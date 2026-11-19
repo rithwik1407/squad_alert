@@ -1,0 +1,120 @@
+import { Suspense } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Bell, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { page } from '@/lib/motion';
+import { Avatar, cx, Skeleton } from './ui';
+import { Logo } from './Logo';
+
+export function Layout() {
+  const { user, team, isCaptain, logout } = useAuth();
+  const loc = useLocation();
+  const nav = useNavigate();
+  const items = isCaptain
+    ? [
+        { to: '/', label: 'Home', icon: Home },
+        { to: '/matches', label: 'Matches', icon: CalendarClock },
+        { to: '/team', label: 'Team', icon: Users },
+        { to: '/notifications', label: 'Alerts', icon: Bell },
+        { to: '/settings', label: 'Settings', icon: Settings },
+      ]
+    : [
+        { to: '/', label: 'Home', icon: Home },
+        { to: '/stats', label: 'Stats', icon: BarChart3 },
+        { to: '/notifications', label: 'Inbox', icon: Bell },
+        { to: '/settings', label: 'Settings', icon: Settings },
+      ];
+
+  return (
+    <div className="min-h-screen lg:pl-64">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[80] btn-primary">Skip to content</a>
+
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/[0.06] bg-ink-900/70 p-5 backdrop-blur-xl lg:flex">
+        <Logo />
+        {team && (
+          <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Team</p>
+            <p className="font-display text-lg font-bold text-white">{team.name}</p>
+          </div>
+        )}
+        <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label="Main">
+          {items.map(({ to, label, icon: I }) => (
+            <NavLink key={to} to={to} end={to === '/'} className="relative">
+              {({ isActive }) => (
+                <span className={cx('relative z-10 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors', isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-100')}>
+                  {isActive && (
+                    <motion.span layoutId="side-active" className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-r from-ember-500/20 to-transparent ring-1 ring-ember-400/25" transition={{ type: 'spring', stiffness: 400, damping: 34 }} />
+                  )}
+                  <I className={cx('h-[18px] w-[18px]', isActive && 'text-ember-400')} aria-hidden />
+                  {label}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+        {user && (
+          <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] p-2.5">
+            <Avatar name={user.ign} src={user.avatar} size={36} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-white">{user.ign}</p>
+              <p className="text-xs capitalize text-zinc-500">{user.role}</p>
+            </div>
+            <button aria-label="Sign out" className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
+              onClick={async () => { await logout(); nav('/welcome'); }}>
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </aside>
+
+      {/* Mobile top bar */}
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.05] bg-ink-950/75 px-4 py-3 backdrop-blur-xl lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+        <Logo compact />
+        {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
+      </div>
+
+      <main id="main" className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
+        <AnimatePresence mode="wait">
+          <motion.div key={loc.pathname} variants={page} initial="initial" animate="animate" exit="exit">
+            <Suspense fallback={<PageSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      {/* Mobile bottom nav */}
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/85 backdrop-blur-xl lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <ul className="mx-auto flex max-w-lg justify-around px-2">
+          {items.map(({ to, label, icon: I }) => (
+            <li key={to} className="flex-1">
+              <NavLink to={to} end={to === '/'} className="relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium">
+                {({ isActive }) => (
+                  <>
+                    {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-0.5 w-8 rounded-full bg-ember-400 shadow-glow" />}
+                    <motion.span animate={{ scale: isActive ? 1.12 : 1, y: isActive ? -1 : 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+                      <I className={cx('h-5 w-5', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
+                    </motion.span>
+                    <span className={isActive ? 'text-white' : 'text-zinc-500'}>{label}</span>
+                  </>
+                )}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
+}
+
+function PageSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Loading">
+      <Skeleton className="h-10 w-48" />
+      <Skeleton className="h-44" />
+      <div className="grid gap-4 sm:grid-cols-2"><Skeleton className="h-28" /><Skeleton className="h-28" /></div>
+    </div>
+  );
+}

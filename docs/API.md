@@ -1,0 +1,98 @@
+# SquadSync REST API
+
+Base URL: `/api`. JSON in, JSON out. Auth is a JWT in the httpOnly cookie `ss_token`, set by register/login.
+Errors look like `{ "error": "message", "details"?: [{ "path": "field", "message": "..." }] }`.
+
+All timestamps are ISO 8601 **UTC**. The client renders them in `Asia/Kolkata`.
+
+| Status | Meaning |
+|---|---|
+| 400 | Validation failed (Zod) or the action doesn't fit the match state |
+| 401 | Not signed in / session expired |
+| 403 | Captain-only route |
+| 404 | Not found, or a player asking for a match they aren't selected for |
+| 409 | Duplicate (e.g. email taken, already on a team) |
+| 423 | Locked: the notification already went out |
+
+## Public
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| GET | `/health` | | `{ ok, db, time }` |
+| GET | `/config` | | `{ telegramBot, pushServerReady, timeZone }` |
+| GET | `/team/preview/:code` | | `{ name, tag, slotsLeft }` for the join screen |
+| POST | `/telegram/webhook` | Telegram update | Checks `X-Telegram-Bot-Api-Secret-Token`. Handles `/start <token>` to link a chat |
+
+## Auth
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/auth/register` | `{ name, email, password(≥8), ign, bgmiId?, mode: "captain"\|"player", teamName? (captain), joinCode? (player) }` | `{ user, team }` + cookie. A captain gets a new team with a join code |
+| POST | `/auth/login` | `{ email, password }` | `{ user, team }` + cookie |
+| POST | `/auth/logout` | | clears cookie |
+| GET | `/auth/me` | | `{ user, team }` |
+
+## Team
+
+| Method | Path | Role | Body | Notes |
+|---|---|---|---|---|
+| GET | `/team` | any | | `{ team: { id, name, tag, logo, joinCode, drops, captain, members[] } }` |
+| POST | `/team/join` | player | `{ code }` | Max 5 players |
+| POST | `/team/code/regenerate` | captain | | Old code and link stop working |
+| PATCH | `/team` | captain | `{ name?, tag?, logo?, drops?: { Erangel: "Quarry", ... } }` | `drops` = default drop per map |
+| DELETE | `/team/members/:userId` | captain | | |
+
+## Matches
+
+A match object:
+
+```json
+{
+  "id": "…", "title": "Scrim 1", "type": "scrim", "map": "Erangel", "drop": "Quarry",
+  "startAt": "2026-11-19T15:30:00.000Z", "notifyAt": "2026-11-19T15:28:00.000Z", "notifyOffsetMin": 2,
+  "roomId": "4471823", "roomPassword": "rare21",
+  "status": "scheduled|notified|live|done|cancelled", "notifiedAt": null, "captainAlertedAt": null,
+  "locked": false, "tournamentName": "", "placement": null,
+  "squad": { "selectedIds": ["…x4"], "benchedId": "…", "confirmed": true, "updatedAt": "…" },
+  "notifications": { "sent": 4, "failed": 0, "pending": 0 }
+}
+```
+
+Players only ever see matches where they are in the **confirmed** squad.
+
+| Method | Path | Role | Body | Notes |
+|---|---|---|---|---|
+| GET | `/matches?scope=upcoming\|past\|all` | any | | |
+| POST | `/matches` | captain | `{ title, type, map, startAt, notifyOffsetMin=2, drop?, roomId?, roomPassword?, tournamentName? }` | Upserts the BullMQ delayed job (`jobId = matchId`). `drop` defaults from team drops. Response includes `schedule` |
+| GET | `/matches/:id` | any | | |
+| PATCH | `/matches/:id` | captain | any subset of the create body | Re-schedules the job. Changing time after the alert went out → 423 |
+| POST | `/matches/:id/cancel` | captain | | Removes the job |
+| POST | `/matches/:id/status` | captain | `{ status: "live"\|"done", placement? }` | |
+| GET | `/matches/:id/squad` | any | | `{ squad, locked }` |
+| PUT | `/matches/:id/squad` | captain | `{ selectedIds: [4 ids], confirm: boolean }` | Exactly 4 distinct team members. Remaining member becomes `benchedId`. 423 once locked |
+| POST | `/matches/:id/substitute` | captain | `{ outId, inId }` | Emergency sub. After the lock, only `inId` is alerted, immediately |
+| POST | `/matches/:id/send-now` | captain | | Requires a confirmed squad. Cancels the delayed job and sends now. 202 |
+| POST | `/matches/:id/resend-failed` | captain | | Retries everyone selected who has no `sent` log. 202 |
+| GET | `/matches/:id/notifications` | captain | | Delivery log for this match |
+| GET | `/matches/:id/report` | any | | `{ attendance[], stats[] }` |
+| PUT | `/matches/:id/attendance` | captain | `{ entries: [{ userId, joined }] }` | |
+| PUT | `/matches/:id/stats` | captain | `{ entries: [{ userId, kills, damage, mvp }] }` | One MVP max |
+
+## Notifications
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/notifications?limit=100` | Captain: every attempt for the team. Player: their delivered alerts (inbox) |
+
+Log entry: `{ id, matchId, match, userId, user, kind: "squad"|"captain_alert", channel: "fcm"|"telegram"|"whatsapp"|"none", status: "sent"|"failed"|"skipped", trigger: "scheduled"|"manual"|"resend"|"substitute", title, body, sentAt, error }`
+
+## Me
+
+| Method | Path | Body |
+|---|---|---|
+| PATCH | `/me` | `{ name?, ign?, bgmiId?, avatar?, whatsappNumber?, notifyPrefs?: { push?, telegram?, whatsapp? } }` |
+| POST | `/me/fcm-token` | `{ token }` (keeps the newest 5 devices) |
+| DELETE | `/me/fcm-token` | `{ token }` |
+| POST | `/me/telegram/link` | → `{ url: "https://t.me/<bot>?start=<one-time token>" }` |
+| DELETE | `/me/telegram` | unlink |
+| GET | `/me/stats` | `{ rows: [{ matchId, title, map, startAt, selected, joined, kills, damage, mvp }], totals }` |

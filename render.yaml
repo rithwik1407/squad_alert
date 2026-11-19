@@ -1,0 +1,49 @@
+# Render Blueprint: API (web) + notification worker (background).
+# Dashboard > New > Blueprint > pick this repo. Fill the env vars marked sync:false.
+# The worker must be always-on for alerts to fire on time, so it needs a paid instance (Starter).
+services:
+  - type: web
+    name: squadsync-api
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci && npm run build -w server
+    startCommand: npm start -w server
+    healthCheckPath: /api/health
+    envVars: &shared
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: MONGODB_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        sync: false
+      - key: COOKIE_SAMESITE
+        value: lax
+      - key: DISPLAY_TZ
+        value: Asia/Kolkata
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+  - type: worker
+    name: squadsync-worker
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci && npm run build -w server && npm run build -w worker
+    startCommand: npm start -w worker
+    envVars: *shared

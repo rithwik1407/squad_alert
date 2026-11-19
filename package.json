@@ -1,0 +1,15 @@
+{
+  "name": "squadsync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SquadSync: BGMI team management PWA with last-minute squad notifications",
+  "workspaces": ["server", "worker", "client"],
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w worker & npm run dev -w client",
+    "build": "npm run build -w server && npm run build -w worker && npm run build -w client",
+    "test": "npm test -w server",
+    "seed": "npm run seed -w server",
+    "lint:types": "npm run typecheck -w server && npm run typecheck -w worker && npm run typecheck -w client"
+  },
+  "engines": { "node": ">=20" }
+}
