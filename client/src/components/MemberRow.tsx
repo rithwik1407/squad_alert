@@ -22,6 +22,7 @@ export function MemberRow({ p, onChanged }: { p: Member; onChanged: () => Promis
     if (f.bgmiId !== p.bgmiId) body.bgmiId = f.bgmiId;
     if (f.email && f.email !== p.email) body.email = f.email;
     if (f.password) body.password = f.password;
+    if ((f.whatsappNumber ?? '') !== (p.whatsappNumber ?? '')) body.whatsappNumber = f.whatsappNumber;
     if (!Object.keys(body).length) { setOpen(false); return; }
     setBusy(true);
     try {
@@ -43,7 +44,7 @@ export function MemberRow({ p, onChanged }: { p: Member; onChanged: () => Promis
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-white">{p.ign}</p>
           <p className="truncate text-xs text-zinc-400">{p.email ?? ''}</p>
-          <p className="font-mono text-[11px] text-zinc-500">UID {p.bgmiId || '-'} · {p.pushEnabled ? 'Push on' : 'No push'} · {p.telegramLinked ? 'Telegram' : 'No Telegram'}</p>
+          <p className="font-mono text-[11px] text-zinc-500">UID {p.bgmiId || '-'} · {p.whatsappLinked ? 'WhatsApp' : 'No WhatsApp'} · {p.pushEnabled ? 'Push on' : 'No push'} · {p.telegramLinked ? 'Telegram' : 'No Telegram'}</p>
         </div>
         <button aria-label={open ? `Close editing ${p.ign}` : `Edit ${p.ign}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}
           className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white">
@@ -64,6 +65,9 @@ export function MemberRow({ p, onChanged }: { p: Member; onChanged: () => Promis
               <Field label="IGN"><input name="ign" className="input" defaultValue={p.ign} /></Field>
               <Field label="BGMI UID"><input name="bgmiId" className="input font-mono" inputMode="numeric" defaultValue={p.bgmiId} /></Field>
               <Field label="Login email"><input name="email" type="email" className="input" defaultValue={p.email ?? ''} autoComplete="off" /></Field>
+              <Field label="WhatsApp number" hint="With country code. 10-digit Indian numbers get +91 added.">
+                <input name="whatsappNumber" type="tel" className="input font-mono" defaultValue={p.whatsappNumber ? `+${p.whatsappNumber}` : ''} placeholder="+91 98765 43210" />
+              </Field>
               <Field label="New password" hint="Leave empty to keep their current password. At least 8 characters.">
                 <input name="password" type="text" className="input font-mono" autoComplete="new-password" minLength={8} placeholder="••••••••" />
               </Field>

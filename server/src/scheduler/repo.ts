@@ -32,7 +32,7 @@ export const mongoDispatchRepo: DispatchRepo = {
       notifyPrefs: {
         push: u.notifyPrefs?.push ?? true,
         telegram: u.notifyPrefs?.telegram ?? true,
-        whatsapp: u.notifyPrefs?.whatsapp ?? false,
+        whatsapp: u.notifyPrefs?.whatsapp ?? true,
       },
     }));
   },

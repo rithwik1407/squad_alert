@@ -24,7 +24,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 type Session = { user: User; team: Team | null };
 
 export const api = {
-  config: () => request<{ telegramBot: string | null; pushServerReady: boolean; timeZone: string }>('GET', '/config'),
+  config: () => request<{ telegramBot: string | null; pushServerReady: boolean; whatsappReady?: boolean; timeZone: string }>('GET', '/config'),
 
   me: () => request<Session>('GET', '/auth/me'),
   login: (b: { email: string; password: string }) => request<Session>('POST', '/auth/login', b),
@@ -36,7 +36,7 @@ export const api = {
   joinTeam: (code: string) => request<{ team: Team }>('POST', '/team/join', { code }),
   regenerateCode: () => request<{ joinCode: string }>('POST', '/team/code/regenerate'),
   updateTeam: (b: Partial<Pick<Team, 'name' | 'tag' | 'logo' | 'drops'>>) => request<{ team: Team }>('PATCH', '/team', b),
-  updateMember: (id: string, b: { name?: string; ign?: string; bgmiId?: string; email?: string; password?: string }) =>
+  updateMember: (id: string, b: { name?: string; ign?: string; bgmiId?: string; email?: string; password?: string; whatsappNumber?: string }) =>
     request<{ team: Team }>('PATCH', `/team/members/${id}`, b),
   removeMember: (id: string) => request<{ team: Team }>('DELETE', `/team/members/${id}`),
 

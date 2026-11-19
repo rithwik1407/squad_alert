@@ -69,7 +69,7 @@ export class MemoryRepo implements DispatchRepo {
 export class FakeProvider implements NotificationProvider {
   calls: { userId: string; title: string; body: string }[] = [];
   failFor = new Set<string>();
-  constructor(public readonly channel: 'fcm' | 'telegram', private reach: (r: Recipient) => boolean) {}
+  constructor(public readonly channel: 'fcm' | 'telegram' | 'whatsapp', private reach: (r: Recipient) => boolean) {}
   isConfigured() { return true; }
   canReach(r: Recipient) { return this.reach(r); }
   async send(r: Recipient, p: { title: string; body: string }): Promise<SendResult> {

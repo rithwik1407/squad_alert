@@ -7,7 +7,8 @@ export interface LogSummary { sent: number; failed: number; pending: number }
 
 export function publicUser(u: {
   _id: Id; name: string; ign: string; bgmiId?: string | null; role: string; avatar?: string | null;
-  fcmTokens?: string[]; telegramChatId?: string | null;
+  fcmTokens?: string[]; telegramChatId?: string | null; whatsappNumber?: string | null;
+  notifyPrefs?: { whatsapp?: boolean | null } | null;
 }) {
   return {
     id: String(u._id),
@@ -18,6 +19,7 @@ export function publicUser(u: {
     avatar: u.avatar ?? '',
     pushEnabled: (u.fcmTokens?.length ?? 0) > 0,
     telegramLinked: Boolean(u.telegramChatId),
+    whatsappLinked: Boolean(u.whatsappNumber) && u.notifyPrefs?.whatsapp !== false,
   };
 }
 

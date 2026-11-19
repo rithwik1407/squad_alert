@@ -5,6 +5,7 @@ import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth, requireCaptain } from '../middleware/auth.js';
 import { MAPS, Team, TEAM_SIZE, User } from '../models/index.js';
 import bcrypt from 'bcryptjs';
+import { normalizePhone } from '../lib/phone.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { joinCode } from '../lib/codes.js';
 import { publicUser } from '../lib/serialize.js';
@@ -28,7 +29,7 @@ export async function loadTeamView(teamId: Types.ObjectId | string | null | unde
     drops: Object.fromEntries(team.drops instanceof Map ? team.drops : Object.entries(team.drops ?? {})),
     captain: captain ? publicUser(captain) : null,
     members: team.memberIds.map((id) => byId.get(String(id))).filter(Boolean)
-      .map((u) => ({ ...publicUser(u!), ...(withEmails ? { email: u!.email } : {}) })),
+      .map((u) => ({ ...publicUser(u!), ...(withEmails ? { email: u!.email, whatsappNumber: u!.whatsappNumber ?? '' } : {}) })),
   };
 }
 
@@ -95,6 +96,7 @@ const memberSchema = z.object({
   bgmiId: z.string().trim().regex(/^\d{6,15}$/, 'BGMI ID should be 6 to 15 digits').or(z.literal('')).optional(),
   email: z.string().trim().toLowerCase().email().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters').max(100).optional(),
+  whatsappNumber: z.string().trim().max(20).optional(),
 });
 
 teamRouter.patch('/members/:userId', requireCaptain, ah(async (req, res) => {
@@ -106,8 +108,14 @@ teamRouter.patch('/members/:userId', requireCaptain, ah(async (req, res) => {
   const user = await User.findById(id);
   if (!user) throw notFound('Player not found');
   if (body.email && body.email !== user.email && (await User.exists({ email: body.email }))) throw conflict('That email is already used by another account');
-  const { password, ...rest } = body;
+  const { password, whatsappNumber, ...rest } = body;
   user.set(rest);
+  if (whatsappNumber !== undefined) {
+    const phone = whatsappNumber ? normalizePhone(whatsappNumber) : null;
+    if (whatsappNumber && !phone) throw badRequest('Enter the WhatsApp number with country code, e.g. +91 98765 43210');
+    user.set('whatsappNumber', phone);
+    if (phone) user.set('notifyPrefs.whatsapp', true);
+  }
   if (password) user.set('passwordHash', await bcrypt.hash(password, 10));
   await user.save();
   res.json({ team: await loadTeamView(team._id, true) });

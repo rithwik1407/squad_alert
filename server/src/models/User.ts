@@ -5,7 +5,7 @@ const notifyPrefsSchema = new Schema(
   {
     push: { type: Boolean, default: true },
     telegram: { type: Boolean, default: true },
-    whatsapp: { type: Boolean, default: false },
+    whatsapp: { type: Boolean, default: true },
   },
   { _id: false },
 );
@@ -35,6 +35,7 @@ userSchema.set('toJSON', {
     delete ret.telegramLinkToken;
     delete ret.__v;
     ret.telegramLinked = Boolean(ret.telegramChatId);
+    ret.whatsappLinked = Boolean(ret.whatsappNumber);
     ret.pushEnabled = Array.isArray(ret.fcmTokens) && ret.fcmTokens.length > 0;
     delete ret.fcmTokens;
     delete ret.telegramChatId;

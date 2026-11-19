@@ -18,7 +18,7 @@ docs/     REST API reference
 2. When the job fires, the worker loads the match's **confirmed squad**:
    - no confirmed squad → only the **captain** is alerted ("Squad not confirmed!"), and the squad stays editable;
    - otherwise the **4 selected players** are alerted. The bench is never contacted.
-3. Per player: try **FCM web push**; if there's no token or it fails, fall back to **Telegram**. Every attempt is written to `NotificationLog`.
+3. Per player: try **WhatsApp** (Meta Cloud API DM), then **FCM web push**, then **Telegram**, until one succeeds. Captain-only alerts try WhatsApp last. Every attempt is written to `NotificationLog`.
 4. **Idempotent**: players with a `sent` log for the match are skipped. A unique partial index plus a per-player delivery claim
    mean that even overlapping runs (scheduled job + "Send now") can't double-send.
 5. Once sent, the match is `notified` and the squad is **locked**. Captains can still do an **emergency substitution**
@@ -120,6 +120,20 @@ Players link Telegram from **Settings → Link Telegram**, which opens `t.me/<bo
 
 **Push on phones**: Android Chrome works from the browser. On iPhone (iOS 16.4+), players must **Add to Home Screen** first,
 then open SquadSync from the icon and enable push in Settings. Telegram covers anyone who can't.
+
+## WhatsApp setup (Meta Cloud API)
+
+1. Go to developers.facebook.com, log in, then **My Apps → Create app**. Choose type **Business** (or "Other → Business") and create it.
+2. In the app, **Add product → WhatsApp → Set up**. Meta gives you a free **test number**.
+3. In **WhatsApp → API Setup**: copy the **Temporary access token** → `WHATSAPP_TOKEN`, and the **Phone number ID** → `WHATSAPP_PHONE_NUMBER_ID`.
+4. Same page, **To → Manage phone number list → Add**: add each player's WhatsApp number (+91…) and enter the code each one receives. The test number allows **5** recipients.
+5. In SquadSync, save each player's number (Team → pencil, or the player's own Settings → WhatsApp).
+6. Recommended: **WhatsApp Manager → Message templates → Create**, category **Utility**, name `match_alert`, language English, body for example
+   `{{1}} on {{2}} starts at {{3}}. Join the lobby now. {{4}}` with samples `Scrim 1`, `Erangel`, `9:00 PM`, `Room: 4471823 / Pass: rare21`.
+   Once approved, set `WHATSAPP_TEMPLATE_NAME=match_alert` and `WHATSAPP_TEMPLATE_LANG=en`. Until then the `hello_world` template is used.
+7. Permanent token (the temporary one expires after 24h): **business.facebook.com → Settings → Users → System users → Add** (Admin),
+   **Assign assets** → your app (full control) and your WhatsApp account, then **Generate new token** for the app with
+   `whatsapp_business_messaging` and `whatsapp_business_management`, expiry **Never**. Put it in `WHATSAPP_TOKEN`.
 
 ## Adding a channel
 

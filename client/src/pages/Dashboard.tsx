@@ -140,6 +140,9 @@ export function RosterCard({ p }: { p: Member }) {
         <p className="font-mono text-xs text-zinc-500">UID {p.bgmiId || '-'}</p>
       </div>
       <div className="flex gap-1" aria-label="Notification channels">
+        <span title={p.whatsappLinked ? 'WhatsApp on' : 'No WhatsApp number'} className={cx('grid h-7 w-7 place-items-center rounded-lg text-[10px] font-bold', p.whatsappLinked ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/5 text-zinc-600')}>
+          WA<span className="sr-only">{p.whatsappLinked ? ' enabled' : ' not set'}</span>
+        </span>
         <span title={p.pushEnabled ? 'Push on' : 'Push off'} className={cx('grid h-7 w-7 place-items-center rounded-lg', p.pushEnabled ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/5 text-zinc-600')}>
           <BellRing className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">{p.pushEnabled ? 'Push enabled' : 'Push not enabled'}</span>
         </span>
@@ -202,7 +205,7 @@ function PlayerDashboard() {
     <div>
       <PageHeader eyebrow="Player" title={`GG, ${user?.ign.replace(/^RARE丨/, '') ?? ''}`}>Matches where you're in the squad.</PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
-        {!user?.pushEnabled && !user?.telegramLinked && (
+        {!user?.pushEnabled && !user?.telegramLinked && !user?.whatsappLinked && (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-ember-400/30">
             <p className="text-sm text-zinc-200"><BellRing className="mr-2 inline h-4 w-4 text-ember-400" aria-hidden />Turn on alerts so you don't miss the lobby.</p>
             <Link to="/settings" className="btn-primary">Enable alerts</Link>

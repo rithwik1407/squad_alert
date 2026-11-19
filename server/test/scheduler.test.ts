@@ -206,6 +206,26 @@ describe('dispatch: who gets notified', () => {
     expect(fcm.calls.map((c) => c.userId)).toEqual(['vignesh']);
   });
 
+  it('WhatsApp first for players, falling back to push when it fails', async () => {
+    const wa = new FakeProvider('whatsapp', (r) => Boolean(r.whatsappNumber));
+    for (const id of ['akshay', 'dheeraj', 'bittu', 'vasanth']) repo.users.get(id)!.whatsappNumber = `9198765${id.length}0000`;
+    wa.failFor.add('bittu');
+    deps.providers = [wa, fcm, tg];
+    await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
+    expect(wa.calls.map((c) => c.userId).sort()).toEqual(['akshay', 'bittu', 'dheeraj', 'vasanth']);
+    expect(repo.logs.find((l) => l.userId === 'akshay' && l.status === 'sent')!.channel).toBe('whatsapp');
+    expect(repo.logs.filter((l) => l.userId === 'bittu').map((l) => [l.channel, l.status])).toEqual([['whatsapp', 'failed'], ['fcm', 'sent']]);
+  });
+
+  it('captain alerts try WhatsApp last (test number slots belong to players)', async () => {
+    const wa = new FakeProvider('whatsapp', () => true);
+    repo.squads.get('m1')!.confirmed = false;
+    deps.providers = [wa, fcm, tg];
+    await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
+    expect(wa.calls).toHaveLength(0);
+    expect(fcm.calls.map((c) => c.userId)).toEqual(['cap']);
+  });
+
   it('prunes dead FCM tokens reported by the provider', async () => {
     fcm.send = async (r) => ({ ok: false, error: 'dead', invalidTokens: r.fcmTokens });
     await dispatchMatch('m1', { trigger: 'scheduled' }, deps);

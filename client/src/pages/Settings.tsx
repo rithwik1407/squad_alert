@@ -80,12 +80,15 @@ export default function Settings() {
     <div>
       <PageHeader eyebrow="Settings" title="Alerts & profile" />
       <motion.div variants={list} initial="initial" animate="animate" className="grid gap-6 lg:grid-cols-2">
+        <WhatsAppCard number={user.whatsappNumber ?? ''} on={prefs.whatsapp !== false} ready={cfg.data?.whatsappReady}
+          onToggle={(v) => setPref('whatsapp', v)} onSaved={refresh} />
+
         <Card>
           <div className="flex items-start gap-3">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ember-500/15 text-ember-300"><Smartphone className="h-5 w-5" aria-hidden /></span>
             <div className="flex-1">
               <h2 className="text-xl font-bold text-white">Push notifications</h2>
-              <p className="text-sm text-zinc-400">Main channel. Works even when the app is closed.</p>
+              <p className="text-sm text-zinc-400">Backup to WhatsApp. Works even when the app is closed.</p>
             </div>
             <Toggle label="Use push" on={prefs.push} onChange={(v) => setPref('push', v)} />
           </div>
@@ -191,6 +194,41 @@ function LoginCard({ email, onSaved }: { email: string; onSaved: () => Promise<u
         <Field label="Current password"><input name="currentPassword" type="password" className="input" required autoComplete="current-password" /></Field>
         <div className="sm:col-span-2 lg:col-span-4"><Button type="submit" loading={busy}>Save login</Button></div>
       </form>
+    </Card>
+  );
+}
+
+function WhatsAppCard({ number, on, ready, onToggle, onSaved }: {
+  number: string; on: boolean; ready?: boolean; onToggle: (v: boolean) => void; onSaved: () => Promise<unknown>;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const v = String(new FormData(e.currentTarget).get('phone') ?? '');
+    setBusy(true);
+    try { await api.updateMe({ whatsappNumber: v }); await onSaved(); toast.success(v ? 'WhatsApp number saved' : 'WhatsApp number removed'); }
+    catch (err) { toast.error(err); } finally { setBusy(false); }
+  }
+  return (
+    <Card className="lg:col-span-2">
+      <div className="flex items-start gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-400/15 text-emerald-300"><MessageCircle className="h-5 w-5" aria-hidden /></span>
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-white">WhatsApp</h2>
+          <p className="text-sm text-zinc-400">Main channel. Match alerts arrive as a WhatsApp message to this number.</p>
+        </div>
+        <Toggle label="Use WhatsApp" on={on} onChange={onToggle} />
+      </div>
+      <form onSubmit={save} className="mt-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-[14rem] flex-1">
+          <Field label="WhatsApp number" hint="With country code. 10-digit Indian numbers get +91 added.">
+            <input name="phone" type="tel" className="input font-mono" defaultValue={number ? `+${number}` : ''} key={number} placeholder="+91 98765 43210" autoComplete="tel" />
+          </Field>
+        </div>
+        <Button type="submit" loading={busy}>Save number</Button>
+      </form>
+      {ready === false && <p className="mt-3 text-xs text-amber-300/80">WhatsApp isn't configured on the server yet (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID).</p>}
     </Card>
   );
 }

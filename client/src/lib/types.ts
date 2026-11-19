@@ -19,6 +19,7 @@ export interface User {
   teamId: string | null;
   whatsappNumber?: string | null;
   telegramLinked: boolean;
+  whatsappLinked?: boolean;
   pushEnabled: boolean;
   notifyPrefs: { push: boolean; telegram: boolean; whatsapp: boolean };
 }
@@ -32,8 +33,10 @@ export interface Member {
   avatar: string;
   pushEnabled: boolean;
   telegramLinked: boolean;
+  whatsappLinked?: boolean;
   /** Only sent to the captain. */
   email?: string;
+  whatsappNumber?: string;
 }
 
 export interface Team {

@@ -112,7 +112,11 @@ async function attemptDelivery(
   const base = { matchId, userId: user.id, kind, trigger, title: payload.title, body: payload.body };
   let attempted = false;
 
-  for (const provider of deps.providers) {
+  // Meta's free test number allows only 5 verified recipients (the players), so captain alerts try WhatsApp last.
+  const providers = kind === 'captain_alert'
+    ? [...deps.providers.filter((p) => p.channel !== 'whatsapp'), ...deps.providers.filter((p) => p.channel === 'whatsapp')]
+    : deps.providers;
+  for (const provider of providers) {
     if (!provider.canReach(user)) continue;
     attempted = true;
     let res;

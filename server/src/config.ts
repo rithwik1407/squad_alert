@@ -38,5 +38,9 @@ export const config = {
   whatsapp: {
     token: process.env.WHATSAPP_TOKEN ?? '',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
+    apiVersion: process.env.WHATSAPP_API_VERSION ?? 'v21.0',
+    /** Approved template with 4 body params: {{1}} match, {{2}} map, {{3}} time, {{4}} room/pass. Default: Meta's hello_world. */
+    templateName: process.env.WHATSAPP_TEMPLATE_NAME || 'hello_world',
+    templateLang: process.env.WHATSAPP_TEMPLATE_LANG || (process.env.WHATSAPP_TEMPLATE_NAME ? 'en' : 'en_US'),
   },
 };

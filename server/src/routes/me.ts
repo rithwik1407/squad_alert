@@ -6,6 +6,7 @@ import { Attendance, Match, Squad, Stats, User } from '../models/index.js';
 import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
+import { normalizePhone } from '../lib/phone.js';
 import { badRequest, conflict } from '../lib/errors.js';
 
 export const meRouter = Router();
@@ -16,15 +17,21 @@ const profileSchema = z.object({
   ign: z.string().trim().min(2).max(30).optional(),
   bgmiId: z.string().trim().regex(/^\d{6,15}$/, 'BGMI ID should be 6 to 15 digits').optional(),
   avatar: z.string().url().or(z.literal('')).optional(),
-  whatsappNumber: z.string().trim().regex(/^\+?\d{10,15}$/).or(z.literal('')).optional(),
+  whatsappNumber: z.string().trim().max(20).optional(),
   notifyPrefs: z.object({ push: z.boolean(), telegram: z.boolean(), whatsapp: z.boolean() }).partial().optional(),
 });
 
 meRouter.patch('/', ah(async (req, res) => {
   const body = parse(profileSchema, req.body);
   const user = req.user!;
-  const { notifyPrefs, ...rest } = body;
+  const { notifyPrefs, whatsappNumber, ...rest } = body;
   user.set(rest);
+  if (whatsappNumber !== undefined) {
+    const phone = whatsappNumber ? normalizePhone(whatsappNumber) : null;
+    if (whatsappNumber && !phone) throw badRequest('Enter the WhatsApp number with country code, e.g. +91 98765 43210');
+    user.set('whatsappNumber', phone);
+    if (phone) user.set('notifyPrefs.whatsapp', true);
+  }
   if (notifyPrefs) user.set('notifyPrefs', { ...user.toObject().notifyPrefs, ...notifyPrefs });
   await user.save();
   res.json({ user: user.toJSON() });
