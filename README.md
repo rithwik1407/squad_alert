@@ -64,6 +64,9 @@ Team join code: `RARE25`. Default drops: Erangel → Quarry, Miramar → Monte, 
 Seeded matches: Scrim 1 (Erangel, 9:00 PM IST, squad confirmed, Vignesh benched), Scrim 2 (Miramar), Scrim 3 (Sanhok, tomorrow), Scrim 4 (map not decided), a tournament round, and six past scrims with stats for the charts.
 These are demo accounts: change the emails/passwords or have players register with the join code.
 
+**`querySrv ECONNREFUSED _mongodb._tcp…`**: your DNS refused Atlas's SRV lookup. SquadSync resolves `mongodb+srv` URIs through
+`MONGO_DNS_SERVERS` (default `8.8.8.8,1.1.1.1`), which fixes this. If your network blocks public DNS, set it to your own resolver, or `off`.
+
 ## Tests
 
 ```bash
