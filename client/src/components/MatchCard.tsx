@@ -25,7 +25,7 @@ export function NotifyChips({ m }: { m: Match }) {
 
 export function MatchCard({ m, to }: { m: Match; to?: string }) {
   return (
-    <motion.div variants={item} layout whileHover={{ y: -3 }} whileTap={{ scale: 0.985 }} transition={spring}>
+    <motion.div variants={item} whileHover={{ y: -3 }} whileTap={{ scale: 0.985 }} transition={spring}>
       <Link to={to ?? `/matches/${m.id}`} className="glass gborder group flex overflow-hidden focus-visible:ring-2">
         <div className="relative w-24 shrink-0 sm:w-32">
           <MapArt map={m.map} />

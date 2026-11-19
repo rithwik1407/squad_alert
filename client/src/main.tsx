@@ -6,6 +6,7 @@ import { MotionConfig } from 'framer-motion';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 const qc = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: true, staleTime: 15_000 } } });
@@ -14,10 +15,12 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={qc}>
       <MotionConfig reducedMotion="user">
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ToastProvider>
             <AuthProvider>
-              <App />
+              <ErrorBoundary fullScreen>
+                <App />
+              </ErrorBoundary>
             </AuthProvider>
           </ToastProvider>
         </BrowserRouter>

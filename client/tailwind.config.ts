@@ -21,10 +21,8 @@ export default {
         'glow-lg': '0 0 60px -10px rgba(255,138,31,.7)',
       },
       keyframes: {
-        pulseGlow: {
-          '0%,100%': { boxShadow: '0 0 0 0 rgba(255,138,31,.0), 0 0 40px -12px rgba(255,138,31,.5)' },
-          '50%': { boxShadow: '0 0 0 6px rgba(255,138,31,.12), 0 0 70px -6px rgba(255,138,31,.85)' },
-        },
+        // Opacity-only so it runs on the compositor.
+        pulseGlow: { '0%,100%': { opacity: '0.35' }, '50%': { opacity: '1' } },
         shimmer: { '100%': { transform: 'translateX(100%)' } },
       },
       animation: {

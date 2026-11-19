@@ -50,13 +50,17 @@ export function FlipCountdown({ target, className, onZero }: { target: string; c
   return (
     <div
       className={cx(
-        'inline-flex items-start gap-2 rounded-2xl p-2 font-mono text-4xl font-bold text-white sm:gap-3 sm:text-6xl',
-        urgent && 'animate-pulse-glow text-ember-300',
+        'relative inline-flex items-start gap-2 rounded-2xl p-2 font-mono text-4xl font-bold text-white sm:gap-3 sm:text-6xl',
+        urgent && 'text-ember-300',
         className,
       )}
       role="timer"
       aria-label={ms > 0 ? `${d} days ${h} hours ${m} minutes ${s} seconds` : 'Started'}
     >
+      {urgent && (
+        <span aria-hidden className="pointer-events-none absolute -inset-1 rounded-2xl animate-pulse-glow"
+          style={{ boxShadow: '0 0 0 2px rgba(255,138,31,.35), 0 0 60px -6px rgba(255,138,31,.85)' }} />
+      )}
       {d > 0 && <><Group n={d} label="days" /><Sep /></>}
       <Group n={h} label="hrs" /><Sep />
       <Group n={m} label="min" /><Sep />

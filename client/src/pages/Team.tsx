@@ -24,7 +24,7 @@ export default function TeamPage() {
     <div>
       <PageHeader eyebrow="Team" title={team.name}>Up to 5 players. Invite with the code or link.</PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <Card glow>
+        <Card glow className="self-start">
           <p className="eyebrow">Join code</p>
           <motion.p key={team.joinCode} initial={{ rotateX: 90, opacity: 0 }} animate={{ rotateX: 0, opacity: 1 }}
             className="mt-2 font-mono text-5xl font-bold tracking-[0.3em] text-white">{team.joinCode}</motion.p>
@@ -48,7 +48,7 @@ export default function TeamPage() {
           <h2 className="mb-3 text-xl font-bold text-white">Players · {team.members.length}/5</h2>
           <motion.ul variants={list} initial="initial" animate="animate" className="space-y-2">
             {team.members.map((p) => (
-              <motion.li key={p.id} variants={item} layout className="flex items-center gap-3 rounded-xl border border-white/[0.06] p-3">
+              <motion.li key={p.id} variants={item} className="flex items-center gap-3 rounded-xl border border-white/[0.06] p-3">
                 <Avatar name={p.ign} src={p.avatar} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-white">{p.ign}</p>

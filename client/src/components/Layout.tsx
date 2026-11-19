@@ -1,9 +1,9 @@
 import { Suspense } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { page } from '@/lib/motion';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
 
@@ -31,7 +31,7 @@ export function Layout() {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[80] btn-primary">Skip to content</a>
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/[0.06] bg-ink-900/70 p-5 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/[0.06] bg-ink-900 p-5 lg:flex">
         <Logo />
         {team && (
           <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
@@ -70,23 +70,25 @@ export function Layout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.05] bg-ink-950/75 px-4 py-3 backdrop-blur-xl lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.05] bg-ink-950/90 px-4 py-3 backdrop-blur-md lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
         <Logo compact />
         {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
       </div>
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
-        <AnimatePresence mode="wait">
-          <motion.div key={loc.pathname} variants={page} initial="initial" animate="animate" exit="exit">
-            <Suspense fallback={<PageSkeleton />}>
+        {/* Enter-only page transition (opacity + transform). No exit/wait phase, so a lazy page can never get stuck invisible. */}
+        <ErrorBoundary resetKey={loc.pathname}>
+          <Suspense fallback={<PageSkeleton />}>
+            <motion.div key={loc.pathname} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
               <Outlet />
-            </Suspense>
-          </motion.div>
-        </AnimatePresence>
+            </motion.div>
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Mobile bottom nav */}
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/85 backdrop-blur-xl lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <ul className="mx-auto flex max-w-lg justify-around px-2">
           {items.map(({ to, label, icon: I }) => (
             <li key={to} className="flex-1">

@@ -26,7 +26,6 @@ function PlayerCard({ p, on, benched, locked, order, onToggle, avail, note }: {
   }, [controls, order]);
   return (
     <motion.button
-      layout
       type="button"
       role="checkbox"
       aria-checked={on}
@@ -140,7 +139,7 @@ export default function SquadSelect() {
         </LayoutGroup>
       )}
 
-      <motion.div layout className="sticky bottom-20 z-20 mt-6 lg:bottom-6">
+      <div className="sticky bottom-20 z-20 mt-6 lg:bottom-6">
         <Card className="flex flex-col gap-4 bg-ink-850/90 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="relative grid h-12 w-12 place-items-center rounded-xl bg-ember-500/10 ring-1 ring-ember-400/30">
@@ -169,7 +168,7 @@ export default function SquadSelect() {
           )}
           {locked && <Button variant="ghost" onClick={() => nav(`/matches/${m.id}`)}>Back to match</Button>}
         </Card>
-      </motion.div>
+      </div>
     </div>
   );
 }

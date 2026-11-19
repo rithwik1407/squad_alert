@@ -239,7 +239,7 @@ function PlayerDashboard() {
                   <ul className="divide-y divide-white/5">
                     <AnimatePresence initial={false}>
                       {inbox.data.slice(0, 5).map((n) => (
-                        <motion.li key={n.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <motion.li key={n.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                           <Link to={`/matches/${n.matchId}`} className="flex gap-3 p-4 hover:bg-white/[0.03]">
                             <Inbox className="mt-0.5 h-4 w-4 shrink-0 text-ember-400" aria-hidden />
                             <div className="min-w-0 flex-1">

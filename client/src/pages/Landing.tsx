@@ -41,8 +41,8 @@ export default function Landing() {
       <motion.div aria-hidden style={{ y: bgY }} className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
       </motion.div>
-      <motion.div aria-hidden style={{ x: layer1x, y: layer1y }} className="pointer-events-none absolute -right-40 -top-40 h-[560px] w-[560px] rounded-full bg-ember-500/25 blur-[120px]" />
-      <motion.div aria-hidden style={{ x: layer2x, y: layer2y }} className="pointer-events-none absolute -bottom-52 -left-40 h-[520px] w-[520px] rounded-full bg-amber-400/10 blur-[120px]" />
+      <motion.div aria-hidden style={{ x: layer1x, y: layer1y }} className="pointer-events-none absolute -right-60 -top-60 h-[760px] w-[760px] rounded-full bg-[radial-gradient(closest-side,rgba(255,138,31,.28),transparent)]" />
+      <motion.div aria-hidden style={{ x: layer2x, y: layer2y }} className="pointer-events-none absolute -bottom-72 -left-60 h-[720px] w-[720px] rounded-full bg-[radial-gradient(closest-side,rgba(251,191,36,.12),transparent)]" />
 
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <Logo />

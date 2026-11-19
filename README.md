@@ -45,7 +45,7 @@ Requirements: Node 20+, a MongoDB (local or Atlas), a Redis (local `redis-server
 npm install
 cp .env.example .env               # fill MONGODB_URI, REDIS_URL, JWT_SECRET (+ Firebase/Telegram when ready)
 cp client/.env.example client/.env # Firebase web config for push (optional for local dev)
-npm run seed                       # Team RARE: 1 captain + 5 players + sample matches
+npm run seed                       # Team RARE: 1 captain + 5 players (no matches)
 npm run dev                        # API :4000, worker, client :5173 (Vite proxies /api)
 ```
 
@@ -61,7 +61,8 @@ Seeded logins (password `squadsync123`, or `SEED_PASSWORD`):
 | Player | vignesh@teamrare.gg | RARE丨VIGNESH | 55522353757 |
 
 Team join code: `RARE25`. Default drops: Erangel → Quarry, Miramar → Monte, Sanhok → Ruins.
-Seeded matches: Scrim 1 (Erangel, 9:00 PM IST, squad confirmed, Vignesh benched), Scrim 2 (Miramar), Scrim 3 (Sanhok, tomorrow), Scrim 4 (map not decided), a tournament round, and six past scrims with stats for the charts.
+The seed creates no matches. Add your own from the app.
+To wipe all matches later (teams and players stay): `npm run clear-matches`.
 These are demo accounts: change the emails/passwords or have players register with the join code.
 
 **`querySrv ECONNREFUSED _mongodb._tcp…`**: your DNS refused Atlas's SRV lookup. SquadSync resolves `mongodb+srv` URIs through
