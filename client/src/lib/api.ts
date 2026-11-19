@@ -36,6 +36,8 @@ export const api = {
   joinTeam: (code: string) => request<{ team: Team }>('POST', '/team/join', { code }),
   regenerateCode: () => request<{ joinCode: string }>('POST', '/team/code/regenerate'),
   updateTeam: (b: Partial<Pick<Team, 'name' | 'tag' | 'logo' | 'drops'>>) => request<{ team: Team }>('PATCH', '/team', b),
+  updateMember: (id: string, b: { name?: string; ign?: string; bgmiId?: string; email?: string; password?: string }) =>
+    request<{ team: Team }>('PATCH', `/team/members/${id}`, b),
   removeMember: (id: string) => request<{ team: Team }>('DELETE', `/team/members/${id}`),
 
   matches: (scope: 'upcoming' | 'past' | 'all' = 'upcoming') => request<{ matches: Match[] }>('GET', `/matches?scope=${scope}`),
@@ -64,6 +66,7 @@ export const api = {
 
   notifications: () => request<{ logs: NotificationLog[] }>('GET', '/notifications'),
 
+  updateAccount: (b: { currentPassword: string; email?: string; newPassword?: string }) => request<{ user: User }>('PATCH', '/me/account', b),
   updateMe: (b: Record<string, unknown>) => request<{ user: User }>('PATCH', '/me', b),
   addFcmToken: (token: string) => request('POST', '/me/fcm-token', { token }),
   removeFcmToken: (token: string) => request('DELETE', '/me/fcm-token', { token }),

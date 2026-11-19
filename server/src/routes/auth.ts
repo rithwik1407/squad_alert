@@ -60,7 +60,7 @@ authRouter.post(
     }
 
     setAuthCookie(res, String(user._id));
-    res.status(201).json({ user: user.toJSON(), team: await loadTeamView(user.teamId) });
+    res.status(201).json({ user: user.toJSON(), team: await loadTeamView(user.teamId, user.role === 'captain') });
   }),
 );
 
@@ -74,7 +74,7 @@ authRouter.post(
     const user = await User.findOne({ email: body.email.toLowerCase() }).select('+passwordHash');
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) throw unauthorized('Wrong email or password');
     setAuthCookie(res, String(user._id));
-    res.json({ user: user.toJSON(), team: await loadTeamView(user.teamId) });
+    res.json({ user: user.toJSON(), team: await loadTeamView(user.teamId, user.role === 'captain') });
   }),
 );
 
@@ -87,6 +87,6 @@ authRouter.get(
   '/me',
   requireAuth,
   ah(async (req, res) => {
-    res.json({ user: req.user!.toJSON(), team: await loadTeamView(req.user!.teamId) });
+    res.json({ user: req.user!.toJSON(), team: await loadTeamView(req.user!.teamId, req.user!.role === 'captain') });
   }),
 );

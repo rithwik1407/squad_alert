@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Link2, MapPin, RefreshCw, Share2, UserMinus } from 'lucide-react';
+import { Copy, Link2, MapPin, RefreshCw, Share2 } from 'lucide-react';
+import { MemberRow } from '@/components/MemberRow';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { list, item } from '@/lib/motion';
+import { list } from '@/lib/motion';
 import { MAPS, type MapName } from '@/lib/types';
-import { Avatar, Button, Card, PageHeader } from '@/components/ui';
+import { Button, Card, PageHeader } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 
 export default function TeamPage() {
@@ -22,7 +23,7 @@ export default function TeamPage() {
 
   return (
     <div>
-      <PageHeader eyebrow="Team" title={team.name}>Up to 5 players. Invite with the code or link.</PageHeader>
+      <PageHeader eyebrow="Team" title={team.name}>Up to 5 players. Invite with the code or link. Tap the pencil to change a player's details or login.</PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <Card glow className="self-start">
           <p className="eyebrow">Join code</p>
@@ -48,18 +49,7 @@ export default function TeamPage() {
           <h2 className="mb-3 text-xl font-bold text-white">Players · {team.members.length}/5</h2>
           <motion.ul variants={list} initial="initial" animate="animate" className="space-y-2">
             {team.members.map((p) => (
-              <motion.li key={p.id} variants={item} className="flex items-center gap-3 rounded-xl border border-white/[0.06] p-3">
-                <Avatar name={p.ign} src={p.avatar} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-white">{p.ign}</p>
-                  <p className="font-mono text-xs text-zinc-500">UID {p.bgmiId || '-'} · {p.pushEnabled ? 'Push on' : 'No push'} · {p.telegramLinked ? 'Telegram' : 'No Telegram'}</p>
-                </div>
-                <button aria-label={`Remove ${p.ign}`} className="rounded-lg p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300"
-                  onClick={async () => {
-                    if (!window.confirm(`Remove ${p.ign} from the team?`)) return;
-                    try { await api.removeMember(p.id); await refresh(); toast.info(`${p.ign} removed`); } catch (e) { toast.error(e); }
-                  }}><UserMinus className="h-4 w-4" /></button>
-              </motion.li>
+              <MemberRow key={p.id} p={p} onChanged={refresh} />
             ))}
           </motion.ul>
         </Card>

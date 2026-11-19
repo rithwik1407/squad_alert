@@ -32,6 +32,8 @@ export interface Member {
   avatar: string;
   pushEnabled: boolean;
   telegramLinked: boolean;
+  /** Only sent to the captain. */
+  email?: string;
 }
 
 export interface Team {

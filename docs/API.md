@@ -40,6 +40,7 @@ All timestamps are ISO 8601 **UTC**. The client renders them in `Asia/Kolkata`.
 | POST | `/team/join` | player | `{ code }` | Max 5 players |
 | POST | `/team/code/regenerate` | captain | | Old code and link stop working |
 | PATCH | `/team` | captain | `{ name?, tag?, logo?, drops?: { Erangel: "Quarry", ... } }` | `drops` = default drop per map |
+| PATCH | `/team/members/:userId` | captain | `{ name?, ign?, bgmiId?, email?, password? }` | Edit a player's profile and login. Captains also see members' `email` in team responses |
 | DELETE | `/team/members/:userId` | captain | | |
 
 ## Matches
@@ -97,6 +98,7 @@ Log entry: `{ id, matchId, match, userId, user, kind: "squad"|"captain_alert", c
 
 | Method | Path | Body |
 |---|---|---|
+| PATCH | `/me/account` | `{ currentPassword, email?, newPassword? }` (change own login) |
 | PATCH | `/me` | `{ name?, ign?, bgmiId?, avatar?, whatsappNumber?, notifyPrefs?: { push?, telegram?, whatsapp? } }` |
 | POST | `/me/fcm-token` | `{ token }` (keeps the newest 5 devices) |
 | DELETE | `/me/fcm-token` | `{ token }` |

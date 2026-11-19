@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { BellRing, CheckCircle2, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
+import { BellRing, CheckCircle2, KeyRound, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { disablePush, enablePush, permission, pushConfigured, pushSupport } from '@/lib/push';
@@ -137,6 +137,8 @@ export default function Settings() {
           </div>
         </Card>
 
+        <LoginCard email={user.email} onSaved={refresh} />
+
         <Card className="lg:col-span-2">
           <h2 className="mb-4 text-xl font-bold text-white">Profile</h2>
           <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-[auto_1fr]">
@@ -155,5 +157,40 @@ export default function Settings() {
         </Card>
       </motion.div>
     </div>
+  );
+}
+
+function LoginCard({ email, onSaved }: { email: string; onSaved: () => Promise<unknown> }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    if (f.newPassword && f.newPassword !== f.confirm) { toast.error('New passwords do not match'); return; }
+    setBusy(true);
+    try {
+      await api.updateAccount({
+        currentPassword: f.currentPassword,
+        email: f.email && f.email !== email ? f.email : undefined,
+        newPassword: f.newPassword || undefined,
+      });
+      await onSaved();
+      form.reset();
+      toast.success('Login details updated');
+    } catch (err) { toast.error(err); } finally { setBusy(false); }
+  }
+  return (
+    <Card className="lg:col-span-2">
+      <h2 className="mb-1 flex items-center gap-2 text-xl font-bold text-white"><KeyRound className="h-5 w-5 text-ember-400" aria-hidden />Login</h2>
+      <p className="mb-4 text-sm text-zinc-400">Change your email or password. Your current password is needed to save.</p>
+      <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="Email"><input name="email" type="email" className="input" defaultValue={email} key={email} autoComplete="email" /></Field>
+        <Field label="New password" hint="Optional, 8+ characters"><input name="newPassword" type="password" className="input" minLength={8} autoComplete="new-password" /></Field>
+        <Field label="Confirm new password"><input name="confirm" type="password" className="input" autoComplete="new-password" /></Field>
+        <Field label="Current password"><input name="currentPassword" type="password" className="input" required autoComplete="current-password" /></Field>
+        <div className="sm:col-span-2 lg:col-span-4"><Button type="submit" loading={busy}>Save login</Button></div>
+      </form>
+    </Card>
   );
 }

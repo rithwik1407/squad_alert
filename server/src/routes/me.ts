@@ -5,7 +5,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { Attendance, Match, Squad, Stats, User } from '../models/index.js';
 import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
-import { badRequest } from '../lib/errors.js';
+import bcrypt from 'bcryptjs';
+import { badRequest, conflict } from '../lib/errors.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -25,6 +26,26 @@ meRouter.patch('/', ah(async (req, res) => {
   const { notifyPrefs, ...rest } = body;
   user.set(rest);
   if (notifyPrefs) user.set('notifyPrefs', { ...user.toObject().notifyPrefs, ...notifyPrefs });
+  await user.save();
+  res.json({ user: user.toJSON() });
+}));
+
+/** Change my own login email and/or password. Needs the current password. */
+const accountSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
+  email: z.string().trim().toLowerCase().email().optional(),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters').max(100).optional(),
+}).refine((d) => d.email || d.newPassword, { message: 'Nothing to change' });
+
+meRouter.patch('/account', ah(async (req, res) => {
+  const body = parse(accountSchema, req.body);
+  const user = await User.findById(req.user!._id).select('+passwordHash');
+  if (!user || !(await bcrypt.compare(body.currentPassword, user.passwordHash))) throw badRequest('Current password is wrong');
+  if (body.email && body.email !== user.email) {
+    if (await User.exists({ email: body.email })) throw conflict('That email is already used by another account');
+    user.email = body.email;
+  }
+  if (body.newPassword) user.passwordHash = await bcrypt.hash(body.newPassword, 10);
   await user.save();
   res.json({ user: user.toJSON() });
 }));
