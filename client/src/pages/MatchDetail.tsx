@@ -3,13 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Ban, CheckCircle2, Copy, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trophy,
+  ArrowLeft, Ban, CheckCircle2, Copy, CopyPlus, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trophy,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST, timeIST, ago } from '@/lib/time';
 import { list } from '@/lib/motion';
 import type { Match, Member } from '@/lib/types';
+import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, StatusChip, cx } from '@/components/ui';
 import { MapArt } from '@/components/MapArt';
 import { FlipCountdown } from '@/components/FlipCountdown';
@@ -17,6 +18,8 @@ import { NotifyChips } from '@/components/MatchCard';
 import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
 import { LogTable } from './Notifications';
+import { JoinButton } from './Dashboard';
+import { AVAIL_STYLE } from '@/components/CheckinBoard';
 
 export default function MatchDetail() {
   const { id = '' } = useParams();
@@ -43,11 +46,12 @@ export default function MatchDetail() {
               <span className="chip bg-white/5 capitalize text-zinc-300 ring-1 ring-white/10">{m.type}{m.tournamentName ? ` · ${m.tournamentName}` : ''}</span>
             </div>
             <div className="h-3" />
-            <PageHeader title={m.title}>{fullIST(m.startAt)} IST · {m.map}</PageHeader>
+            <PageHeader title={m.title}>{fullIST(m.startAt)} IST · {mapLabel(m.map)}</PageHeader>
             <div className="flex flex-wrap items-end justify-between gap-5">
               <div className="space-y-2">
                 {m.drop && <p className="flex items-center gap-2 text-sm text-zinc-200"><MapPin className="h-4 w-4 text-ember-400" aria-hidden />Drop: <b>{m.drop}</b></p>}
                 <RoomBox m={m} />
+                {!isCaptain && <JoinButton m={m} />}
               </div>
               {upcoming && <FlipCountdown target={m.startAt} />}
             </div>
@@ -66,10 +70,18 @@ export default function MatchDetail() {
               {[...m.squad.selectedIds, ...(m.squad.benchedId ? [m.squad.benchedId] : [])].map((pid) => {
                 const p = byId.get(pid);
                 const bench = pid === m.squad!.benchedId;
+                const joining = m.joining.includes(pid);
+                const avail = m.availability[pid];
                 return (
                   <li key={pid} className={cx('flex items-center gap-2 rounded-xl border p-2.5', bench ? 'border-white/5 opacity-50 grayscale' : 'border-ember-400/25 bg-ember-500/5')}>
                     <Avatar name={p?.ign ?? '??'} size={32} dim={bench} />
-                    <div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{p?.ign ?? 'Player'}</p>{bench && <p className="text-[10px] uppercase tracking-wider text-zinc-400">Bench</p>}</div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{p?.ign ?? 'Player'}</p>
+                      {bench ? <p className="text-[10px] uppercase tracking-wider text-zinc-400">Bench</p>
+                        : joining ? <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300"><CheckCircle2 className="h-3 w-3" aria-hidden />Joining</p>
+                        : isCaptain && avail ? <p className={cx('text-[10px] font-semibold uppercase tracking-wider', AVAIL_STYLE[avail].cls.split(' ').find((c) => c.startsWith('text-')))}>{AVAIL_STYLE[avail].label}</p>
+                        : null}
+                    </div>
                   </li>
                 );
               })}
@@ -140,7 +152,8 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
         <NotifyChips m={m} />
       </div>
       <div className="flex flex-wrap gap-2">
-        {!done && <Link to={`/matches/${m.id}/edit`} className="btn-ghost"><Pencil className="h-4 w-4" aria-hidden />Edit</Link>}
+        {!done && <Link to={`/matches/${m.id}/edit`} className="btn-ghost"><Pencil className="h-4 w-4" aria-hidden />{m.map === 'TBD' ? 'Set map / edit' : 'Edit'}</Link>}
+        <Link to={`/matches/new?from=${m.id}`} className="btn-ghost"><CopyPlus className="h-4 w-4" aria-hidden />Duplicate</Link>
         {!done && !m.locked && (
           <Button variant="primary" loading={busy === 'send'} disabled={!m.squad?.confirmed} icon={<Send className="h-4 w-4" aria-hidden />}
             title={m.squad?.confirmed ? undefined : 'Confirm the squad first'}

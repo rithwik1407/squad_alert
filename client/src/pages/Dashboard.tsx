@@ -11,12 +11,14 @@ import { PickChip } from '@/components/PickChip';
 import { useSquadSelection, SQUAD_SIZE } from '@/lib/useSquad';
 import { celebrate } from '@/lib/confetti';
 import type { Match, Member } from '@/lib/types';
+import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, Stat, StatusChip, cx } from '@/components/ui';
 import { FlipCountdown } from '@/components/FlipCountdown';
 import { MatchCard, NotifyChips } from '@/components/MatchCard';
 import { MapArt } from '@/components/MapArt';
 import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
+import { CheckinBoard } from '@/components/CheckinBoard';
 
 export default function Dashboard() {
   const { isCaptain } = useAuth();
@@ -40,13 +42,20 @@ function NextMatchHero({ m, captain }: { m: Match; captain?: boolean }) {
           <p className="eyebrow">{started ? 'In progress' : 'Next match'} · {relativeDay(m.startAt)}</p>
           <h2 className="mt-1 text-3xl font-bold text-white sm:text-4xl">{m.title}</h2>
           <p className="mt-1 text-sm text-zinc-300">
-            {m.map} · <span className="font-semibold text-white">{timeIST(m.startAt)} IST</span> · <span className="capitalize">{m.type}</span>
+            {mapLabel(m.map)} · <span className="font-semibold text-white">{timeIST(m.startAt)} IST</span> · <span className="capitalize">{m.type}</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {m.locked && <LockBadge />}
             <NotifyChips m={m} />
             {m.drop && <span className="chip bg-white/5 text-zinc-200 ring-1 ring-white/10"><MapPin className="h-3 w-3" aria-hidden />Drop: {m.drop}</span>}
+            {captain && m.squad?.confirmed && (m.locked || m.joining.length > 0) && (
+              <StatusChip status={m.joining.length >= 4 ? 'sent' : 'pending'}>{m.joining.filter((j) => m.squad!.selectedIds.includes(j)).length}/4 joining</StatusChip>
+            )}
+            {captain && !m.squad?.confirmed && Object.keys(m.availability).length > 0 && (
+              <StatusChip status="scheduled">{Object.values(m.availability).filter((v) => v === 'available').length} checked in</StatusChip>
+            )}
           </div>
+          {!captain && <JoinButton m={m} />}
           {!captain && m.roomId && (
             <div className="mt-4 inline-flex items-center gap-3 rounded-xl bg-black/40 px-3 py-2 ring-1 ring-ember-400/30">
               <KeyRound className="h-4 w-4 text-ember-400" aria-hidden />
@@ -94,7 +103,7 @@ function CaptainDashboard() {
         {next && !next.locked && team && <QuickPicker m={next} members={team.members} />}
 
         <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-          <section aria-labelledby="today-h">
+          <section aria-labelledby="today-h" className="min-w-0">
             <h2 id="today-h" className="mb-3 text-xl font-bold text-white">Today's scrims</h2>
             {q.isLoading ? <div className="space-y-3"><Skeleton className="h-24" /><Skeleton className="h-24" /></div> : today.length ? (
               <motion.div variants={list} initial="initial" animate="animate" className="space-y-3">
@@ -102,7 +111,7 @@ function CaptainDashboard() {
               </motion.div>
             ) : <Card className="text-sm text-zinc-400">Nothing else today. Rest those thumbs.</Card>}
           </section>
-          <section aria-labelledby="roster-h">
+          <section aria-labelledby="roster-h" className="min-w-0">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="roster-h" className="text-xl font-bold text-white">Roster</h2>
               <Link to="/team" className="text-xs font-semibold text-ember-400 hover:text-ember-300">Manage</Link>
@@ -210,14 +219,16 @@ function PlayerDashboard() {
           <Stat label="Attendance" value={stats.data?.totals.attendanceRate != null ? `${stats.data.totals.attendanceRate}%` : '–'} icon={<Check className="h-3.5 w-3.5" aria-hidden />} />
         </div>
 
+        <CheckinBoard />
+
         <div className="grid gap-6 lg:grid-cols-2">
-          <section aria-labelledby="up-h">
+          <section aria-labelledby="up-h" className="min-w-0">
             <h2 id="up-h" className="mb-3 text-xl font-bold text-white">Upcoming</h2>
             {matches.length > 1 ? (
               <motion.div variants={list} initial="initial" animate="animate" className="space-y-3">{matches.slice(1).map((m) => <MatchCard key={m.id} m={m} />)}</motion.div>
             ) : <Card className="text-sm text-zinc-400">No other matches yet.</Card>}
           </section>
-          <section aria-labelledby="inbox-h">
+          <section aria-labelledby="inbox-h" className="min-w-0">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="inbox-h" className="text-xl font-bold text-white">Inbox</h2>
               <Link to="/notifications" className="text-xs font-semibold text-ember-400 hover:text-ember-300">See all</Link>
@@ -250,3 +261,24 @@ function PlayerDashboard() {
   );
 }
 
+
+export function JoinButton({ m }: { m: Match }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  if (m.myJoining) {
+    return <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-300"><Check className="h-4 w-4" aria-hidden />Captain knows you're joining</p>;
+  }
+  if (!m.locked) return null;
+  return (
+    <div className="mt-4">
+      <Button icon={<Check className="h-4 w-4" aria-hidden />} onClick={async () => {
+        try {
+          await api.joining(m.id);
+          toast.success('Captain notified: you are joining');
+          qc.invalidateQueries({ queryKey: ['matches'] });
+          qc.invalidateQueries({ queryKey: ['match', m.id] });
+        } catch (e) { toast.error(e); }
+      }}>I'm joining</Button>
+    </div>
+  );
+}

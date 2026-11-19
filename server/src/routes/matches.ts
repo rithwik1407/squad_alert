@@ -4,10 +4,13 @@ import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth, requireCaptain } from '../middleware/auth.js';
 import {
-  Attendance, MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team, type MatchDoc,
+  Attendance, AVAILABILITY, Availability, MAP_TBD, MATCH_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team,
+  type MatchDoc,
 } from '../models/index.js';
 import { badRequest, locked, notFound } from '../lib/errors.js';
 import { serializeMatch, type LogSummary } from '../lib/serialize.js';
+import { randomUUID } from 'node:crypto';
+import { markJoining } from '../lib/availability.js';
 import { enqueueImmediate, removeMatchJob, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
 
 export function matchesRouter(getQueue: () => QueueLike) {
@@ -45,13 +48,34 @@ export function matchesRouter(getQueue: () => QueueLike) {
     return out;
   }
 
-  async function view(matches: MatchDoc[]) {
+  async function view(matches: MatchDoc[], viewerId?: string) {
     const ids = matches.map((m) => m._id as Types.ObjectId);
-    const squads = await Squad.find({ matchId: { $in: ids } }).lean();
+    const [squads, avail] = await Promise.all([
+      Squad.find({ matchId: { $in: ids } }).lean(),
+      Availability.find({ matchId: { $in: ids } }).lean(),
+    ]);
+    const availBy = new Map<string, typeof avail>();
+    for (const a of avail) {
+      const k = String(a.matchId);
+      if (!availBy.has(k)) availBy.set(k, []);
+      availBy.get(k)!.push(a);
+    }
     const byMatch = new Map(squads.map((s) => [String(s.matchId), s]));
     const sel = new Map(squads.filter((s) => s.confirmed).map((s) => [String(s.matchId), s.selectedIds.map(String)]));
     const logs = await summaries(ids, sel);
-    return matches.map((m) => serializeMatch(m, byMatch.get(String(m._id)), m.notifiedAt ? logs.get(String(m._id)) : undefined));
+    return matches.map((m) => {
+      const out = serializeMatch(m, byMatch.get(String(m._id)), m.notifiedAt ? logs.get(String(m._id)) : undefined);
+      const rows = availBy.get(String(m._id)) ?? [];
+      const mine = viewerId ? rows.find((a) => String(a.userId) === viewerId) : undefined;
+      return {
+        ...out,
+        availability: Object.fromEntries(rows.filter((a) => a.status).map((a) => [String(a.userId), a.status])),
+        availabilityNotes: Object.fromEntries(rows.filter((a) => a.note).map((a) => [String(a.userId), a.note])),
+        joining: rows.filter((a) => a.joiningAt).map((a) => String(a.userId)),
+        myAvailability: mine?.status ?? null,
+        myJoining: Boolean(mine?.joiningAt),
+      };
+    });
   }
 
   // ---------- list ----------
@@ -71,14 +95,37 @@ export function matchesRouter(getQueue: () => QueueLike) {
       filter._id = { $in: mySquads.map((s) => s.matchId) };
     }
     const matches = await Match.find(filter).sort({ startAt: scope === 'past' ? -1 : 1 }).limit(100);
-    res.json({ matches: await view(matches) });
+    res.json({ matches: await view(matches, String(req.user!._id)) });
+  }));
+
+  /** Player check-in board: every upcoming team match (no room details) and my availability. */
+  r.get('/checkin', ah(async (req, res) => {
+    const teamId = teamIdOf(req);
+    const uid = String(req.user!._id);
+    const matches = await Match.find({ teamId, status: 'scheduled', startAt: { $gte: new Date() } }).sort({ startAt: 1 }).limit(50).lean();
+    const ids = matches.map((m) => m._id);
+    const [avail, squads] = await Promise.all([
+      Availability.find({ matchId: { $in: ids }, userId: req.user!._id }).lean(),
+      Squad.find({ matchId: { $in: ids }, confirmed: true }).lean(),
+    ]);
+    res.json({
+      matches: matches.map((m) => {
+        const a = avail.find((x) => String(x.matchId) === String(m._id));
+        const sq = squads.find((x) => String(x.matchId) === String(m._id));
+        return {
+          id: String(m._id), title: m.title, type: m.type, map: m.map, drop: m.drop ?? '', startAt: m.startAt.toISOString(),
+          status: m.status, myAvailability: a?.status ?? null, myNote: a?.note ?? '',
+          squadPicked: Boolean(sq), selected: Boolean(sq?.selectedIds.some((id) => String(id) === uid)),
+        };
+      }),
+    });
   }));
 
   // ---------- create / edit ----------
   const matchBody = z.object({
     title: z.string().trim().min(1).max(60),
     type: z.enum(MATCH_TYPES).default('scrim'),
-    map: z.enum(MAPS),
+    map: z.enum(MATCH_MAPS).default(MAP_TBD),
     drop: z.string().trim().max(30).optional(),
     startAt: z.coerce.date(),
     notifyOffsetMin: z.coerce.number().int().min(0).max(120).default(2),
@@ -91,15 +138,40 @@ export function matchesRouter(getQueue: () => QueueLike) {
     const body = parse(matchBody, req.body);
     if (body.startAt.getTime() < Date.now()) throw badRequest('Pick a time in the future');
     const team = await Team.findById(teamIdOf(req));
-    const drop = body.drop || team?.drops.get(body.map) || '';
+    const drop = body.drop || (body.map !== MAP_TBD ? team?.drops.get(body.map) : '') || '';
     const match = await Match.create({ ...body, drop, teamId: teamIdOf(req) });
     const schedule = await upsertMatchJob(getQueue(), { id: String(match._id), ...match.toObject() });
-    res.status(201).json({ match: (await view([match]))[0], schedule });
+    res.status(201).json({ match: (await view([match], String(req.user!._id)))[0], schedule });
+  }));
+
+  /** Bulk add: several matches at once (different times, optional maps). The client also uses it for "repeat daily". */
+  const bulkBody = z.object({
+    matches: z.array(matchBody).min(1).max(40, 'Up to 40 matches at a time'),
+  });
+
+  r.post('/bulk', requireCaptain, ah(async (req, res) => {
+    const { matches: items } = parse(bulkBody, req.body);
+    const now = Date.now();
+    const past = items.findIndex((m) => m.startAt.getTime() < now);
+    if (past >= 0) throw badRequest(`Match ${past + 1} (${items[past].title}) is in the past`);
+    const times = items.map((m) => m.startAt.getTime());
+    if (new Set(times).size !== times.length) throw badRequest('Two matches have the same start time');
+    const team = await Team.findById(teamIdOf(req));
+    const batchId = randomUUID();
+    const docs = await Match.insertMany(items.map((m) => ({
+      ...m,
+      drop: m.drop || (m.map !== MAP_TBD ? team?.drops.get(m.map) : '') || '',
+      teamId: teamIdOf(req),
+      batchId,
+    })));
+    const created = await Match.find({ _id: { $in: docs.map((d) => d._id) } }).sort({ startAt: 1 });
+    await Promise.all(created.map((m) => upsertMatchJob(getQueue(), { id: String(m._id), ...m.toObject() })));
+    res.status(201).json({ matches: await view(created, String(req.user!._id)), batchId });
   }));
 
   r.get('/:id', ah(async (req, res) => {
     const match = await loadMatch(req);
-    res.json({ match: (await view([match]))[0] });
+    res.json({ match: (await view([match], String(req.user!._id)))[0] });
   }));
 
   r.patch('/:id', requireCaptain, ah(async (req, res) => {
@@ -112,12 +184,12 @@ export function matchesRouter(getQueue: () => QueueLike) {
     if (body.startAt && body.startAt.getTime() < Date.now()) throw badRequest('Pick a time in the future');
     if (body.map && body.drop === undefined && body.map !== match.map) {
       const team = await Team.findById(match.teamId);
-      body.drop = team?.drops.get(body.map) ?? '';
+      body.drop = body.map === MAP_TBD ? '' : team?.drops.get(body.map) ?? '';
     }
     match.set(body);
     await match.save();
     const schedule = await upsertMatchJob(getQueue(), { id: String(match._id), ...match.toObject() });
-    res.json({ match: (await view([match]))[0], schedule });
+    res.json({ match: (await view([match], String(req.user!._id)))[0], schedule });
   }));
 
   r.post('/:id/cancel', requireCaptain, ah(async (req, res) => {
@@ -125,7 +197,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
     match.status = 'cancelled';
     await match.save();
     await removeMatchJob(getQueue(), String(match._id));
-    res.json({ match: (await view([match]))[0] });
+    res.json({ match: (await view([match], String(req.user!._id)))[0] });
   }));
 
   r.post('/:id/status', requireCaptain, ah(async (req, res) => {
@@ -139,7 +211,28 @@ export function matchesRouter(getQueue: () => QueueLike) {
     if (placement) match.placement = placement;
     await match.save();
     await removeMatchJob(getQueue(), String(match._id));
-    res.json({ match: (await view([match]))[0] });
+    res.json({ match: (await view([match], String(req.user!._id)))[0] });
+  }));
+
+  // ---------- availability & joining ----------
+  r.put('/:id/availability', ah(async (req, res) => {
+    const body = parse(z.object({ status: z.enum(AVAILABILITY), note: z.string().trim().max(80).default('') }), req.body);
+    const match = await Match.findById(req.params.id);
+    if (!match || String(match.teamId) !== String(teamIdOf(req))) throw notFound('Match not found');
+    if (match.status !== 'scheduled' || match.startAt.getTime() < Date.now()) throw badRequest('Check-in is closed for this match');
+    await Availability.updateOne(
+      { matchId: match._id, userId: req.user!._id },
+      { $set: { status: body.status, note: body.note } },
+      { upsert: true },
+    );
+    res.json({ ok: true, status: body.status });
+  }));
+
+  r.post('/:id/joining', ah(async (req, res) => {
+    const via = req.query.via === 'push' ? 'push' : 'app';
+    const ok = await markJoining(String(req.params.id), String(req.user!._id), via);
+    if (!ok) throw notFound('You are not in this squad');
+    res.json({ ok: true });
   }));
 
   // ---------- squad ----------
@@ -170,7 +263,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
       { selectedIds: unique, benchedId: benched[0] ?? null, confirmed: body.confirm },
       { upsert: true, new: true, runValidators: true },
     ).lean();
-    res.json({ squad: serializeMatch(match, squad).squad, match: (await view([match]))[0] });
+    res.json({ squad: serializeMatch(match, squad).squad, match: (await view([match], String(req.user!._id)))[0] });
   }));
 
   r.post('/:id/substitute', requireCaptain, ah(async (req, res) => {
@@ -193,7 +286,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
     if (match.notifiedAt) {
       jobId = await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'substitute', onlyUserIds: [inId] });
     }
-    res.json({ match: (await view([match]))[0], jobId });
+    res.json({ match: (await view([match], String(req.user!._id)))[0], jobId });
   }));
 
   // ---------- notifications ----------

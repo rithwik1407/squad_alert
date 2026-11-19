@@ -27,6 +27,16 @@ docs/     REST API reference
 
 Notification: **"Match in 2 minutes!"** / *"Scrim 1 · Erangel · 9:00 PM. Join the lobby now. Room: 4471823 / Pass: rare21"*. Tapping opens `/matches/:id`.
 
+## Features
+
+- **Scheduling**: single match, or **Add several** at once (each with its own time), with **repeat daily** for up to 7 days and quick time presets. Duplicate any match.
+- **Map optional**: pick "Not decided" and set it later. Team default drops fill in when the map is chosen (Erangel → Quarry, Miramar → Monte, Sanhok → Ruins).
+- **Player check-in**: players mark each upcoming match *I'm in / Maybe / Out*. The captain sees it on the squad picker.
+- **4-of-5 squad picker** with bench, confirm, lock after the alert, and emergency substitution.
+- **Alerts** N minutes before start, to the selected 4 only: push first, Telegram fallback, captain-only alert if no squad is confirmed, Send now, Resend to failed.
+- **"I'm joining" replies** from the app, the push notification button, or the Telegram button. The captain sees who's on the way.
+- **Delivery history**, player inbox, attendance, kills/damage/MVP stats with charts, tournament placements.
+
 ## Local setup
 
 Requirements: Node 20+, a MongoDB (local or Atlas), a Redis (local `redis-server` or Upstash).
@@ -51,7 +61,7 @@ Seeded logins (password `squadsync123`, or `SEED_PASSWORD`):
 | Player | vignesh@teamrare.gg | RARE丨VIGNESH | 55522353757 |
 
 Team join code: `RARE25`. Default drops: Erangel → Quarry, Miramar → Monte, Sanhok → Ruins.
-Seeded matches: Scrim 1 (Erangel, 9:00 PM IST, squad confirmed, Vignesh benched), Scrim 2 (Miramar), Scrim 3 (Sanhok, tomorrow), a tournament round, and six past scrims with stats for the charts.
+Seeded matches: Scrim 1 (Erangel, 9:00 PM IST, squad confirmed, Vignesh benched), Scrim 2 (Miramar), Scrim 3 (Sanhok, tomorrow), Scrim 4 (map not decided), a tournament round, and six past scrims with stats for the charts.
 These are demo accounts: change the emails/passwords or have players register with the join code.
 
 ## Tests

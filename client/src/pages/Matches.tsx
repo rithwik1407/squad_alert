@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { CalendarPlus, Trophy } from 'lucide-react';
+import { CalendarPlus, Layers, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { list } from '@/lib/motion';
 import { dayIST } from '@/lib/time';
@@ -31,7 +31,11 @@ export default function Matches() {
 
   return (
     <div>
-      <PageHeader eyebrow="Schedule" title="Matches" action={<Link to="/matches/new" className="btn-primary"><CalendarPlus className="h-4 w-4" aria-hidden />New match</Link>} />
+      <PageHeader eyebrow="Schedule" title="Matches" action={
+        <div className="flex gap-2">
+          <Link to="/matches/bulk" className="btn-ghost"><Layers className="h-4 w-4" aria-hidden />Add several</Link>
+          <Link to="/matches/new" className="btn-primary"><CalendarPlus className="h-4 w-4" aria-hidden />New match</Link>
+        </div>} />
       <div role="tablist" aria-label="Matches" className="mb-5 inline-flex rounded-xl bg-white/[0.04] p-1">
         {TABS.map((t) => (
           <button key={t.k} role="tab" aria-selected={tab === t.k} onClick={() => setTab(t.k)}

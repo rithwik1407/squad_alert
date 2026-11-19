@@ -9,6 +9,8 @@ export interface MatchForContent {
   roomPassword?: string | null;
 }
 
+const mapLabel = (map: string) => (map === 'TBD' ? 'Map TBD' : map);
+
 function minutesLabel(min: number) {
   if (min <= 0) return 'Match starting now!';
   return `Match in ${min} minute${min === 1 ? '' : 's'}!`;
@@ -20,7 +22,7 @@ export function squadNotification(m: MatchForContent, now: Date, tz?: string) {
   const room = m.roomId ? `Room: ${m.roomId} / Pass: ${m.roomPassword || '-'}` : 'Room: TBA';
   return {
     title: minutesLabel(mins),
-    body: `${m.title} · ${m.map} · ${formatTimeIST(m.startAt, tz)}. Join the lobby now. ${room}`,
+    body: `${m.title} · ${mapLabel(m.map)} · ${formatTimeIST(m.startAt, tz)}. Join the lobby now. ${room}`,
     url: `/matches/${m.id}`,
     matchId: m.id,
     tag: `match-${m.id}`,
@@ -31,7 +33,7 @@ export function captainAlert(m: MatchForContent, now: Date, tz?: string) {
   const mins = Math.max(0, Math.round((m.startAt.getTime() - now.getTime()) / 60_000));
   return {
     title: 'Squad not confirmed!',
-    body: `${m.title} · ${m.map} · ${formatTimeIST(m.startAt, tz)} starts in ${mins} min. Confirm your 4 and hit Send now.`,
+    body: `${m.title} · ${mapLabel(m.map)} · ${formatTimeIST(m.startAt, tz)} starts in ${mins} min. Confirm your 4 and hit Send now.`,
     url: `/matches/${m.id}/squad`,
     matchId: m.id,
     tag: `captain-${m.id}`,

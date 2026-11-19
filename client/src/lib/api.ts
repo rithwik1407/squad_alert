@@ -1,4 +1,4 @@
-import type { Match, MyStats, NotificationLog, Team, User } from './types';
+import type { Availability, CheckinMatch, Match, MyStats, NotificationLog, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -41,6 +41,10 @@ export const api = {
   matches: (scope: 'upcoming' | 'past' | 'all' = 'upcoming') => request<{ matches: Match[] }>('GET', `/matches?scope=${scope}`),
   match: (id: string) => request<{ match: Match }>('GET', `/matches/${id}`),
   createMatch: (b: Record<string, unknown>) => request<{ match: Match }>('POST', '/matches', b),
+  createMatches: (matches: Record<string, unknown>[]) => request<{ matches: Match[]; batchId: string }>('POST', '/matches/bulk', { matches }),
+  checkin: () => request<{ matches: CheckinMatch[] }>('GET', '/matches/checkin'),
+  setAvailability: (id: string, status: Availability, note = '') => request('PUT', `/matches/${id}/availability`, { status, note }),
+  joining: (id: string) => request('POST', `/matches/${id}/joining`),
   updateMatch: (id: string, b: Record<string, unknown>) => request<{ match: Match }>('PATCH', `/matches/${id}`, b),
   cancelMatch: (id: string) => request<{ match: Match }>('POST', `/matches/${id}/cancel`),
   setStatus: (id: string, status: 'live' | 'done', placement?: number) =>

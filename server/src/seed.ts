@@ -73,11 +73,12 @@ async function main() {
     { title: 'Scrim 1', type: 'scrim', map: 'Erangel', startAt: ist(0, 21, 0), roomId: '4471823', roomPassword: 'rare21' },
     { title: 'Scrim 2', type: 'scrim', map: 'Miramar', startAt: ist(0, 22, 0), roomId: '', roomPassword: '' },
     { title: 'Scrim 3', type: 'scrim', map: 'Sanhok', startAt: ist(1, 21, 0), roomId: '', roomPassword: '' },
+    { title: 'Scrim 4', type: 'scrim', map: 'TBD', startAt: ist(1, 22, 0), roomId: '', roomPassword: '' },
     { title: 'BGIS Qualifier R1', type: 'tournament', map: 'Erangel', startAt: ist(2, 18, 30), tournamentName: 'BGIS 2026' },
   ];
   for (const u of upcoming) {
     if (u.startAt.getTime() < Date.now() + 5 * 60_000) u.startAt = new Date(u.startAt.getTime() + 24 * 3600_000);
-    const m = await Match.create({ ...u, teamId: team._id, drop: DROPS[u.map as keyof typeof DROPS] ?? '' });
+    const m = await Match.create({ ...u, teamId: team._id, drop: DROPS[u.map as keyof typeof DROPS] ?? '', batchId: null });
     if (u.title === 'Scrim 1') {
       await Squad.create({ matchId: m._id, selectedIds: [akshay._id, dheeraj._id, bittu._id, vasanth._id], benchedId: vignesh._id, confirmed: true });
     }

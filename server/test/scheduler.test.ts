@@ -112,6 +112,12 @@ describe('dispatch: who gets notified', () => {
     expect(fcm.calls[0].body).toBe('Scrim 1 · Erangel · 9:00 PM. Join the lobby now. Room: 4471823 / Pass: rare21');
   });
 
+  it('says "Map TBD" when the map has not been decided', async () => {
+    repo.matches.get('m1')!.map = 'TBD';
+    await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
+    expect(fcm.calls[0].body).toBe('Scrim 1 · Map TBD · 9:00 PM. Join the lobby now. Room: 4471823 / Pass: rare21');
+  });
+
   it('duplicate prevention: running twice sends nothing new', async () => {
     await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
     const second = await dispatchMatch('m1', { trigger: 'manual' }, deps);

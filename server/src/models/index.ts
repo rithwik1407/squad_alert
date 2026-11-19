@@ -7,3 +7,4 @@ export * from './NotificationLog.js';
 export * from './Attendance.js';
 export * from './Stats.js';
 export * from './DeliveryClaim.js';
+export * from './Availability.js';

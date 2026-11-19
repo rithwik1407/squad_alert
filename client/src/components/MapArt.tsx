@@ -1,16 +1,17 @@
-import type { MapName } from '@/lib/types';
+import type { MatchMap } from '@/lib/types';
 import { cx } from './ui';
 
 /** Stylised top-down map art (pure SVG, no image downloads). */
-const PALETTE: Record<MapName, { a: string; b: string; c: string; land: string; tag: string }> = {
+const PALETTE: Record<MatchMap, { a: string; b: string; c: string; land: string; tag: string }> = {
   Erangel: { a: '#2d4a2b', b: '#4f7a3a', c: '#7fa35a', land: '#1c3a52', tag: '8×8 · Classic' },
   Miramar: { a: '#5a3a1e', b: '#a8693a', c: '#e2a35e', land: '#3a2410', tag: '8×8 · Desert' },
   Sanhok: { a: '#0f4a3a', b: '#1f7a55', c: '#4fbf7a', land: '#0d3b4a', tag: '4×4 · Jungle' },
   Vikendi: { a: '#3a4a5e', b: '#8fa6c2', c: '#e6eef7', land: '#1d2c40', tag: '6×6 · Snow' },
   Livik: { a: '#2a4a3a', b: '#5a8a5a', c: '#e0b04a', land: '#13405a', tag: '2×2 · Fast' },
+  TBD: { a: '#1f1f2b', b: '#2a2a3a', c: '#3a3a4d', land: '#111118', tag: 'Decide later' },
 };
 
-export function MapArt({ map, className }: { map: MapName; className?: string }) {
+export function MapArt({ map, className }: { map: MatchMap; className?: string }) {
   const p = PALETTE[map] ?? PALETTE.Erangel;
   const id = `m-${map}`;
   return (
@@ -34,9 +35,12 @@ export function MapArt({ map, className }: { map: MapName; className?: string })
         <g key={i}><rect x={x} y={y} width="8" height="8" fill="rgba(0,0,0,.35)" /><rect x={x + 10} y={y + 3} width="5" height="5" fill="rgba(0,0,0,.3)" /></g>
       ))}
       <rect width="320" height="180" fill={`url(#${id}-grid)`} />
+      {map === 'TBD' && (
+        <text x="160" y="104" textAnchor="middle" fontSize="64" fontWeight="700" fill="rgba(255,169,77,.35)" fontFamily="Rajdhani, sans-serif">?</text>
+      )}
       <rect width="320" height="180" fill={`url(#${id}-fade)`} />
     </svg>
   );
 }
 
-export const mapTag = (m: MapName) => PALETTE[m]?.tag ?? '';
+export const mapTag = (m: MatchMap) => PALETTE[m]?.tag ?? '';

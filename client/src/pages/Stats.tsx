@@ -4,6 +4,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Too
 import { CheckCircle2, Crosshair, Flame, Swords, Trophy, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { dayIST } from '@/lib/time';
+import { mapLabel } from '@/lib/types';
 import { list } from '@/lib/motion';
 import { Card, PageHeader, Skeleton, Stat } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
@@ -18,6 +19,7 @@ export default function Stats() {
   const played = (d?.rows ?? []).filter((r) => r.selected);
   const chart = played.map((r) => ({ name: `${r.title} · ${dayIST(r.startAt)}`, short: dayIST(r.startAt).split(', ')[1] ?? r.title, kills: r.kills, damage: r.damage, map: r.map }));
   const byMap = Object.entries(played.reduce<Record<string, { kills: number; n: number }>>((a, r) => {
+    if (r.map === 'TBD') return a;
     a[r.map] ??= { kills: 0, n: 0 };
     a[r.map].kills += r.kills; a[r.map].n += 1;
     return a;
@@ -84,7 +86,7 @@ export default function Stats() {
                 {[...(d?.rows ?? [])].reverse().slice(0, 8).map((r) => (
                   <li key={r.matchId} className="flex items-center gap-3 py-2.5">
                     {r.selected ? (r.joined === false ? <XCircle className="h-4 w-4 text-red-400" aria-label="missed" /> : <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-label="played" />) : <span className="chip bg-zinc-700/60 text-zinc-300">Bench</span>}
-                    <span className="flex-1 text-zinc-200">{r.title} · {r.map}</span>
+                    <span className="flex-1 text-zinc-200">{r.title} · {mapLabel(r.map)}</span>
                     <span className="text-xs text-zinc-500">{dayIST(r.startAt)}</span>
                     {r.selected && <span className="w-16 text-right font-mono text-zinc-300">{r.kills}K {r.mvp && <Trophy className="inline h-3.5 w-3.5 text-ember-400" aria-label="MVP" />}</span>}
                   </li>

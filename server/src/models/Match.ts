@@ -1,12 +1,13 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
-import { MAPS, MATCH_STATUS, MATCH_TYPES } from './constants.js';
+import { MAP_TBD, MATCH_MAPS, MATCH_STATUS, MATCH_TYPES } from './constants.js';
 
 const matchSchema = new Schema(
   {
     teamId: { type: Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
     title: { type: String, required: true, trim: true },
     type: { type: String, enum: MATCH_TYPES, default: 'scrim' },
-    map: { type: String, enum: MAPS, required: true },
+    /** 'TBD' until the captain decides. */
+    map: { type: String, enum: MATCH_MAPS, default: MAP_TBD },
     drop: { type: String, default: '' },
     /** Always UTC. */
     startAt: { type: Date, required: true, index: true },
@@ -20,6 +21,8 @@ const matchSchema = new Schema(
     captainAlertedAt: { type: Date, default: null },
     tournamentName: { type: String, default: '' },
     placement: { type: Number, default: null },
+    /** Matches created together (bulk add / daily repeat) share a batch id. */
+    batchId: { type: String, default: null, index: true },
   },
   { timestamps: true },
 );

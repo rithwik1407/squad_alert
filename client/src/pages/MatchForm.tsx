@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BellRing, Check, MapPin } from 'lucide-react';
+import { ArrowLeft, BellRing, Check, HelpCircle, Layers, MapPin } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { MAPS, type MapName } from '@/lib/types';
+import { MAPS, MAP_TBD, mapLabel, type MatchMap } from '@/lib/types';
 import { fromISTInput, timeIST, toISTInput, fullIST } from '@/lib/time';
 import { list, item, spring } from '@/lib/motion';
 import { Button, Card, Field, PageHeader, Skeleton, cx } from '@/components/ui';
@@ -26,12 +26,15 @@ export default function MatchForm() {
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-  const existing = useQuery({ queryKey: ['match', id], queryFn: () => api.match(id!).then((r) => r.match), enabled: editing });
+  const [params] = useSearchParams();
+  const fromId = params.get('from');
+  const sourceId = id ?? fromId;
+  const existing = useQuery({ queryKey: ['match', sourceId], queryFn: () => api.match(sourceId!).then((r) => r.match), enabled: Boolean(sourceId) });
 
   const [title, setTitle] = useState('Scrim 1');
   const [type, setType] = useState<'scrim' | 'tournament'>('scrim');
-  const [map, setMap] = useState<MapName>('Erangel');
-  const [drop, setDrop] = useState<string>(team?.drops.Erangel ?? '');
+  const [map, setMap] = useState<MatchMap>(MAP_TBD);
+  const [drop, setDrop] = useState<string>('');
   const [start, setStart] = useState(defaultStart());
   const [offset, setOffset] = useState(2);
   const [roomId, setRoomId] = useState('');
@@ -42,18 +45,25 @@ export default function MatchForm() {
   useEffect(() => {
     const m = existing.data;
     if (!m) return;
-    setTitle(m.title); setType(m.type); setMap(m.map); setDrop(m.drop); setStart(toISTInput(m.startAt));
-    setOffset(m.notifyOffsetMin); setRoomId(m.roomId); setRoomPassword(m.roomPassword); setTournamentName(m.tournamentName);
-  }, [existing.data]);
+    setTitle(m.title); setType(m.type); setMap(m.map); setDrop(m.drop);
+    setOffset(m.notifyOffsetMin); setTournamentName(m.tournamentName);
+    if (editing) {
+      setStart(toISTInput(m.startAt)); setRoomId(m.roomId); setRoomPassword(m.roomPassword);
+    } else {
+      // Duplicate: same setup, one day later, fresh room.
+      const next = new Date(new Date(m.startAt).getTime() + 864e5);
+      setStart(toISTInput(next.getTime() > Date.now() ? next : new Date(Date.now() + 3600_000)));
+    }
+  }, [existing.data, editing]);
 
-  const pickMap = (mp: MapName) => {
+  const pickMap = (mp: MatchMap) => {
     setMap(mp);
-    setDrop(team?.drops[mp] ?? '');
+    setDrop(mp === MAP_TBD ? '' : team?.drops[mp] ?? '');
   };
 
   const startIso = start ? fromISTInput(start) : null;
   const notifyIso = startIso ? new Date(new Date(startIso).getTime() - offset * 60_000).toISOString() : null;
-  const timeLocked = Boolean(existing.data?.locked);
+  const timeLocked = editing && Boolean(existing.data?.locked);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -77,12 +87,15 @@ export default function MatchForm() {
     }
   }
 
-  if (editing && existing.isLoading) return <Skeleton className="h-96" />;
+  if (sourceId && existing.isLoading) return <Skeleton className="h-96" />;
 
   return (
     <div>
       <Link to={editing ? `/matches/${id}` : '/matches'} className="mb-3 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white"><ArrowLeft className="h-4 w-4" aria-hidden />Back</Link>
-      <PageHeader eyebrow={editing ? 'Edit match' : 'New match'} title={editing ? title : 'Schedule a match'}>All times are IST (Asia/Kolkata).</PageHeader>
+      <PageHeader eyebrow={editing ? 'Edit match' : fromId ? 'Duplicate match' : 'New match'} title={editing ? title : 'Schedule a match'}
+        action={!editing ? <Link to="/matches/bulk" className="btn-ghost"><Layers className="h-4 w-4" aria-hidden />Add several at once</Link> : undefined}>
+        All times are IST (Asia/Kolkata).
+      </PageHeader>
 
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
@@ -105,9 +118,17 @@ export default function MatchForm() {
                   )}
                 </motion.button>
               ))}
+              <motion.button type="button" role="radio" aria-checked={map === MAP_TBD} onClick={() => pickMap(MAP_TBD)}
+                variants={item} whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }} transition={spring}
+                className={cx('relative flex h-28 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-dashed text-center transition-shadow',
+                  map === MAP_TBD ? 'border-ember-400 bg-ember-500/10 shadow-glow' : 'border-white/15 bg-white/[0.02]')}>
+                <HelpCircle className="h-6 w-6 text-ember-300" aria-hidden />
+                <span className="font-display text-lg font-bold leading-none text-white">Not decided</span>
+                <span className="text-[10px] text-zinc-400">Pick the map later</span>
+              </motion.button>
             </div>
             <div className="mt-4">
-              <Field label="Drop location" hint={team?.drops[map] ? `Team default for ${map}: ${team.drops[map]}` : 'No team default for this map'}>
+              <Field label="Drop location" hint={map === MAP_TBD ? 'Set the map later and the team default drop fills in' : team?.drops[map] ? `Team default for ${map}: ${team.drops[map]}` : 'No team default for this map'}>
                 <div className="relative">
                   <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ember-400" aria-hidden />
                   <input className="input pl-9" value={drop} onChange={(e) => setDrop(e.target.value)} placeholder="e.g. Quarry" maxLength={30} />
@@ -152,7 +173,7 @@ export default function MatchForm() {
               </div>
               <p className="mt-1.5 font-semibold text-white">Match in {offset} minute{offset === 1 ? '' : 's'}!</p>
               <p className="text-sm text-zinc-300">
-                {title} · {map} · {startIso ? timeIST(startIso) : '--'}. Join the lobby now. Room: {roomId || 'TBA'}{roomId ? ` / Pass: ${roomPassword || '-'}` : ''}
+                {title} · {mapLabel(map)} · {startIso ? timeIST(startIso) : '--'}. Join the lobby now. Room: {roomId || 'TBA'}{roomId ? ` / Pass: ${roomPassword || '-'}` : ''}
               </p>
             </div>
             <p className="mt-4 flex items-start gap-2 text-sm text-zinc-300">

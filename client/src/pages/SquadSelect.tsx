@@ -10,12 +10,15 @@ import { celebrate } from '@/lib/confetti';
 import { shake, spring, list } from '@/lib/motion';
 import { relativeDay, timeIST } from '@/lib/time';
 import type { Member } from '@/lib/types';
+import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, cx } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 import { EmptyState } from '@/components/EmptyState';
+import { AVAIL_STYLE } from '@/components/CheckinBoard';
+import type { Availability } from '@/lib/types';
 
-function PlayerCard({ p, on, benched, locked, order, onToggle }: {
-  p: Member; on: boolean; benched: boolean; locked: boolean; order: number; onToggle: () => boolean;
+function PlayerCard({ p, on, benched, locked, order, onToggle, avail, note }: {
+  p: Member; on: boolean; benched: boolean; locked: boolean; order: number; onToggle: () => boolean; avail?: Availability; note?: string;
 }) {
   const controls = useAnimationControls();
   useEffect(() => {
@@ -63,6 +66,9 @@ function PlayerCard({ p, on, benched, locked, order, onToggle }: {
         <p className="truncate font-display text-lg font-bold text-white">{p.ign}</p>
         <p className="font-mono text-[11px] text-zinc-500">UID {p.bgmiId || '-'}</p>
       </div>
+      <span className={cx('chip relative ring-1', avail ? AVAIL_STYLE[avail].cls : 'bg-white/5 text-zinc-500 ring-white/10')} title={note || undefined}>
+        {avail ? AVAIL_STYLE[avail].label : 'No check-in'}
+      </span>
       <div className="relative flex gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
         <span className={p.pushEnabled ? 'text-emerald-300' : 'text-zinc-600'}>Push</span>
         <span className="text-zinc-700">·</span>
@@ -109,7 +115,7 @@ export default function SquadSelect() {
   return (
     <div>
       <Link to={`/matches/${m.id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white"><ArrowLeft className="h-4 w-4" aria-hidden />Match</Link>
-      <PageHeader eyebrow={`${m.map} · ${relativeDay(m.startAt)} · ${timeIST(m.startAt)}`} title={`Squad · ${m.title}`}
+      <PageHeader eyebrow={`${mapLabel(m.map)} · ${relativeDay(m.startAt)} · ${timeIST(m.startAt)}`} title={`Squad · ${m.title}`}
         action={locked ? <LockBadge className="text-sm" /> : undefined}>
         Tap to pick exactly {SQUAD_SIZE}. The fifth sits on the bench and gets no alert.
       </PageHeader>
@@ -122,7 +128,7 @@ export default function SquadSelect() {
             {members.map((p, i) => {
               const on = sel.selected.includes(p.id);
               return (
-                <PlayerCard key={p.id} p={p} order={i} on={on} benched={sel.full && !on} locked={locked}
+                <PlayerCard key={p.id} p={p} order={i} on={on} benched={sel.full && !on} locked={locked} avail={m.availability[p.id]} note={m.availabilityNotes[p.id]}
                   onToggle={() => {
                     const ok = sel.toggle(p.id);
                     if (!ok) toast.error(`Squad is full (${SQUAD_SIZE}/${SQUAD_SIZE}). Tap a selected player to swap.`);

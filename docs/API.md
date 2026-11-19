@@ -58,12 +58,19 @@ A match object:
 }
 ```
 
-Players only ever see matches where they are in the **confirmed** squad.
+`map` is `"TBD"` until decided (the alert then says "Map TBD"). Match objects also carry
+`availability` (userId → status), `availabilityNotes`, `joining` (userIds), `myAvailability`, `myJoining`.
+
+Players only see full match details (room ID, squad) for matches where they are in the **confirmed** squad.
 
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
 | GET | `/matches?scope=upcoming\|past\|all` | any | | |
-| POST | `/matches` | captain | `{ title, type, map, startAt, notifyOffsetMin=2, drop?, roomId?, roomPassword?, tournamentName? }` | Upserts the BullMQ delayed job (`jobId = matchId`). `drop` defaults from team drops. Response includes `schedule` |
+| POST | `/matches` | captain | `{ title, type, map?, startAt, notifyOffsetMin=2, drop?, roomId?, roomPassword?, tournamentName? }` | Upserts the BullMQ delayed job (`jobId = matchId`). `drop` defaults from team drops. Response includes `schedule` |
+| POST | `/matches/bulk` | captain | `{ matches: [ ...create bodies ] }` (1–40) | Several matches at once, each with its own time and job. All share a `batchId`. Rejects past or duplicate times |
+| GET | `/matches/checkin` | any | | Player check-in board: upcoming team matches (no room info) with `myAvailability`, `squadPicked`, `selected` |
+| PUT | `/matches/:id/availability` | any | `{ status: "available"\|"maybe"\|"unavailable", note? }` | Before the match starts. Shown to the captain on the squad picker |
+| POST | `/matches/:id/joining` | selected player | | "I'm joining" reply after the alert. Also sent from the push notification button (`?via=push`) and the Telegram button |
 | GET | `/matches/:id` | any | | |
 | PATCH | `/matches/:id` | captain | any subset of the create body | Re-schedules the job. Changing time after the alert went out → 423 |
 | POST | `/matches/:id/cancel` | captain | | Removes the job |

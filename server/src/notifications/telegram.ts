@@ -33,10 +33,14 @@ export class TelegramProvider implements NotificationProvider {
         chat_id: r.telegramChatId,
         text: `🎮 <b>${esc(p.title)}</b>\n${esc(p.body)}`,
         parse_mode: 'HTML',
-        // Telegram rejects localhost URLs in buttons; fall back to plain text there.
-        ...(url.startsWith('https://')
-          ? { reply_markup: { inline_keyboard: [[{ text: 'Open match', url }]] } }
-          : {}),
+        reply_markup: {
+          inline_keyboard: [[
+            // Captain alerts get no "joining" button.
+            ...(p.tag.startsWith('match-') ? [{ text: "✅ I'm joining", callback_data: `join:${p.matchId}` }] : []),
+            // Telegram rejects localhost URLs in buttons.
+            ...(url.startsWith('https://') ? [{ text: 'Open match', url }] : []),
+          ]],
+        },
       });
       return { ok: true };
     } catch (e) {

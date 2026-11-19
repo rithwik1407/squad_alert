@@ -29,7 +29,7 @@ export function MatchCard({ m, to }: { m: Match; to?: string }) {
       <Link to={to ?? `/matches/${m.id}`} className="glass gborder group flex overflow-hidden focus-visible:ring-2">
         <div className="relative w-24 shrink-0 sm:w-32">
           <MapArt map={m.map} />
-          <span className="absolute bottom-2 left-2 font-display text-xs font-bold uppercase tracking-wider text-white/90">{m.map}</span>
+          <span className="absolute bottom-2 left-2 font-display text-xs font-bold uppercase tracking-wider text-white/90">{m.map === 'TBD' ? 'Map TBD' : m.map}</span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-2 p-3.5 sm:p-4">
           <div className="flex items-start justify-between gap-2">

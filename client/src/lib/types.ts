@@ -1,6 +1,11 @@
 export type Role = 'captain' | 'player';
 export const MAPS = ['Erangel', 'Miramar', 'Sanhok', 'Vikendi', 'Livik'] as const;
 export type MapName = (typeof MAPS)[number];
+export const MAP_TBD = 'TBD' as const;
+/** A match's map: one of the maps, or 'TBD' (not decided yet). */
+export type MatchMap = MapName | typeof MAP_TBD;
+export const mapLabel = (m: MatchMap) => (m === MAP_TBD ? 'Map TBD' : m);
+export type Availability = 'available' | 'maybe' | 'unavailable';
 export type MatchStatus = 'scheduled' | 'notified' | 'live' | 'done' | 'cancelled';
 
 export interface User {
@@ -45,7 +50,7 @@ export interface Match {
   teamId: string;
   title: string;
   type: 'scrim' | 'tournament';
-  map: MapName;
+  map: MatchMap;
   drop: string;
   startAt: string;
   notifyAt: string;
@@ -60,6 +65,28 @@ export interface Match {
   placement: number | null;
   squad: { selectedIds: string[]; benchedId: string | null; confirmed: boolean; updatedAt: string | null } | null;
   notifications: { sent: number; failed: number; pending: number } | null;
+  /** userId → check-in status */
+  availability: Record<string, Availability>;
+  availabilityNotes: Record<string, string>;
+  /** userIds who tapped "I'm joining" */
+  joining: string[];
+  myAvailability: Availability | null;
+  myJoining: boolean;
+  batchId?: string | null;
+}
+
+export interface CheckinMatch {
+  id: string;
+  title: string;
+  type: 'scrim' | 'tournament';
+  map: MatchMap;
+  drop: string;
+  startAt: string;
+  status: MatchStatus;
+  myAvailability: Availability | null;
+  myNote: string;
+  squadPicked: boolean;
+  selected: boolean;
 }
 
 export interface NotificationLog {
@@ -81,7 +108,7 @@ export interface NotificationLog {
 export interface StatsRow {
   matchId: string;
   title: string;
-  map: MapName;
+  map: MatchMap;
   type: string;
   startAt: string;
   selected: boolean;

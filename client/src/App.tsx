@@ -8,6 +8,7 @@ import Landing from './pages/Landing';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Matches = lazy(() => import('./pages/Matches'));
 const MatchForm = lazy(() => import('./pages/MatchForm'));
+const BulkMatchForm = lazy(() => import('./pages/BulkMatchForm'));
 const MatchDetail = lazy(() => import('./pages/MatchDetail'));
 const SquadSelect = lazy(() => import('./pages/SquadSelect'));
 const Notifications = lazy(() => import('./pages/Notifications'));
@@ -46,6 +47,7 @@ export function App() {
           <Route index element={<Dashboard />} />
           <Route path="matches" element={<Protected captain><Matches /></Protected>} />
           <Route path="matches/new" element={<Protected captain><MatchForm /></Protected>} />
+          <Route path="matches/bulk" element={<Protected captain><BulkMatchForm /></Protected>} />
           <Route path="matches/:id" element={<MatchDetail />} />
           <Route path="matches/:id/edit" element={<Protected captain><MatchForm /></Protected>} />
           <Route path="matches/:id/squad" element={<Protected captain><SquadSelect /></Protected>} />

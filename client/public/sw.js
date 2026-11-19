@@ -1,5 +1,5 @@
 /* SquadSync service worker: web push (FCM data messages) + light offline shell. */
-const CACHE = 'squadsync-v1';
+const CACHE = 'squadsync-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/badge-96.png'];
 
 self.addEventListener('install', (e) => {
@@ -48,14 +48,26 @@ self.addEventListener('push', (e) => {
       renotify: true,
       requireInteraction: true,
       vibrate: [200, 100, 200, 100, 400],
-      data: { url: d.url || '/' },
-      actions: [{ action: 'open', title: 'Open match' }],
+      data: { url: d.url || '/', matchId: d.matchId || null },
+      actions: (d.tag || '').startsWith('match-')
+        ? [{ action: 'join', title: "✅ I'm joining" }, { action: 'open', title: 'Open match' }]
+        : [{ action: 'open', title: 'Open match' }],
     }),
   );
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
+  const matchId = e.notification.data && e.notification.data.matchId;
+  if (e.action === 'join' && matchId) {
+    // Tell the captain without opening the app (same-origin, so the auth cookie is sent).
+    e.waitUntil(
+      fetch(`/api/matches/${matchId}/joining?via=push`, { method: 'POST', credentials: 'include' })
+        .then((r) => { if (!r.ok) throw new Error(String(r.status)); })
+        .catch(() => self.clients.openWindow(`/matches/${matchId}`)),
+    );
+    return;
+  }
   const target = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {

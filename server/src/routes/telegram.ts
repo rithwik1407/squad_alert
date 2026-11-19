@@ -3,6 +3,8 @@ import { ah } from '../middleware/handlers.js';
 import { User } from '../models/index.js';
 import { config } from '../config.js';
 import { telegramApi } from '../notifications/telegram.js';
+import { markJoining } from '../lib/availability.js';
+import { Match } from '../models/index.js';
 
 /**
  * Telegram webhook. Set it once with:
@@ -15,6 +17,21 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
   if (config.telegram.webhookSecret && req.get('x-telegram-bot-api-secret-token') !== config.telegram.webhookSecret) {
     return res.sendStatus(401);
   }
+  // Inline "I'm joining" button under a match alert.
+  const cb = req.body?.callback_query;
+  if (cb) {
+    res.sendStatus(200);
+    const m = String(cb.data ?? '').match(/^join:([a-f0-9]{24})$/);
+    const user = m ? await User.findOne({ telegramChatId: String(cb.from?.id ?? cb.message?.chat?.id) }) : null;
+    let text = 'Could not record that. Open SquadSync instead.';
+    if (m && user && (await markJoining(m[1], String(user._id), 'telegram'))) {
+      const match = await Match.findById(m[1]).lean();
+      text = `Got it, ${user.ign}. Captain knows you're joining${match ? ` ${match.title}` : ''}.`;
+    }
+    await telegramApi('answerCallbackQuery', { callback_query_id: cb.id, text }).catch(() => {});
+    return;
+  }
+
   const msg = req.body?.message;
   const text: string = msg?.text ?? '';
   const chatId = msg?.chat?.id;

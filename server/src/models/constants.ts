@@ -3,6 +3,13 @@ export type Role = (typeof ROLES)[number];
 
 export const MAPS = ['Erangel', 'Miramar', 'Sanhok', 'Vikendi', 'Livik'] as const;
 export type MapName = (typeof MAPS)[number];
+/** A match can be scheduled before the map is known. */
+export const MAP_TBD = 'TBD' as const;
+export const MATCH_MAPS = [...MAPS, MAP_TBD] as const;
+export type MatchMap = (typeof MATCH_MAPS)[number];
+
+export const AVAILABILITY = ['available', 'maybe', 'unavailable'] as const;
+export type AvailabilityStatus = (typeof AVAILABILITY)[number];
 
 export const MATCH_TYPES = ['scrim', 'tournament'] as const;
 export type MatchType = (typeof MATCH_TYPES)[number];
