@@ -108,12 +108,48 @@ const GEMINI_SCHEMA = {
   },
 };
 
-/** Google Gemini over plain REST (free tier key from aistudio.google.com). Tries the configured model, then a fallback. */
-async function askGemini(mime: string, data: string): Promise<string> {
-  const models = [...new Set([config.geminiModel, 'gemini-2.5-flash', 'gemini-2.0-flash'])];
-  let lastErr = '';
-  for (const model of models) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
+/** Known-good defaults, newest first. Google retires models often, so the live list (ListModels) is checked too. */
+const GEMINI_DEFAULTS = ['gemini-3.8-flash', 'gemini-flash-latest'];
+/** The model that last worked, tried first next time. */
+let lastGoodModel: string | null = null;
+let discovered: { at: number; models: string[] } | null = null;
+
+let sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Tests only: forget cached models and skip waiting between retries. */
+export function _resetGeminiForTests() { lastGoodModel = null; discovered = null; sleep = async () => undefined; }
+
+/** Flash models this key can call with generateContent, newest version first (lite models last). */
+export async function discoverGeminiModels(): Promise<string[]> {
+  if (discovered && Date.now() - discovered.at < 6 * 3600_000) return discovered.models;
+  try {
+    const res = await fetch(`${GEMINI_API}/models?pageSize=1000`, {
+      headers: { 'x-goog-api-key': config.geminiApiKey }, signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return [];
+    const body = await res.json() as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
+    const version = (n: string) => Number(/gemini-(\d+(?:\.\d+)?)/.exec(n)?.[1] ?? 0);
+    const models = (body.models ?? [])
+      .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+      .map((m) => String(m.name ?? '').replace(/^models\//, ''))
+      .filter((n) => /^gemini-.*flash/.test(n) && !/(image|tts|audio|live|embed|thinking-exp)/.test(n))
+      .sort((a, b) => Number(a.includes('lite')) - Number(b.includes('lite'))
+        || Number(/preview|exp/.test(a)) - Number(/preview|exp/.test(b))
+        || version(b) - version(a));
+    discovered = { at: Date.now(), models };
+    return models;
+  } catch {
+    return [];
+  }
+}
+
+type GeminiTry = { text: string } | { retry: true; err: string } | { skip: true; err: string };
+
+async function callGemini(model: string, mime: string, data: string): Promise<GeminiTry> {
+  let res: Response;
+  try {
+    res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': config.geminiApiKey },
       signal: AbortSignal.timeout(90_000),
@@ -121,26 +157,56 @@ async function askGemini(mime: string, data: string): Promise<string> {
         contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mime, data } }, { text: PROMPT }] }],
         generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA },
       }),
-    }).catch((e: Error) => { lastErr = e.message; return null; });
-    if (!res) continue;
-    const body = await res.json().catch(() => ({})) as {
-      candidates?: { content?: { parts?: { text?: string }[] } }[];
-      error?: { message?: string; status?: string };
-    };
-    if (res.ok) {
-      const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
-      if (text) return text;
-      lastErr = 'empty answer';
-      continue;
-    }
-    lastErr = body.error?.message ?? `HTTP ${res.status}`;
-    console.warn(`[scorecard] Gemini ${model} failed: ${lastErr}`);
-    if (res.status === 400 && /api key/i.test(lastErr)) throw badRequest('The GEMINI_API_KEY on the server is not valid');
-    if (res.status === 403) throw badRequest('The GEMINI_API_KEY on the server is not allowed to use Gemini');
-    if (res.status === 429) throw badRequest('The free screenshot reader is busy (daily or per-minute limit). Try again in a minute, or type the numbers in.');
-    // 404 (model retired) or 5xx: try the next model.
+    });
+  } catch (e) {
+    return { retry: true, err: (e as Error).message };
   }
-  throw badRequest(`Could not read the screenshot (${lastErr || 'unknown error'}). Try again or type the numbers in.`);
+  const body = await res.json().catch(() => ({})) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    error?: { message?: string; status?: string };
+  };
+  if (res.ok) {
+    const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+    return text ? { text } : { retry: true, err: 'empty answer' };
+  }
+  const err = body.error?.message ?? `HTTP ${res.status}`;
+  console.warn(`[scorecard] Gemini ${model} failed (${res.status}): ${err}`);
+  if (/api key not valid|api_key_invalid/i.test(err)) throw badRequest('The GEMINI_API_KEY on the server is not valid');
+  // Busy ("high demand", overloaded) or a per-minute limit: worth waiting and trying again.
+  if (res.status === 503 || res.status === 500 || res.status === 429 || /high demand|overloaded|try again/i.test(err)) return { retry: true, err };
+  // Retired, unknown or not allowed for this key: move on to another model.
+  return { skip: true, err };
+}
+
+/**
+ * Google Gemini over plain REST (free tier key from aistudio.google.com).
+ * Order: GEMINI_MODEL if set, the model that last worked, current defaults, then whatever ListModels offers.
+ * Busy models get a couple of retries with a growing pause before moving on.
+ */
+async function askGemini(mime: string, data: string): Promise<string> {
+  const first = [config.geminiModel, lastGoodModel, ...GEMINI_DEFAULTS].filter(Boolean) as string[];
+  const tried = new Set<string>();
+  let lastErr = '';
+  let busy = false;
+  const started = Date.now();
+  const attempt = async (model: string) => {
+    if (tried.has(model)) return null;
+    tried.add(model);
+    for (let i = 0; i < 2; i++) {
+      if (Date.now() - started > 45_000) return null; // keep the whole upload under about a minute
+      const r = await callGemini(model, mime, data);
+      if ('text' in r) { lastGoodModel = model; return r.text; }
+      lastErr = r.err;
+      if ('skip' in r) return null;
+      busy = true;
+      if (i === 0) await sleep(2500);
+    }
+    return null;
+  };
+  for (const m of first) { const t = await attempt(m); if (t) return t; }
+  for (const m of (await discoverGeminiModels()).slice(0, 4)) { const t = await attempt(m); if (t) return t; }
+  if (busy) throw badRequest('Google\'s free screenshot reader is busy right now. Try again in a few minutes, or type the numbers in.');
+  throw badRequest(`Could not read the screenshot (${lastErr || 'no Gemini model available'}). Type the numbers in instead.`);
 }
 
 function toRows(text: string): ScorecardRow[] {

@@ -34,7 +34,8 @@ export const config = {
   /** Optional: lets the admin upload a BGMI results screenshot and have it read automatically. */
   /** Free option: Google Gemini key from aistudio.google.com. Used before ANTHROPIC_API_KEY when both are set. */
   geminiApiKey: (process.env.GEMINI_API_KEY ?? '').trim(),
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+  /** Optional: force one Gemini model (e.g. gemini-3.8-flash). Empty = pick automatically. */
+  geminiModel: (process.env.GEMINI_MODEL ?? '').trim(),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
   scorecardModel: process.env.SCORECARD_MODEL || 'claude-opus-5-5',
   firebase: {
