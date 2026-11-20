@@ -32,6 +32,9 @@ export const config = {
   /** How many minutes after a match starts a late (missed while asleep) alert is still sent. */
   catchupGraceMin: Number(process.env.CATCHUP_GRACE_MIN ?? 10),
   /** Optional: lets the admin upload a BGMI results screenshot and have it read automatically. */
+  /** Free option: Google Gemini key from aistudio.google.com. Used before ANTHROPIC_API_KEY when both are set. */
+  geminiApiKey: (process.env.GEMINI_API_KEY ?? '').trim(),
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
   scorecardModel: process.env.SCORECARD_MODEL || 'claude-opus-5-5',
   firebase: {

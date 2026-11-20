@@ -42,8 +42,11 @@ services:
       # Any made-up password-like word; you reuse it once when you connect the Telegram webhook.
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
-      # Optional: reads uploaded BGMI results screenshots automatically (console.anthropic.com > API keys).
-      # Without it the admin types the kills/damage in by hand.
+      # Optional: reads uploaded BGMI results screenshots automatically.
+      # Free: a Google Gemini key from https://aistudio.google.com/apikey. Used first when set.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Paid alternative (console.anthropic.com > API keys). Without either key the admin types the numbers in.
       - key: ANTHROPIC_API_KEY
         sync: false
       # Optional: WhatsApp Cloud API. Leave blank to use Telegram only.
