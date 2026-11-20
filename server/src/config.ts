@@ -31,6 +31,9 @@ export const config = {
   runWorkerInApi: process.env.RUN_WORKER_IN_API === 'true' || process.env.RUN_WORKER_INLINE === 'true',
   /** How many minutes after a match starts a late (missed while asleep) alert is still sent. */
   catchupGraceMin: Number(process.env.CATCHUP_GRACE_MIN ?? 10),
+  /** Optional: lets the admin upload a BGMI results screenshot and have it read automatically. */
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+  scorecardModel: process.env.SCORECARD_MODEL || 'claude-opus-5-5',
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID ?? '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',

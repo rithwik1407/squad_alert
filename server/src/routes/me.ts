@@ -7,7 +7,7 @@ import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhone } from '../lib/phone.js';
-import { badRequest, conflict } from '../lib/errors.js';
+import { badRequest, conflict, forbidden } from '../lib/errors.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -37,7 +37,7 @@ meRouter.patch('/', ah(async (req, res) => {
   res.json({ user: user.toJSON() });
 }));
 
-/** Change my own login email and/or password. Needs the current password. */
+/** Change my own login email and/or password. Admin only: players' passwords are reset by the admin on the Team page. */
 const accountSchema = z.object({
   currentPassword: z.string().min(1, 'Enter your current password'),
   email: z.string().trim().toLowerCase().email().optional(),
@@ -45,6 +45,7 @@ const accountSchema = z.object({
 }).refine((d) => d.email || d.newPassword, { message: 'Nothing to change' });
 
 meRouter.patch('/account', ah(async (req, res) => {
+  if (!isAdmin(req.user)) throw forbidden('Ask the admin to change your login details');
   const body = parse(accountSchema, req.body);
   const user = await User.findById(req.user!._id).select('+passwordHash');
   if (!user || !(await bcrypt.compare(body.currentPassword, user.passwordHash))) throw badRequest('Current password is wrong');

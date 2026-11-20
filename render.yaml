@@ -42,6 +42,10 @@ services:
       # Any made-up password-like word; you reuse it once when you connect the Telegram webhook.
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      # Optional: reads uploaded BGMI results screenshots automatically (console.anthropic.com > API keys).
+      # Without it the admin types the kills/damage in by hand.
+      - key: ANTHROPIC_API_KEY
+        sync: false
       # Optional: WhatsApp Cloud API. Leave blank to use Telegram only.
       - key: WHATSAPP_TOKEN
         sync: false

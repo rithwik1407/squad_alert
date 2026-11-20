@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Ban, CheckCircle2, Copy, CopyPlus, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trophy,
+  ArrowLeft, Ban, CheckCircle2, Copy, CopyPlus, Crown, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST, timeIST, ago } from '@/lib/time';
 import { list } from '@/lib/motion';
-import type { Match, Member } from '@/lib/types';
+import type { Match, MatchReport, Member, NotificationLog, ScorecardRow } from '@/lib/types';
 import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, StatusChip, cx } from '@/components/ui';
 import { MapArt } from '@/components/MapArt';
@@ -17,7 +17,6 @@ import { FlipCountdown } from '@/components/FlipCountdown';
 import { NotifyChips } from '@/components/MatchCard';
 import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
-import { LogTable } from './Notifications';
 import { JoinButton } from './Dashboard';
 import { AVAIL_STYLE } from '@/components/CheckinBoard';
 
@@ -31,6 +30,8 @@ export default function MatchDetail() {
   const members = [...(team?.members ?? [])];
   const byId = new Map(members.map((p) => [p.id, p]));
   const upcoming = new Date(m.startAt).getTime() > Date.now() && !['cancelled', 'done'].includes(m.status);
+  // Attendance and stats only appear once the match start time has passed.
+  const started = new Date(m.startAt).getTime() <= Date.now() && m.status !== 'cancelled';
 
   return (
     <div>
@@ -50,7 +51,7 @@ export default function MatchDetail() {
             <div className="flex flex-wrap items-end justify-between gap-5">
               <div className="space-y-2">
                 {m.drop && <p className="flex items-center gap-2 text-sm text-zinc-200"><MapPin className="h-4 w-4 text-ember-400" aria-hidden />Drop: <b>{m.drop}</b></p>}
-                <RoomBox m={m} />
+                {isCaptain || m.inSquad ? <RoomBox m={m} /> : <p className="text-sm text-zinc-400">Room ID and password go to the picked squad.</p>}
                 {!isCaptain && <JoinButton m={m} />}
               </div>
               {upcoming && <FlipCountdown target={m.startAt} />}
@@ -93,7 +94,7 @@ export default function MatchDetail() {
         </Card>
 
         {isCaptain && <MatchLogs m={m} />}
-        {isCaptain && new Date(m.startAt).getTime() < Date.now() + 3600_000 && m.squad?.confirmed && m.status !== 'cancelled' && <ReportCard m={m} members={members} />}
+        {started && (isCaptain ? <ReportCard m={m} members={members} /> : <ResultsCard m={m} members={members} />)}
       </motion.div>
     </div>
   );
@@ -175,6 +176,18 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
               run('done', () => api.setStatus(m.id, 'done', n && n >= 1 && n <= 25 ? n : undefined), 'Match finished');
             }}>Finish</Button>
         )}
+        <Button variant="danger" loading={busy === 'delete'} icon={<Trash2 className="h-4 w-4" aria-hidden />}
+          onClick={() => {
+            if (!window.confirm('Delete this match for everyone? Its squad, attendance and stats are removed from every player. This cannot be undone.')) return;
+            setBusy('delete');
+            api.deleteMatch(m.id).then(() => {
+              toast.success('Match deleted');
+              qc.removeQueries({ queryKey: ['match', m.id] });
+              qc.invalidateQueries({ queryKey: ['matches'] });
+              qc.invalidateQueries({ queryKey: ['mystats'] });
+              nav('/matches');
+            }, (e) => { toast.error(e); setBusy(null); });
+          }}>Delete</Button>
         {!done && (
           <Button variant="danger" loading={busy === 'cancel'} icon={<Ban className="h-4 w-4" aria-hidden />}
             onClick={() => { if (window.confirm('Cancel this match? The scheduled alert will be removed.')) run('cancel', () => api.cancelMatch(m.id), 'Match cancelled').then(() => nav('/matches')); }}>Cancel</Button>
@@ -211,73 +224,223 @@ function MatchLogs({ m }: { m: Match }) {
         <h2 className="text-xl font-bold text-white">Delivery log</h2>
         {q.data?.[0] && <span className="text-xs text-zinc-500">Last {ago(q.data[0].sentAt)}</span>}
       </div>
-      {q.isLoading ? <Skeleton className="h-24" /> : q.data?.length ? <LogTable logs={q.data} compact /> :
+      {q.isLoading ? <Skeleton className="h-24" /> : q.data?.length ? <DeliveryList logs={q.data} /> :
         <p className="text-sm text-zinc-400">{m.squad?.confirmed ? `Nothing sent yet. Alert fires at ${timeIST(m.notifyAt)}.` : 'Nothing sent yet.'}</p>}
     </Card>
   );
+}
+
+/** One line per player: Sent if any channel reached them, otherwise Failed. */
+function DeliveryList({ logs }: { logs: NotificationLog[] }) {
+  const rows = useMemo(() => {
+    const by = new Map<string, { name: string; captain: boolean; sent: boolean }>();
+    for (const l of logs) {
+      const k = `${l.userId}:${l.kind}`;
+      const cur = by.get(k) ?? { name: l.user?.ign ?? 'Player', captain: l.kind === 'captain_alert', sent: false };
+      cur.sent ||= l.status === 'sent';
+      by.set(k, cur);
+    }
+    return [...by.entries()];
+  }, [logs]);
+  return (
+    <ul className="divide-y divide-white/5">
+      {rows.map(([k, r]) => (
+        <li key={k} className="flex items-center justify-between gap-3 py-2.5">
+          <span className="min-w-0 truncate font-semibold text-white">{r.name}{r.captain && <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-300">Captain alert</span>}</span>
+          {r.sent ? <StatusChip status="sent">Sent</StatusChip> : <StatusChip status="failed">Failed</StatusChip>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/* ---------- Attendance, stats and MVP ---------- */
+
+/** Same weighting as the server: finishes 40%, damage 30%, survival 20%, assists (in place of knockouts) 10%, each vs the squad best. */
+const W = { kills: 0.4, damage: 0.3, survivalMin: 0.2, assists: 0.1 } as const;
+type Row = { joined: boolean; kills: number; damage: number; survivalMin: number; assists: number };
+
+function mvpScores(rows: Record<string, Row>) {
+  const ids = Object.keys(rows);
+  const keys = Object.keys(W) as (keyof typeof W)[];
+  const max = Object.fromEntries(keys.map((k) => [k, Math.max(0, ...ids.map((id) => rows[id][k] || 0))])) as Record<keyof typeof W, number>;
+  const score: Record<string, number> = {};
+  for (const id of ids) score[id] = Math.round(keys.reduce((a, k) => a + (max[k] ? ((rows[id][k] || 0) / max[k]) * W[k] : 0), 0) * 1000) / 10;
+  const best = [...ids].sort((a, b) => score[b] - score[a] || rows[b].kills - rows[a].kills || rows[b].damage - rows[a].damage)[0];
+  return { score, mvp: best && score[best] > 0 ? best : null };
+}
+
+/** Shrink the screenshot before upload so it stays small on slow mobile data. */
+async function toDataUrl(file: File, maxW = 1600): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const scale = Math.min(1, maxW / img.naturalWidth);
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale);
+    c.height = Math.round(img.naturalHeight * scale);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.88);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   const toast = useToast();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['report', m.id], queryFn: () => api.report(m.id) });
-  const squad = (m.squad?.selectedIds ?? []).map((id) => members.find((p) => p.id === id)).filter(Boolean) as Member[];
-  const [rows, setRows] = useState<Record<string, { joined: boolean; kills: number; damage: number; mvp: boolean }>>({});
-  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [rows, setRows] = useState<Record<string, Row>>({});
+  const [unmatched, setUnmatched] = useState<ScorecardRow[]>([]);
+  const [busy, setBusy] = useState<'read' | 'save' | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const byId = new Map(members.map((p) => [p.id, p]));
 
   useEffect(() => {
     if (!q.data) return;
-    const next: typeof rows = {};
-    for (const p of squad) {
-      const a = q.data.attendance.find((x) => x.userId === p.id);
-      const s = q.data.stats.find((x) => x.userId === p.id);
-      next[p.id] = { joined: a?.joined ?? true, kills: s?.kills ?? 0, damage: s?.damage ?? 0, mvp: s?.mvp ?? false };
+    const ids = [...new Set([...(m.squad?.selectedIds ?? []), ...q.data.stats.map((s) => s.userId)])];
+    const next: Record<string, Row> = {};
+    for (const id of ids) {
+      const a = q.data.attendance.find((x) => x.userId === id);
+      const s = q.data.stats.find((x) => x.userId === id);
+      next[id] = { joined: a?.joined ?? true, kills: s?.kills ?? 0, damage: s?.damage ?? 0, survivalMin: s?.survivalMin ?? 0, assists: s?.assists ?? 0 };
     }
     setRows(next);
+    setDirty(false);
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const set = (id: string, patch: Partial<(typeof rows)[string]>) =>
-    setRows((r) => {
-      const n = { ...r, [id]: { ...r[id], ...patch } };
-      if (patch.mvp) for (const k of Object.keys(n)) if (k !== id) n[k] = { ...n[k], mvp: false };
-      return n;
-    });
+  const { score, mvp } = useMemo(() => mvpScores(rows), [rows]);
+  const set = (id: string, patch: Partial<Row>) => { setDirty(true); setRows((r) => ({ ...r, [id]: { ...(r[id] ?? { joined: true, kills: 0, damage: 0, survivalMin: 0, assists: 0 }), ...patch } })); };
+  const fromCard = (c: ScorecardRow): Partial<Row> => ({ joined: true, kills: c.finishes, damage: c.damage, survivalMin: c.survivedMin, assists: c.assists });
+
+  async function upload(file: File) {
+    setBusy('read');
+    try {
+      const { rows: read } = await api.readScorecard(m.id, await toDataUrl(file));
+      const matched = read.filter((r) => r.userId);
+      for (const r of matched) set(r.userId!, fromCard(r));
+      setUnmatched(read.filter((r) => !r.userId));
+      toast.success(`Read ${read.length} players${matched.length < read.length ? `, ${read.length - matched.length} need a name picked` : ''}. Check the numbers, then Save.`);
+    } catch (e) { toast.error(e); } finally {
+      setBusy(null);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
 
   async function save() {
-    setBusy(true);
+    setBusy('save');
     try {
       const entries = Object.entries(rows);
       await api.saveAttendance(m.id, entries.map(([userId, r]) => ({ userId, joined: r.joined })));
-      await api.saveStats(m.id, entries.map(([userId, r]) => ({ userId, kills: r.kills, damage: r.damage, mvp: r.mvp })));
-      toast.success('Attendance and stats saved');
+      const res = await api.saveStats(m.id, entries.map(([userId, r]) => ({
+        userId, kills: r.kills, damage: r.damage, survivalMin: r.survivalMin, assists: r.assists,
+      })));
+      toast.success(res.mvpUserId ? `Saved. MVP: ${byId.get(res.mvpUserId)?.ign ?? 'player'}` : 'Saved');
       qc.invalidateQueries({ queryKey: ['report', m.id] });
-    } catch (e) { toast.error(e); } finally { setBusy(false); }
+      qc.invalidateQueries({ queryKey: ['mystats'] });
+    } catch (e) { toast.error(e); } finally { setBusy(null); }
   }
+
+  const ids = Object.keys(rows);
+  const addable = members.filter((p) => !rows[p.id]);
+  const num = (v: string) => Math.max(0, Number(v) || 0);
 
   return (
     <Card>
-      <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Attendance & stats</h2>
-      <div className="-mx-1 overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead><tr className="text-left text-[11px] uppercase tracking-wider text-zinc-500"><th className="p-2">Player</th><th className="p-2">Joined</th><th className="p-2">Kills</th><th className="p-2">Damage</th><th className="p-2">MVP</th></tr></thead>
-          <tbody>
-            {squad.map((p) => {
-              const r = rows[p.id];
-              if (!r) return null;
-              return (
-                <tr key={p.id} className="border-t border-white/5">
-                  <td className="p-2 font-semibold text-white">{p.ign}</td>
-                  <td className="p-2"><input type="checkbox" aria-label={`${p.ign} joined`} className="h-4 w-4 accent-ember-500" checked={r.joined} onChange={(e) => set(p.id, { joined: e.target.checked })} /></td>
-                  <td className="p-2"><input type="number" min={0} max={99} aria-label={`${p.ign} kills`} className="input w-20 py-1.5" value={r.kills} onChange={(e) => set(p.id, { kills: Number(e.target.value) })} /></td>
-                  <td className="p-2"><input type="number" min={0} max={9999} aria-label={`${p.ign} damage`} className="input w-24 py-1.5" value={r.damage} onChange={(e) => set(p.id, { damage: Number(e.target.value) })} /></td>
-                  <td className="p-2"><input type="radio" name="mvp" aria-label={`${p.ign} MVP`} className="h-4 w-4 accent-ember-500" checked={r.mvp} onChange={() => set(p.id, { mvp: true })} /></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Attendance & stats</h2>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
+        <Button variant="ghost" loading={busy === 'read'} icon={<ImageUp className="h-4 w-4" aria-hidden />} onClick={() => fileRef.current?.click()}>
+          {busy === 'read' ? 'Reading screenshot…' : 'Upload results screenshot'}
+        </Button>
       </div>
-      <Button className="mt-4" loading={busy} onClick={save}>Save</Button>
+      <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers fill in automatically. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
+
+      {unmatched.length > 0 && (
+        <div className="mb-3 space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
+          <p className="text-sm font-semibold text-amber-200">Couldn't match these names to a player. Pick who they are:</p>
+          {unmatched.map((u, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-mono text-white">{u.name}</span>
+              <span className="text-zinc-400">{u.finishes} kills · {u.damage} dmg</span>
+              <select aria-label={`Who is ${u.name}`} className="input w-auto py-1.5" value="" onChange={(e) => {
+                if (!e.target.value) return;
+                set(e.target.value, fromCard(u));
+                setUnmatched((list) => list.filter((_, j) => j !== i));
+              }}>
+                <option value="">Pick player…</option>
+                {members.map((p) => <option key={p.id} value={p.id}>{p.ign}</option>)}
+              </select>
+              <button className="text-xs text-zinc-500 hover:text-white" onClick={() => setUnmatched((list) => list.filter((_, j) => j !== i))}>Ignore</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {q.isLoading ? <Skeleton className="h-32" /> : (
+        <div className="-mx-1 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead><tr className="text-left text-[11px] uppercase tracking-wider text-zinc-500">
+              <th className="p-2">Player</th><th className="p-2">Joined</th><th className="p-2">Kills</th><th className="p-2">Damage</th>
+              <th className="p-2">Survived (min)</th><th className="p-2">Assists</th><th className="p-2">Score</th><th className="p-2" />
+            </tr></thead>
+            <tbody>
+              {ids.map((id) => {
+                const r = rows[id];
+                const ign = byId.get(id)?.ign ?? 'Player';
+                return (
+                  <tr key={id} className={cx('border-t border-white/5', mvp === id && 'bg-ember-500/10')}>
+                    <td className="p-2 font-semibold text-white">{ign}{mvp === id && <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-ember-300"><Crown className="h-3.5 w-3.5" aria-hidden />MVP</span>}</td>
+                    <td className="p-2"><input type="checkbox" aria-label={`${ign} joined`} className="h-4 w-4 accent-ember-500" checked={r.joined} onChange={(e) => set(id, { joined: e.target.checked })} /></td>
+                    <td className="p-2"><input type="number" min={0} max={99} aria-label={`${ign} kills`} className="input w-16 py-1.5" value={r.kills} onChange={(e) => set(id, { kills: num(e.target.value) })} /></td>
+                    <td className="p-2"><input type="number" min={0} max={9999} aria-label={`${ign} damage`} className="input w-20 py-1.5" value={r.damage} onChange={(e) => set(id, { damage: num(e.target.value) })} /></td>
+                    <td className="p-2"><input type="number" min={0} max={60} step={0.1} aria-label={`${ign} minutes survived`} className="input w-20 py-1.5" value={r.survivalMin} onChange={(e) => set(id, { survivalMin: num(e.target.value) })} /></td>
+                    <td className="p-2"><input type="number" min={0} max={99} aria-label={`${ign} assists`} className="input w-16 py-1.5" value={r.assists} onChange={(e) => set(id, { assists: num(e.target.value) })} /></td>
+                    <td className="p-2 font-mono text-zinc-300">{score[id]?.toFixed(1) ?? '–'}</td>
+                    <td className="p-2"><button aria-label={`Remove ${ign}`} className="rounded p-1 text-zinc-500 hover:text-white" onClick={() => { setDirty(true); setRows((rs) => { const n = { ...rs }; delete n[id]; return n; }); }}><X className="h-4 w-4" /></button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {!ids.length && <p className="p-2 text-sm text-zinc-400">No squad picked for this match. Upload the screenshot or add players below.</p>}
+        </div>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button loading={busy === 'save'} disabled={!ids.length} onClick={save}>{dirty ? 'Save stats' : 'Save'}</Button>
+        {addable.length > 0 && (
+          <select aria-label="Add a player" className="input w-auto py-2" value="" onChange={(e) => e.target.value && set(e.target.value, {})}>
+            <option value="">Add player…</option>
+            {addable.map((p) => <option key={p.id} value={p.id}>{p.ign}</option>)}
+          </select>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** What players see after the match: kills, damage and the MVP. */
+function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
+  const q = useQuery({ queryKey: ['report', m.id], queryFn: () => api.report(m.id) });
+  const data: MatchReport | undefined = q.data;
+  const stats = [...(data?.stats ?? [])].sort((a, b) => b.mvpScore - a.mvpScore);
+  const ign = (id: string) => members.find((p) => p.id === id)?.ign ?? 'Player';
+  return (
+    <Card>
+      <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Match results</h2>
+      {q.isLoading ? <Skeleton className="h-24" /> : !stats.length ? <p className="text-sm text-zinc-400">Results aren't posted yet.</p> : (
+        <ul className="divide-y divide-white/5">
+          {stats.map((s) => (
+            <li key={s.userId} className={cx('flex items-center justify-between gap-3 py-2.5', s.mvp && 'text-ember-200')}>
+              <span className="flex min-w-0 items-center gap-2 font-semibold text-white">
+                {s.mvp && <Crown className="h-4 w-4 text-ember-300" aria-label="MVP" />}{ign(s.userId)}
+              </span>
+              <span className="text-sm text-zinc-300">{s.kills} kills · {s.damage} dmg</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

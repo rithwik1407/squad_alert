@@ -56,6 +56,12 @@ function NextMatchHero({ m, captain }: { m: Match; captain?: boolean }) {
               <StatusChip status="scheduled">{Object.values(m.availability).filter((v) => v === 'available').length} checked in</StatusChip>
             )}
           </div>
+          {!captain && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {m.inSquad ? <StatusChip status="sent">You're in the squad</StatusChip> : <StatusChip status="pending">{m.squad?.confirmed ? 'Not picked this time' : 'Squad not picked yet'}</StatusChip>}
+              <Link to={`/matches/${m.id}`} className="btn-ghost">Details</Link>
+            </div>
+          )}
           {!captain && <JoinButton m={m} />}
           {!captain && m.roomId && (
             <div className="mt-4 inline-flex items-center gap-3 rounded-xl bg-black/40 px-3 py-2 ring-1 ring-ember-400/30">
@@ -206,12 +212,14 @@ function PlayerDashboard() {
   const q = useUpcoming();
   const inbox = useQuery({ queryKey: ['notifications'], queryFn: () => api.notifications().then((r) => r.logs) });
   const stats = useQuery({ queryKey: ['mystats'], queryFn: api.myStats });
-  const matches = q.data ?? [];
-  const next = matches[0];
+  const matches = (q.data ?? []).filter((m) => m.status !== 'cancelled');
+  // Hero: the next match I'm playing in, otherwise the team's next match.
+  const next = matches.find((m) => m.inSquad) ?? matches[0];
+  const others = matches.filter((m) => m.id !== next?.id);
 
   return (
     <div>
-      <PageHeader eyebrow="Player" title={`GG, ${user?.ign.replace(/^RARE丨/, '') ?? ''}`}>Matches where you're in the squad.</PageHeader>
+      <PageHeader eyebrow="Player" title={`Welcome, ${user?.ign.replace(/^RARE\s*[|丨]\s*/i, '') ?? ''}`}>Your team's scheduled matches. Tap one to see the details.</PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
         {!user?.pushEnabled && !user?.telegramLinked && !user?.whatsappLinked && (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-ember-400/30">
@@ -220,7 +228,7 @@ function PlayerDashboard() {
           </Card>
         )}
         {q.isLoading ? <Skeleton className="h-56" /> : next ? <NextMatchHero m={next} /> : (
-          <Card><EmptyState title="You're not in a squad yet" text="When your captain picks you, the match shows up here and you'll get pinged before it starts." /></Card>
+          <Card><EmptyState title="No matches scheduled" text="When the admin schedules a scrim it shows up here. If you're picked, you'll get pinged before it starts." /></Card>
         )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -235,8 +243,8 @@ function PlayerDashboard() {
         <div className="grid gap-6 lg:grid-cols-2">
           <section aria-labelledby="up-h" className="min-w-0">
             <h2 id="up-h" className="mb-3 text-xl font-bold text-white">Upcoming</h2>
-            {matches.length > 1 ? (
-              <motion.div variants={list} initial="initial" animate="animate" className="space-y-3">{matches.slice(1).map((m) => <MatchCard key={m.id} m={m} />)}</motion.div>
+            {others.length ? (
+              <motion.div variants={list} initial="initial" animate="animate" className="space-y-3">{others.map((m) => <MatchCard key={m.id} m={m} />)}</motion.div>
             ) : <Card className="text-sm text-zinc-400">No other matches yet.</Card>}
           </section>
           <section aria-labelledby="inbox-h" className="min-w-0">

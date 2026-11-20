@@ -45,6 +45,7 @@ export function MatchCard({ m, to }: { m: Match; to?: string }) {
           <div className="flex flex-wrap items-center gap-1.5">
             {m.status !== 'scheduled' && m.status !== 'notified' && <StatusChip status={m.status} />}
             {m.locked && <LockBadge />}
+            {m.inSquad && <StatusChip status="sent">You're in</StatusChip>}
             <NotifyChips m={m} />
             {m.drop && (
               <span className="chip bg-white/5 text-zinc-300 ring-1 ring-white/10"><MapPin className="h-3 w-3" aria-hidden />{m.drop}</span>

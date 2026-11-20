@@ -5,6 +5,7 @@ import { closeQueue, getQueue } from './scheduler/bull.js';
 import { startWorker } from './scheduler/worker.js';
 import { startCatchupLoop } from './scheduler/catchup.js';
 import { seedTeamRare } from './seed-data.js';
+import { runStartupMigrations } from './lib/deleteMatches.js';
 
 /** Keep retrying instead of crashing, so /api/health stays up and shows db: "down" with the reason in the logs. */
 async function connectWithRetry() {
@@ -27,6 +28,12 @@ async function main() {
   const server = app.listen(config.port, () => console.log(`[api] listening on :${config.port}`));
 
   await connectWithRetry();
+
+  try {
+    await runStartupMigrations();
+  } catch (e) {
+    console.error('[migrate] failed:', (e as Error).message);
+  }
 
   if (process.env.SEED_TEAM_RARE === 'true') {
     try {

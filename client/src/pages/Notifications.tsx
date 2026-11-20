@@ -48,9 +48,7 @@ export function LogTable({ logs, compact }: { logs: NotificationLog[]; compact?:
                 )}
                 <td className="p-2"><span className="inline-flex items-center gap-1.5 text-zinc-300"><C.icon className="h-3.5 w-3.5" aria-hidden />{C.label}</span></td>
                 <td className="p-2">
-                  <StatusChip status={l.status} />
-                  {l.error && <p className="mt-1 max-w-[16rem] text-xs text-red-300/80">{l.error}</p>}
-                  {l.trigger !== 'scheduled' && <p className="mt-1 text-[10px] uppercase tracking-wider text-zinc-500">{l.trigger}</p>}
+                  {l.status === 'sent' ? <StatusChip status="sent">Sent</StatusChip> : <StatusChip status="failed">Failed</StatusChip>}
                 </td>
                 <td className="whitespace-nowrap p-2 text-zinc-400" title={fullIST(l.sentAt)}>{fullIST(l.sentAt)}</td>
               </motion.tr>

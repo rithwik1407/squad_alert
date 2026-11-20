@@ -93,6 +93,7 @@ FCM → Telegram fallback, unreachable players + Resend to failed, captain-only 
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` | API + worker | @BotFather → `/newbot` |
 | `TELEGRAM_WEBHOOK_SECRET` | API | Any random string |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | later | Meta WhatsApp Cloud API (provider is a stub) |
+| `ANTHROPIC_API_KEY` | optional | Reads uploaded BGMI results screenshots (kills, damage, survival, assists) so the MVP is worked out automatically |
 
 ## Deploy
 
