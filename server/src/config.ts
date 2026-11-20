@@ -25,6 +25,10 @@ export const config = {
   cookieSameSite: (process.env.COOKIE_SAMESITE ?? 'lax') as 'lax' | 'none' | 'strict',
   displayTimeZone: process.env.DISPLAY_TZ ?? 'Asia/Kolkata',
   queueName: process.env.QUEUE_NAME ?? 'match-notify',
+  /** Run the BullMQ worker inside the API (one free Render service). RUN_WORKER_INLINE is an alias. */
+  runWorkerInApi: process.env.RUN_WORKER_IN_API === 'true' || process.env.RUN_WORKER_INLINE === 'true',
+  /** How many minutes after a match starts a late (missed while asleep) alert is still sent. */
+  catchupGraceMin: Number(process.env.CATCHUP_GRACE_MIN ?? 10),
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID ?? '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',

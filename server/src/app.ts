@@ -26,6 +26,9 @@ export function createApp(getQueue: () => QueueLike) {
     res.json({ ok: true, db: mongoose.connection.readyState === 1 ? 'up' : 'down', time: new Date().toISOString() });
   });
 
+  // Tiny keep-awake endpoint for an uptime pinger (no DB work, no body).
+  app.get('/api/ping', (_req, res) => res.type('text/plain').send('pong'));
+
   app.get('/api/config', (_req, res) => {
     res.json({
       telegramBot: config.telegram.botUsername || null,

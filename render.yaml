@@ -1,20 +1,25 @@
-# Render Blueprint: API (web) + notification worker (background).
-# Dashboard > New > Blueprint > pick this repo. Fill the env vars marked sync:false.
-# The worker must be always-on for alerts to fire on time, so it needs a paid instance (Starter).
+# Render Blueprint: ONE free web service that runs the API and the alert worker together.
+# Dashboard > New > Blueprint > pick this repo. Fill in the env vars Render asks for.
+#
+# Free instances sleep after ~15 minutes without traffic. To keep alerts on time, point a free
+# pinger (e.g. cron-job.org) at https://<your-service>.onrender.com/api/health every 10 minutes.
+# If it does sleep, the app catches up on startup and sends any alert that came due meanwhile.
 services:
   - type: web
     name: squadsync-api
     runtime: node
-    plan: starter
+    plan: free
     region: singapore
     buildCommand: npm ci && npm run build -w server
     startCommand: npm start -w server
     healthCheckPath: /api/health
-    envVars: &shared
+    envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: "22"
+      - key: RUN_WORKER_IN_API
+        value: "true"
       - key: MONGODB_URI
         sync: false
       - key: REDIS_URL
@@ -27,23 +32,15 @@ services:
         value: lax
       - key: DISPLAY_TZ
         value: Asia/Kolkata
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      - key: FIREBASE_CLIENT_EMAIL
-        sync: false
-      - key: FIREBASE_PRIVATE_KEY
-        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_BOT_USERNAME
         sync: false
+      # Any made-up password-like word; you reuse it once when you connect the Telegram webhook.
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
-  - type: worker
-    name: squadsync-worker
-    runtime: node
-    plan: starter
-    region: singapore
-    buildCommand: npm ci && npm run build -w server && npm run build -w worker
-    startCommand: npm start -w worker
-    envVars: *shared
+      # Optional: WhatsApp Cloud API. Leave blank to use Telegram only.
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false

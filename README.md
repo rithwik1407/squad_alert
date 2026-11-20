@@ -6,8 +6,8 @@ The benched player gets nothing. No Discord anywhere.
 
 ```
 client/   React + Vite + TS, Tailwind, Framer Motion, React Router, Recharts, lucide-react  → Vercel
-server/   Express + TS, MongoDB (Mongoose), JWT httpOnly cookie, Zod, BullMQ producer     → Render (web)
-worker/   BullMQ worker: FCM web push → Telegram fallback, delivery logs                  → Render (worker)
+server/   Express + TS, MongoDB (Mongoose), JWT httpOnly cookie, Zod, BullMQ producer     → Render (free web service, runs the worker too)
+worker/   BullMQ worker: FCM web push → Telegram fallback, delivery logs                  → inside the API on free plans, or its own service
 docs/     REST API reference
 ```
 
@@ -96,15 +96,21 @@ FCM → Telegram fallback, unreachable players + Resend to failed, captain-only 
 
 ## Deploy
 
-**MongoDB Atlas**: create a free M0 cluster, a DB user, and allow `0.0.0.0/0` (Render has no fixed IPs on Starter).
+**MongoDB Atlas**: create a free M0 cluster, a DB user, and allow `0.0.0.0/0` (Render has no fixed IPs).
 
-**Upstash Redis**: create a database (region: ap-south-1 Mumbai). Use the `rediss://` URL.
-BullMQ polls Redis; on Upstash pick pay-as-you-go or a fixed plan rather than the free 10k-commands/day tier.
+**Upstash Redis**: create a free database (region: ap-south-1 Mumbai). Use the `rediss://` TCP URL, not the REST URL.
 
-**Render (API + worker)**: New → Blueprint → this repo (`render.yaml`). Fill the `sync: false` env vars on both services.
-The worker must be always on for alerts to fire on time, so both use the Starter plan. On a tight budget you can run only
-the web service with `RUN_WORKER_IN_API=true`, but it must also be a paid, never-sleeping instance: a free Render service
-sleeps after 15 minutes idle and would miss alerts.
+**Render (API + alerts, free)**: New → Blueprint → this repo (`render.yaml`). It creates one free web service that runs
+the API and the alert worker in the same process (`RUN_WORKER_IN_API=true`). Fill in the env vars Render asks for.
+
+A free Render service sleeps after about 15 minutes without traffic. Two things keep alerts on time:
+
+- A free pinger (for example cron-job.org) that opens `https://<service>.onrender.com/api/health` every 10 minutes keeps it awake.
+- If it sleeps anyway, on startup and every minute after, the server looks in MongoDB for matches whose alert time has passed
+  but were never notified and sends them straight away (still sent up to `CATCHUP_GRACE_MIN`, default 10, minutes after the match starts).
+  Sending is idempotent, so nobody gets the same alert twice.
+
+For a paid always-on setup you can still run `worker/` as a separate Render background worker instead.
 
 **Vercel (client)**: import the repo, Root Directory `client`, framework Vite. Add the `VITE_FIREBASE_*` vars.
 Edit `client/vercel.json` and replace `YOUR-RENDER-API.onrender.com` with your API host. The rewrite keeps the auth cookie
