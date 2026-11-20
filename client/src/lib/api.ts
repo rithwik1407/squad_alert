@@ -1,4 +1,4 @@
-import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ScorecardRow, Team, User } from './types';
+import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, TeamStats, ScorecardRow, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -75,6 +75,7 @@ export const api = {
   telegramLink: () => request<{ url: string }>('POST', '/me/telegram/link'),
   telegramUnlink: () => request('DELETE', '/me/telegram'),
   myStats: () => request<MyStats>('GET', '/me/stats'),
+  teamStats: () => request<TeamStats>('GET', '/me/stats/team'),
 
   chat: () => request<{ state: ChatState; messages: ChatMessage[]; mutes?: ChatMute[] }>('GET', '/chat'),
   chatUnread: (since: string) => request<{ count: number }>('GET', `/chat/unread?since=${encodeURIComponent(since)}`),

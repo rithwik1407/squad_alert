@@ -105,3 +105,4 @@ Log entry: `{ id, matchId, match, userId, user, kind: "squad"|"captain_alert", c
 | POST | `/me/telegram/link` | → `{ url: "https://t.me/<bot>?start=<one-time token>" }` |
 | DELETE | `/me/telegram` | unlink |
 | GET | `/me/stats` | `{ rows: [{ matchId, title, map, startAt, selected, joined, kills, damage, mvp }], totals }` |
+| GET | `/me/stats/team` | Whole-team scorecards for the charts: `{ players: [{ id, name, ign, avatar }], matches: [{ matchId, title, map, type, startAt, placement, stats: [{ userId, kills, damage, survivalMin, assists, mvp, mvpScore }] }] }` |
