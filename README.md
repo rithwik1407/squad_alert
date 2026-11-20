@@ -49,16 +49,16 @@ npm run seed                       # Team RARE: 1 captain + 5 players (no matche
 npm run dev                        # API :4000, worker, client :5173 (Vite proxies /api)
 ```
 
-Seeded logins (password `squadsync123`, or `SEED_PASSWORD`):
+Seeded logins (every account uses the password `rare@123`):
 
 | Role | Email | IGN | UID |
 |---|---|---|---|
-| Captain | captain@teamrare.gg | RARE丨CAPTAIN | |
-| Player | akshay@teamrare.gg | RARE丨AKSHAY | 5577363210 |
-| Player | dheeraj@teamrare.gg | RARE丨DHEERAJ33 | 5688639254 |
-| Player | bittu@teamrare.gg | RARE丨BITTU | 5758878717 |
-| Player | vasanth@teamrare.gg | RARE丨VASANTH | 5781100224 |
-| Player | vignesh@teamrare.gg | RARE丨VIGNESH | 55522353757 |
+| Captain | admin@rare.com | RARE丨CAPTAIN | |
+| Player | akshay@rare.com | RARE丨AKSHAY | 5577363210 |
+| Player | dheeraj@rare.com | RARE丨DHEERAJ33 | 5688639254 |
+| Player | bittu@rare.com | RARE丨BITTU | 5758878717 |
+| Player | vasanth@rare.com | RARE丨VASANTH | 5781100224 |
+| Player | vignesh@rare.com | RARE丨VIGNESH | 55522353757 |
 
 Team join code: `RARE25`. Default drops: Erangel → Quarry, Miramar → Monte, Sanhok → Ruins.
 The seed creates no matches. Add your own from the app.
