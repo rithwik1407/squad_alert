@@ -87,6 +87,47 @@ meRouter.delete('/telegram', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+/**
+ * Whole-team stats for the interactive charts: every recorded scorecard line for
+ * the team's started matches, plus the players they belong to.
+ */
+meRouter.get('/stats/team', ah(async (req, res) => {
+  const teamId = req.user!.teamId;
+  if (!teamId) { res.json({ players: [], matches: [] }); return; }
+  const matches = await Match.find({ teamId, startAt: { $lt: new Date() }, status: { $ne: 'cancelled' } })
+    .sort({ startAt: 1 }).select('title map type startAt placement').lean();
+  const stats = await Stats.find({ matchId: { $in: matches.map((m) => m._id) } }).lean();
+  const userIds = [...new Set(stats.map((s) => String(s.userId)))];
+  const users = await User.find({ _id: { $in: userIds } }).select('name ign avatar').lean();
+  const byMatch = new Map<string, typeof stats>();
+  for (const s of stats) {
+    const k = String(s.matchId);
+    byMatch.set(k, [...(byMatch.get(k) ?? []), s]);
+  }
+  res.json({
+    players: users.map((u) => ({ id: String(u._id), name: u.name, ign: u.ign, avatar: u.avatar ?? '' })),
+    matches: matches
+      .filter((m) => byMatch.has(String(m._id)))
+      .map((m) => ({
+        matchId: String(m._id),
+        title: m.title,
+        map: m.map,
+        type: m.type,
+        startAt: m.startAt.toISOString(),
+        placement: m.placement ?? null,
+        stats: byMatch.get(String(m._id))!.map((s) => ({
+          userId: String(s.userId),
+          kills: s.kills,
+          damage: s.damage,
+          survivalMin: s.survivalMin,
+          assists: s.assists,
+          mvp: s.mvp,
+          mvpScore: s.mvpScore,
+        })),
+      })),
+  });
+}));
+
 /** Personal history: attendance, stats per match, and totals for charts. */
 meRouter.get('/stats', ah(async (req, res) => {
   const uid = req.user!._id;

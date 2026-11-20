@@ -154,6 +154,28 @@ export interface StatsRow {
   mvp: boolean;
 }
 
+export interface TeamStatsPlayer {
+  id: string;
+  name: string;
+  ign: string;
+  avatar: string;
+}
+
+export interface TeamStatsMatch {
+  matchId: string;
+  title: string;
+  map: MatchMap;
+  type: string;
+  startAt: string;
+  placement: number | null;
+  stats: MatchStat[];
+}
+
+export interface TeamStats {
+  players: TeamStatsPlayer[];
+  matches: TeamStatsMatch[];
+}
+
 export interface MyStats {
   rows: StatsRow[];
   totals: { matches: number; kills: number; damage: number; mvps: number; attendanceRate: number | null };
