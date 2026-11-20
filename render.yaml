@@ -10,7 +10,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm ci && npm run build -w server
+    buildCommand: npm ci --include=dev && npm run build -w server
     startCommand: npm start -w server
     healthCheckPath: /api/health
     envVars:
