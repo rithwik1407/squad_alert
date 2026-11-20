@@ -1,7 +1,7 @@
 /**
  * Seed: Team RARE (1 captain + 5 players). No sample matches.
  * Run: npm run seed            (wipes the users/teams/matches it creates, then re-creates them)
- * All seeded accounts use the password in SEED_PASSWORD (default "squadsync123").
+ * All seeded accounts use the password "rare@123". Captain: admin@rare.com, players: <name>@rare.com.
  * Discord handles were provided for reference only; SquadSync never uses Discord.
  */
 import bcrypt from 'bcryptjs';
@@ -9,22 +9,25 @@ import { connectDb, disconnectDb } from './lib/db.js';
 import { deleteMatchesFor } from './scripts/clearMatches.js';
 import { Team, User } from './models/index.js';
 
-const PASSWORD = process.env.SEED_PASSWORD ?? 'squadsync123';
+const PASSWORD = 'rare@123';
 
-const captain = { name: 'Vivek Reddy', email: 'captain@teamrare.gg', ign: 'RARE丨CAPTAIN', bgmiId: '' };
+// Emails used by older versions of this seed, removed so they don't linger.
+const OLD_EMAILS = ['captain', 'akshay', 'dheeraj', 'bittu', 'vasanth', 'vignesh'].map((n) => `${n}@teamrare.gg`);
+
+const captain = { name: 'Vivek Reddy', email: 'admin@rare.com', ign: 'RARE丨CAPTAIN', bgmiId: '' };
 const players = [
-  { name: 'Akshay', email: 'akshay@teamrare.gg', ign: 'RARE丨AKSHAY', bgmiId: '5577363210' },
-  { name: 'Dheeraj', email: 'dheeraj@teamrare.gg', ign: 'RARE丨DHEERAJ33', bgmiId: '5688639254' },
-  { name: 'Bittu', email: 'bittu@teamrare.gg', ign: 'RARE丨BITTU', bgmiId: '5758878717' },
-  { name: 'Vasanth', email: 'vasanth@teamrare.gg', ign: 'RARE丨VASANTH', bgmiId: '5781100224' },
-  { name: 'Vignesh', email: 'vignesh@teamrare.gg', ign: 'RARE丨VIGNESH', bgmiId: '55522353757' },
+  { name: 'Akshay', email: 'akshay@rare.com', ign: 'RARE丨AKSHAY', bgmiId: '5577363210' },
+  { name: 'Dheeraj', email: 'dheeraj@rare.com', ign: 'RARE丨DHEERAJ33', bgmiId: '5688639254' },
+  { name: 'Bittu', email: 'bittu@rare.com', ign: 'RARE丨BITTU', bgmiId: '5758878717' },
+  { name: 'Vasanth', email: 'vasanth@rare.com', ign: 'RARE丨VASANTH', bgmiId: '5781100224' },
+  { name: 'Vignesh', email: 'vignesh@rare.com', ign: 'RARE丨VIGNESH', bgmiId: '55522353757' },
 ];
 
 const DROPS = { Erangel: 'Quarry', Miramar: 'Monte', Sanhok: 'Ruins' };
 
 async function main() {
   await connectDb();
-  const emails = [captain, ...players].map((p) => p.email);
+  const emails = [...[captain, ...players].map((p) => p.email), ...OLD_EMAILS];
   const old = await User.find({ email: { $in: emails } }).lean();
   const oldTeam = await Team.findOne({ name: 'TEAM RARE' }).lean();
   if (oldTeam) {
