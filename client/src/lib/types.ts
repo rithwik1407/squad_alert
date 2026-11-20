@@ -192,3 +192,33 @@ export interface JoinRequest {
   role: Role;
   createdAt: string;
 }
+
+export type ChatMode = 'always' | 'hours' | 'closed';
+
+export interface ChatMessage {
+  id: string;
+  userId: string | null;
+  ign: string;
+  avatar: string;
+  isAdmin: boolean;
+  role: Role;
+  text: string;
+  system: boolean;
+  mine: boolean;
+  createdAt: string;
+}
+
+export interface ChatState {
+  open: boolean;
+  mode: ChatMode;
+  /** "HH:MM" in the team's time zone. */
+  openFrom: string;
+  openTo: string;
+  timeZone: string;
+  isAdmin: boolean;
+  canPost: boolean;
+  /** Set when the admin muted me. */
+  mutedUntil: string | null;
+}
+
+export interface ChatMute { userId: string; until: string }
