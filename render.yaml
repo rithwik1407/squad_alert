@@ -20,6 +20,9 @@ services:
         value: "22"
       - key: RUN_WORKER_IN_API
         value: "true"
+      # Creates the TEAM RARE accounts (admin@rare.com etc., password rare@123) on startup if they don't exist yet.
+      - key: SEED_TEAM_RARE
+        value: "true"
       - key: MONGODB_URI
         sync: false
       - key: REDIS_URL
