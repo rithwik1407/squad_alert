@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth, requireCaptain } from '../middleware/auth.js';
 import {
-  Attendance, AVAILABILITY, Availability, MAP_TBD, MATCH_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team,
+  Attendance, AVAILABILITY, Availability, MAP_TBD, MATCH_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team, User,
   type MatchDoc,
 } from '../models/index.js';
 import { badRequest, locked, notFound } from '../lib/errors.js';
@@ -12,25 +12,28 @@ import { serializeMatch, type LogSummary } from '../lib/serialize.js';
 import { randomUUID } from 'node:crypto';
 import { markJoining } from '../lib/availability.js';
 import { enqueueImmediate, removeMatchJob, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
+import { readScorecard } from '../lib/scorecard.js';
+import { matchPlayer, scoreMvp } from '../lib/mvp.js';
+import { deleteMatchData } from '../lib/deleteMatches.js';
 
 export function matchesRouter(getQueue: () => QueueLike) {
   const r = Router();
   r.use(requireAuth);
 
+  const isCaptain = (req: Request) => req.user!.role === 'captain';
   const teamIdOf = (req: Request) => {
     if (!req.user!.teamId) throw badRequest('Join or create a team first');
     return req.user!.teamId;
   };
 
+  /** Any team member can open a team match. Room details are only shown to the picked squad (see view()). */
   async function loadMatch(req: Request): Promise<MatchDoc> {
     const match = await Match.findById(req.params.id);
     if (!match || String(match.teamId) !== String(teamIdOf(req))) throw notFound('Match not found');
-    if (req.user!.role !== 'captain') {
-      const squad = await Squad.findOne({ matchId: match._id, confirmed: true, selectedIds: req.user!._id }).lean();
-      if (!squad) throw notFound('Match not found');
-    }
     return match;
   }
+
+  const hasStarted = (m: { startAt: Date }) => m.startAt.getTime() <= Date.now();
 
   async function summaries(matchIds: Types.ObjectId[], selectedByMatch: Map<string, string[]>) {
     const rows = await NotificationLog.aggregate<{ _id: { m: Types.ObjectId; u: Types.ObjectId }; sent: number }>([
@@ -48,7 +51,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
     return out;
   }
 
-  async function view(matches: MatchDoc[], viewerId?: string) {
+  async function view(matches: MatchDoc[], viewerId?: string, viewerIsCaptain = true) {
     const ids = matches.map((m) => m._id as Types.ObjectId);
     const [squads, avail] = await Promise.all([
       Squad.find({ matchId: { $in: ids } }).lean(),
@@ -67,8 +70,11 @@ export function matchesRouter(getQueue: () => QueueLike) {
       const out = serializeMatch(m, byMatch.get(String(m._id)), m.notifiedAt ? logs.get(String(m._id)) : undefined);
       const rows = availBy.get(String(m._id)) ?? [];
       const mine = viewerId ? rows.find((a) => String(a.userId) === viewerId) : undefined;
+      const inSquad = Boolean(viewerId && out.squad?.confirmed && out.squad.selectedIds.includes(viewerId));
+      if (!viewerIsCaptain && !inSquad) { out.roomId = ''; out.roomPassword = ''; }
       return {
         ...out,
+        inSquad,
         availability: Object.fromEntries(rows.filter((a) => a.status).map((a) => [String(a.userId), a.status])),
         availabilityNotes: Object.fromEntries(rows.filter((a) => a.note).map((a) => [String(a.userId), a.note])),
         joining: rows.filter((a) => a.joiningAt).map((a) => String(a.userId)),
@@ -90,12 +96,9 @@ export function matchesRouter(getQueue: () => QueueLike) {
     } else if (scope === 'past') {
       filter.$or = [{ startAt: { $lt: now } }, { status: { $in: ['done', 'cancelled'] } }];
     }
-    if (req.user!.role !== 'captain') {
-      const mySquads = await Squad.find({ confirmed: true, selectedIds: req.user!._id }).select('matchId').lean();
-      filter._id = { $in: mySquads.map((s) => s.matchId) };
-    }
+    // Players see every team match the admin scheduled (room details stay hidden unless they're in the squad).
     const matches = await Match.find(filter).sort({ startAt: scope === 'past' ? -1 : 1 }).limit(100);
-    res.json({ matches: await view(matches, String(req.user!._id)) });
+    res.json({ matches: await view(matches, String(req.user!._id), isCaptain(req)) });
   }));
 
   /** Player check-in board: every upcoming team match (no room details) and my availability. */
@@ -171,7 +174,15 @@ export function matchesRouter(getQueue: () => QueueLike) {
 
   r.get('/:id', ah(async (req, res) => {
     const match = await loadMatch(req);
-    res.json({ match: (await view([match], String(req.user!._id)))[0] });
+    res.json({ match: (await view([match], String(req.user!._id), isCaptain(req)))[0] });
+  }));
+
+  /** Delete a match for everyone: its squad, check-ins, delivery log, attendance and stats go with it. */
+  r.delete('/:id', requireCaptain, ah(async (req, res) => {
+    const match = await loadMatch(req);
+    await removeMatchJob(getQueue(), String(match._id)).catch(() => undefined);
+    await deleteMatchData([match._id as Types.ObjectId]);
+    res.json({ ok: true });
   }));
 
   r.patch('/:id', requireCaptain, ah(async (req, res) => {
@@ -314,37 +325,76 @@ export function matchesRouter(getQueue: () => QueueLike) {
   }));
 
   // ---------- attendance & stats ----------
+  // Attendance and stats only open once the match has started.
   r.get('/:id/report', ah(async (req, res) => {
     const match = await loadMatch(req);
+    if (!hasStarted(match)) { res.json({ open: false, attendance: [], stats: [] }); return; }
     const [attendance, stats] = await Promise.all([
       Attendance.find({ matchId: match._id }).lean(),
       Stats.find({ matchId: match._id }).lean(),
     ]);
     res.json({
+      open: true,
       attendance: attendance.map((a) => ({ userId: String(a.userId), joined: a.joined })),
-      stats: stats.map((s) => ({ userId: String(s.userId), kills: s.kills, damage: s.damage, mvp: s.mvp })),
+      stats: stats.map((s) => ({
+        userId: String(s.userId), kills: s.kills, damage: s.damage, survivalMin: s.survivalMin ?? 0, assists: s.assists ?? 0,
+        mvp: s.mvp, mvpScore: s.mvpScore ?? 0,
+      })),
+    });
+  }));
+
+  /** Read a BGMI results screenshot and suggest numbers per squad player. Nothing is saved: the admin reviews, then saves. */
+  r.post('/:id/scorecard', requireCaptain, ah(async (req, res) => {
+    const { image } = parse(z.object({ image: z.string().min(50).max(7_000_000, 'Screenshot is too big') }), req.body);
+    const match = await loadMatch(req);
+    if (!hasStarted(match)) throw badRequest('Stats open once the match has started');
+    const rows = await readScorecard(image);
+    const team = await Team.findById(match.teamId).lean();
+    const squad = await Squad.findOne({ matchId: match._id }).lean();
+    const memberIds = [...new Set([...(squad?.selectedIds ?? []), ...(team?.memberIds ?? [])].map(String))];
+    const users = await User.find({ _id: { $in: memberIds } }).select('name ign').lean();
+    const players = users.map((u) => ({ id: String(u._id), ign: u.ign, name: u.name }));
+    const taken = new Set<string>();
+    res.json({
+      rows: rows.map((r) => {
+        const p = matchPlayer(r.name, players.filter((x) => !taken.has(x.id)));
+        if (p) taken.add(p.id);
+        return { ...r, userId: p?.id ?? null };
+      }),
     });
   }));
 
   r.put('/:id/attendance', requireCaptain, ah(async (req, res) => {
-    const { entries } = parse(z.object({ entries: z.array(z.object({ userId: z.string(), joined: z.boolean() })).max(5) }), req.body);
+    const { entries } = parse(z.object({ entries: z.array(z.object({ userId: z.string().regex(/^[a-f\d]{24}$/i), joined: z.boolean() })).max(8) }), req.body);
     const match = await loadMatch(req);
+    if (!hasStarted(match)) throw badRequest('Attendance opens once the match has started');
     await Promise.all(entries.map((e) =>
       Attendance.updateOne({ matchId: match._id, userId: e.userId }, { $set: { joined: e.joined } }, { upsert: true })));
     res.json({ ok: true });
   }));
 
+  /** Save kills, damage, survival and assists. The MVP is worked out here from those numbers. */
   r.put('/:id/stats', requireCaptain, ah(async (req, res) => {
     const { entries } = parse(z.object({
       entries: z.array(z.object({
-        userId: z.string(), kills: z.number().int().min(0).max(99), damage: z.number().int().min(0).max(9999), mvp: z.boolean(),
-      })).max(5),
+        userId: z.string().regex(/^[a-f\d]{24}$/i),
+        kills: z.number().int().min(0).max(99),
+        damage: z.number().int().min(0).max(9999),
+        survivalMin: z.number().min(0).max(60).default(0),
+        assists: z.number().int().min(0).max(99).default(0),
+      })).max(8),
     }), req.body);
-    if (entries.filter((e) => e.mvp).length > 1) throw badRequest('Only one MVP per match');
+    if (new Set(entries.map((e) => e.userId)).size !== entries.length) throw badRequest('A player is listed twice');
     const match = await loadMatch(req);
-    await Promise.all(entries.map((e) =>
-      Stats.updateOne({ matchId: match._id, userId: e.userId }, { $set: { kills: e.kills, damage: e.damage, mvp: e.mvp } }, { upsert: true })));
-    res.json({ ok: true });
+    if (!hasStarted(match)) throw badRequest('Stats open once the match has started');
+    const { rows, mvpUserId } = scoreMvp(entries);
+    await Stats.deleteMany({ matchId: match._id, userId: { $nin: entries.map((e) => e.userId) } });
+    await Promise.all(rows.map((e) => Stats.updateOne(
+      { matchId: match._id, userId: e.userId },
+      { $set: { kills: e.kills, damage: e.damage, survivalMin: e.survivalMin, assists: e.assists, mvp: e.mvp, mvpScore: e.mvpScore } },
+      { upsert: true },
+    )));
+    res.json({ ok: true, mvpUserId, scores: rows.map((r) => ({ userId: r.userId, mvpScore: r.mvpScore, mvp: r.mvp })) });
   }));
 
   return r;

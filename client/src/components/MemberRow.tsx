@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { KeyRound, Pencil, UserMinus, X } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -7,9 +8,10 @@ import type { Member } from '@/lib/types';
 import { Avatar, Button, Field } from './ui';
 import { useToast } from './Toast';
 
-/** A player on the Team page. The captain can edit their profile, login email and reset their password. */
+/** A player on the Team page. The captain can edit their profile and login email; only the admin can reset their password. */
 export function MemberRow({ p, onChanged }: { p: Member; onChanged: () => Promise<unknown> }) {
   const toast = useToast();
+  const isAdmin = Boolean(useAuth().user?.isAdmin);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -68,9 +70,11 @@ export function MemberRow({ p, onChanged }: { p: Member; onChanged: () => Promis
               <Field label="WhatsApp number" hint="With country code. 10-digit Indian numbers get +91 added.">
                 <input name="whatsappNumber" type="tel" className="input font-mono" defaultValue={p.whatsappNumber ? `+${p.whatsappNumber}` : ''} placeholder="+91 98765 43210" />
               </Field>
-              <Field label="New password" hint="Leave empty to keep their current password. At least 8 characters.">
-                <input name="password" type="text" className="input font-mono" autoComplete="new-password" minLength={8} placeholder="••••••••" />
-              </Field>
+              {isAdmin && (
+                <Field label="Reset password" hint="Leave empty to keep their current password. At least 8 characters. Players can't change it themselves.">
+                  <input name="password" type="text" className="input font-mono" autoComplete="new-password" minLength={8} placeholder="••••••••" />
+                </Field>
+              )}
               <div className="flex items-end gap-2">
                 <Button type="submit" loading={busy} icon={<KeyRound className="h-4 w-4" aria-hidden />}>Save</Button>
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

@@ -1,4 +1,4 @@
-import type { Availability, CheckinMatch, JoinRequest, Match, MyStats, NotificationLog, Team, User } from './types';
+import type { Availability, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ScorecardRow, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -58,12 +58,13 @@ export const api = {
   sendNow: (id: string) => request<{ jobId: string }>('POST', `/matches/${id}/send-now`),
   resendFailed: (id: string) => request<{ jobId: string }>('POST', `/matches/${id}/resend-failed`),
   matchLogs: (id: string) => request<{ logs: NotificationLog[] }>('GET', `/matches/${id}/notifications`),
-  report: (id: string) =>
-    request<{ attendance: { userId: string; joined: boolean }[]; stats: { userId: string; kills: number; damage: number; mvp: boolean }[] }>(
-      'GET', `/matches/${id}/report`),
+  deleteMatch: (id: string) => request<{ ok: true }>('DELETE', `/matches/${id}`),
+  report: (id: string) => request<MatchReport>('GET', `/matches/${id}/report`),
+  /** image: a data: URL. Returns the numbers read from the screenshot; nothing is saved yet. */
+  readScorecard: (id: string, image: string) => request<{ rows: ScorecardRow[] }>('POST', `/matches/${id}/scorecard`, { image }),
   saveAttendance: (id: string, entries: { userId: string; joined: boolean }[]) => request('PUT', `/matches/${id}/attendance`, { entries }),
-  saveStats: (id: string, entries: { userId: string; kills: number; damage: number; mvp: boolean }[]) =>
-    request('PUT', `/matches/${id}/stats`, { entries }),
+  saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[]) =>
+    request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries }),
 
   notifications: () => request<{ logs: NotificationLog[] }>('GET', '/notifications'),
 

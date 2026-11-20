@@ -140,7 +140,12 @@ export default function Settings() {
           </div>
         </Card>
 
-        <LoginCard email={user.email} onSaved={refresh} />
+        {user.isAdmin ? <LoginCard email={user.email} onSaved={refresh} /> : (
+          <Card className="lg:col-span-2">
+            <h2 className="mb-1 flex items-center gap-2 text-xl font-bold text-white"><KeyRound className="h-5 w-5 text-ember-400" aria-hidden />Login</h2>
+            <p className="text-sm text-zinc-400">Signed in as <span className="text-zinc-200">{user.email}</span>. To change your password, ask the admin.</p>
+          </Card>
+        )}
 
         <Card className="lg:col-span-2">
           <h2 className="mb-4 text-xl font-bold text-white">Profile</h2>

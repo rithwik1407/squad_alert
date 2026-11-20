@@ -3,10 +3,10 @@ import { z } from 'zod';
 import type { Types } from 'mongoose';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAdmin, requireAuth, requireCaptain } from '../middleware/auth.js';
-import { MAPS, Team, TEAM_SIZE, User } from '../models/index.js';
+import { isAdmin, MAPS, Team, TEAM_SIZE, User } from '../models/index.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhone } from '../lib/phone.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { publicUser } from '../lib/serialize.js';
 
 export const teamRouter = Router();
@@ -97,7 +97,7 @@ teamRouter.patch('/', requireCaptain, ah(async (req, res) => {
   res.json({ team: await loadTeamView(team._id, true) });
 }));
 
-/** Captain edits a player's profile and login: email and/or a new password (the player can change it later). */
+/** Captain edits a player's profile and login email. Only the admin can set a new password (players can't change their own). */
 const memberSchema = z.object({
   name: z.string().trim().min(2).max(40).optional(),
   ign: z.string().trim().min(2).max(30).optional(),
@@ -116,6 +116,7 @@ teamRouter.patch('/members/:userId', requireCaptain, ah(async (req, res) => {
   if (!user) throw notFound('Player not found');
   if (body.email && body.email !== user.email && (await User.exists({ email: body.email }))) throw conflict('That email is already used by another account');
   const { password, whatsappNumber, ...rest } = body;
+  if (password && !isAdmin(req.user)) throw forbidden('Only the admin can reset a player\'s password');
   user.set(rest);
   if (whatsappNumber !== undefined) {
     const phone = whatsappNumber ? normalizePhone(whatsappNumber) : null;

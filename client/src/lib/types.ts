@@ -79,6 +79,8 @@ export interface Match {
   joining: string[];
   myAvailability: Availability | null;
   myJoining: boolean;
+  /** True when the signed-in user is in this match's confirmed squad. Room details are only sent to them. */
+  inSquad: boolean;
   batchId?: string | null;
 }
 
@@ -110,6 +112,33 @@ export interface NotificationLog {
   body: string;
   sentAt: string;
   error: string | null;
+}
+
+export interface MatchStat {
+  userId: string;
+  kills: number;
+  damage: number;
+  survivalMin: number;
+  assists: number;
+  mvp: boolean;
+  mvpScore: number;
+}
+
+export interface MatchReport {
+  /** false until the match start time; attendance and stats stay hidden until then. */
+  open: boolean;
+  attendance: { userId: string; joined: boolean }[];
+  stats: MatchStat[];
+}
+
+/** A row read from a BGMI results screenshot, matched to a team member when the IGN fits. */
+export interface ScorecardRow {
+  name: string;
+  finishes: number;
+  assists: number;
+  damage: number;
+  survivedMin: number;
+  userId: string | null;
 }
 
 export interface StatsRow {

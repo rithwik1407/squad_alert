@@ -5,9 +5,9 @@
  */
 import { Redis } from 'ioredis';
 import { config } from '../config.js';
-import {
-  Attendance, Availability, DeliveryClaim, Match, NotificationLog, Squad, Stats,
-} from '../models/index.js';
+import type { Types } from 'mongoose';
+import { Match } from '../models/index.js';
+import { deleteMatchData } from '../lib/deleteMatches.js';
 import { closeQueue, getQueue } from '../scheduler/bull.js';
 
 async function redisReachable() {
@@ -19,11 +19,6 @@ async function redisReachable() {
 export async function deleteMatchesFor(filter: Record<string, unknown>) {
   const ids = await Match.find(filter).distinct('_id');
   if (!ids.length) return 0;
-  const byMatch = { matchId: { $in: ids } };
-  await Promise.all([
-    Squad.deleteMany(byMatch), NotificationLog.deleteMany(byMatch), Attendance.deleteMany(byMatch),
-    Stats.deleteMany(byMatch), Availability.deleteMany(byMatch), DeliveryClaim.deleteMany(byMatch),
-  ]);
   if (await redisReachable()) {
     const q = getQueue();
     for (const id of ids) {
@@ -34,7 +29,6 @@ export async function deleteMatchesFor(filter: Record<string, unknown>) {
   } else {
     console.warn('[clear] Redis not reachable: any queued alerts will be skipped by the worker since their matches are gone.');
   }
-  await Match.deleteMany({ _id: { $in: ids } });
-  return ids.length;
+  return deleteMatchData(ids as Types.ObjectId[]);
 }
 
