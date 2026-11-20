@@ -21,6 +21,8 @@ export function createApp(getQueue: () => QueueLike) {
   app.use(cors({ origin: (o, cb) => cb(null, !o || origins.has(o)), credentials: true }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
+  // API responses are per-user (auth cookie), so never let a browser or proxy cache them.
+  app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, db: mongoose.connection.readyState === 1 ? 'up' : 'down', time: new Date().toISOString() });
