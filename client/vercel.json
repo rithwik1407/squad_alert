@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://squadsync-api.onrender.com/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://squadsync-api-hx9f.onrender.com/api/:path*" },
     { "source": "/((?!api/|assets/|icons/|sw.js|manifest.webmanifest).*)", "destination": "/index.html" }
   ],
   "headers": [
