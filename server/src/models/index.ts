@@ -8,3 +8,4 @@ export * from './Attendance.js';
 export * from './Stats.js';
 export * from './DeliveryClaim.js';
 export * from './Availability.js';
+export * from './Chat.js';

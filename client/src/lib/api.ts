@@ -1,4 +1,4 @@
-import type { Availability, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ScorecardRow, Team, User } from './types';
+import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ScorecardRow, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -75,4 +75,12 @@ export const api = {
   telegramLink: () => request<{ url: string }>('POST', '/me/telegram/link'),
   telegramUnlink: () => request('DELETE', '/me/telegram'),
   myStats: () => request<MyStats>('GET', '/me/stats'),
+
+  chat: () => request<{ state: ChatState; messages: ChatMessage[]; mutes?: ChatMute[] }>('GET', '/chat'),
+  chatUnread: (since: string) => request<{ count: number }>('GET', `/chat/unread?since=${encodeURIComponent(since)}`),
+  sendChat: (text: string) => request<{ message: ChatMessage }>('POST', '/chat', { text }),
+  deleteChat: (id: string) => request<{ ok: true }>('DELETE', `/chat/messages/${id}`),
+  chatSettings: (b: { mode: ChatMode; openFrom?: string; openTo?: string }) => request<{ state: ChatState }>('PUT', '/chat/settings', b),
+  muteChat: (userId: string, minutes: number) => request<{ mutes: ChatMute[] }>('POST', '/chat/mutes', { userId, minutes }),
+  unmuteChat: (userId: string) => request<{ mutes: ChatMute[] }>('DELETE', `/chat/mutes/${userId}`),
 };

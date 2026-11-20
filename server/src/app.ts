@@ -11,6 +11,7 @@ import { matchesRouter } from './routes/matches.js';
 import { meRouter } from './routes/me.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { telegramRouter } from './routes/telegram.js';
+import { chatRouter } from './routes/chat.js';
 import type { QueueLike } from './scheduler/queue.js';
 
 export function createApp(getQueue: () => QueueLike) {
@@ -48,6 +49,7 @@ export function createApp(getQueue: () => QueueLike) {
   app.use('/api/me', meRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/telegram', telegramRouter);
+  app.use('/api/chat', chatRouter);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);

@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
+import { TeamChat } from './TeamChat';
 
 export function Layout() {
   const { user, team, isCaptain, logout } = useAuth();
@@ -90,6 +91,8 @@ export function Layout() {
           </Suspense>
         </ErrorBoundary>
       </main>
+
+      <TeamChat />
 
       {/* Mobile bottom nav */}
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
