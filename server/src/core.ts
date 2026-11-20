@@ -9,3 +9,5 @@ export { upsertMatchJob, removeMatchJob, enqueueImmediate, JOB_NAME, type Notify
 export { defaultProviders } from './notifications/providers.js';
 export type { NotificationProvider, Recipient, NotificationPayload, SendResult } from './notifications/types.js';
 export { startWorker } from './scheduler/worker.js';
+export { startCatchupLoop, catchUpDueMatches, mongoCatchupRepo } from './scheduler/catchup.js';
+export { getQueue, closeQueue } from './scheduler/bull.js';
