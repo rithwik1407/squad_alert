@@ -23,6 +23,8 @@ export const config = {
   corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   /** 'lax' when the client proxies /api through Vercel rewrites (recommended), 'none' for cross-site. */
   cookieSameSite: (process.env.COOKIE_SAMESITE ?? 'lax') as 'lax' | 'none' | 'strict',
+  /** The one account that approves new signups. */
+  adminEmail: (process.env.ADMIN_EMAIL ?? 'admin@rare.com').trim().toLowerCase(),
   displayTimeZone: process.env.DISPLAY_TZ ?? 'Asia/Kolkata',
   queueName: process.env.QUEUE_NAME ?? 'match-notify',
   /** Run the BullMQ worker inside the API (one free Render service). RUN_WORKER_INLINE is an alias. */

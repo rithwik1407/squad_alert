@@ -42,7 +42,7 @@ export function App() {
     <Suspense fallback={<div className="mx-auto max-w-5xl p-6"><Loading /></div>}>
       <Routes>
         <Route path="/welcome" element={<Landing />} />
-        <Route path="/join/:code?" element={<Join />} />
+        <Route path="/join/*" element={<Join />} />
         <Route element={<Protected><Layout /></Protected>}>
           <Route index element={<Dashboard />} />
           <Route path="matches" element={<Protected captain><Matches /></Protected>} />

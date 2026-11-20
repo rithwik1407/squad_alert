@@ -9,6 +9,7 @@ import { isTodayIST, relativeDay, timeIST, ago } from '@/lib/time';
 import { list, item, spring } from '@/lib/motion';
 import { PickChip } from '@/components/PickChip';
 import { useSquadSelection, SQUAD_SIZE } from '@/lib/useSquad';
+import { useJoinRequests } from '@/lib/useJoinRequests';
 import { celebrate } from '@/lib/confetti';
 import type { Match, Member } from '@/lib/types';
 import { mapLabel } from '@/lib/types';
@@ -84,6 +85,7 @@ function NextMatchHero({ m, captain }: { m: Match; captain?: boolean }) {
 
 function CaptainDashboard() {
   const { team } = useAuth();
+  const { requests } = useJoinRequests();
   const q = useUpcoming();
   const matches = q.data ?? [];
   const next = matches.find((m) => m.status !== 'cancelled');
@@ -95,6 +97,12 @@ function CaptainDashboard() {
         <Link to="/matches/new" className="btn-primary"><CalendarPlus className="h-4 w-4" aria-hidden />Schedule</Link>
       } />
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
+        {requests.length > 0 && (
+          <Link to="/team" className="flex items-center justify-between gap-3 rounded-xl bg-ember-500/10 p-3 text-sm ring-1 ring-ember-400/30 hover:bg-ember-500/15">
+            <span className="text-ember-100"><span className="font-bold">{requests.length}</span> new {requests.length === 1 ? 'player is' : 'players are'} waiting for your approval</span>
+            <span className="font-semibold text-ember-300">Review</span>
+          </Link>
+        )}
         {q.isLoading ? <Skeleton className="h-56" /> : next ? <NextMatchHero m={next} captain /> : (
           <Card><EmptyState title="No matches lined up" text="Schedule a scrim and SquadSync will ping your four right before it starts."
             action={<Link to="/matches/new" className="btn-primary">Schedule a match</Link>} /></Card>
@@ -120,7 +128,7 @@ function CaptainDashboard() {
               {(team?.members ?? []).map((p) => <RosterCard key={p.id} p={p} />)}
               {team && team.members.length < 5 && (
                 <motion.li variants={item} className="glass border-dashed p-3 text-sm text-zinc-400">
-                  {5 - team.members.length} slot(s) open. Share code <span className="font-mono font-bold text-ember-300">{team.joinCode}</span>
+                  New players register on the sign-in page. The admin approves them from the Team page.
                 </motion.li>
               )}
             </motion.ul>

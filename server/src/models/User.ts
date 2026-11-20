@@ -1,5 +1,6 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
-import { ROLES } from './constants.js';
+import { ROLES, USER_STATUS } from './constants.js';
+import { config } from '../config.js';
 
 const notifyPrefsSchema = new Schema(
   {
@@ -18,6 +19,8 @@ const userSchema = new Schema(
     ign: { type: String, required: true, trim: true },
     bgmiId: { type: String, trim: true, default: '' },
     role: { type: String, enum: ROLES, default: 'player' },
+    /** 'pending' = registered, waiting for the admin to approve. Pending users can't sign in. */
+    status: { type: String, enum: USER_STATUS, default: 'active', index: true },
     avatar: { type: String, default: '' },
     teamId: { type: Schema.Types.ObjectId, ref: 'Team', default: null },
     fcmTokens: { type: [String], default: [] },
@@ -34,6 +37,7 @@ userSchema.set('toJSON', {
     delete ret.passwordHash;
     delete ret.telegramLinkToken;
     delete ret.__v;
+    ret.isAdmin = typeof ret.email === 'string' && ret.email === config.adminEmail;
     ret.telegramLinked = Boolean(ret.telegramChatId);
     ret.whatsappLinked = Boolean(ret.whatsappNumber);
     ret.pushEnabled = Array.isArray(ret.fcmTokens) && ret.fcmTokens.length > 0;
@@ -46,3 +50,5 @@ userSchema.set('toJSON', {
 export type UserAttrs = InferSchemaType<typeof userSchema>;
 export type UserDoc = HydratedDocument<UserAttrs>;
 export const User = model('User', userSchema);
+
+export const isAdmin = (u: { email?: string | null } | null | undefined) => Boolean(u?.email) && u!.email === config.adminEmail;

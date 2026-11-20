@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
-import { Attendance, Match, Squad, Stats, User } from '../models/index.js';
+import { Attendance, isAdmin, Match, Squad, Stats, User } from '../models/index.js';
 import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
@@ -49,6 +49,7 @@ meRouter.patch('/account', ah(async (req, res) => {
   const user = await User.findById(req.user!._id).select('+passwordHash');
   if (!user || !(await bcrypt.compare(body.currentPassword, user.passwordHash))) throw badRequest('Current password is wrong');
   if (body.email && body.email !== user.email) {
+    if (isAdmin(user)) throw badRequest('The admin login email can\'t be changed');
     if (await User.exists({ email: body.email })) throw conflict('That email is already used by another account');
     user.email = body.email;
   }

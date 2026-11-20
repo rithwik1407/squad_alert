@@ -17,6 +17,8 @@ export interface User {
   role: Role;
   avatar: string;
   teamId: string | null;
+  /** True only for the admin account (admin@rare.com), who approves new signups. */
+  isAdmin?: boolean;
   whatsappNumber?: string | null;
   telegramLinked: boolean;
   whatsappLinked?: boolean;
@@ -126,4 +128,16 @@ export interface StatsRow {
 export interface MyStats {
   rows: StatsRow[];
   totals: { matches: number; kills: number; damage: number; mvps: number; attendanceRate: number | null };
+}
+
+/** Someone who registered and is waiting for the admin to approve them. */
+export interface JoinRequest {
+  id: string;
+  name: string;
+  email: string;
+  ign: string;
+  bgmiId: string;
+  phone: string;
+  role: Role;
+  createdAt: string;
 }

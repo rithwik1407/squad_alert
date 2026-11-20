@@ -1,4 +1,4 @@
-import type { Availability, CheckinMatch, Match, MyStats, NotificationLog, Team, User } from './types';
+import type { Availability, CheckinMatch, JoinRequest, Match, MyStats, NotificationLog, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -28,13 +28,14 @@ export const api = {
 
   me: () => request<Session>('GET', '/auth/me'),
   login: (b: { email: string; password: string }) => request<Session>('POST', '/auth/login', b),
-  register: (b: Record<string, unknown>) => request<Session>('POST', '/auth/register', b),
+  /** Sends a join request. The account can't sign in until the admin approves it. */
+  register: (b: Record<string, unknown>) => request<{ pending: true; message: string }>('POST', '/auth/register', b),
   logout: () => request<{ ok: true }>('POST', '/auth/logout'),
 
   team: () => request<{ team: Team | null }>('GET', '/team'),
-  previewTeam: (code: string) => request<{ name: string; tag: string; slotsLeft: number }>('GET', `/team/preview/${encodeURIComponent(code)}`),
-  joinTeam: (code: string) => request<{ team: Team }>('POST', '/team/join', { code }),
-  regenerateCode: () => request<{ joinCode: string }>('POST', '/team/code/regenerate'),
+  joinRequests: () => request<{ requests: JoinRequest[] }>('GET', '/team/requests'),
+  approveRequest: (id: string) => request<{ ok: true; team: Team }>('POST', `/team/requests/${id}/approve`),
+  rejectRequest: (id: string) => request<{ ok: true }>('POST', `/team/requests/${id}/reject`),
   updateTeam: (b: Partial<Pick<Team, 'name' | 'tag' | 'logo' | 'drops'>>) => request<{ team: Team }>('PATCH', '/team', b),
   updateMember: (id: string, b: { name?: string; ign?: string; bgmiId?: string; email?: string; password?: string; whatsappNumber?: string }) =>
     request<{ team: Team }>('PATCH', `/team/members/${id}`, b),
