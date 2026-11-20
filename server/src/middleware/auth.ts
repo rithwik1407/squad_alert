@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
-import { User, type UserDoc } from '../models/index.js';
+import { isAdmin, User, type UserDoc } from '../models/index.js';
 
 export const COOKIE_NAME = 'ss_token';
 
@@ -47,6 +47,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     }
     const user = await User.findById(payload.sub);
     if (!user) throw unauthorized();
+    if (user.status === 'pending') throw unauthorized('Your request is still waiting for admin approval');
     req.user = user;
     next();
   } catch (e) {
@@ -56,5 +57,11 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
 export function requireCaptain(req: Request, _res: Response, next: NextFunction) {
   if (req.user?.role !== 'captain') return next(forbidden('Captain only'));
+  next();
+}
+
+/** Only the admin account (ADMIN_EMAIL, default admin@rare.com) approves new signups. */
+export function requireAdmin(req: Request, _res: Response, next: NextFunction) {
+  if (!isAdmin(req.user)) return next(forbidden('Admin only'));
   next();
 }

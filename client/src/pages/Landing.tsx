@@ -101,19 +101,28 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
   const [mode, setMode] = useState<'player' | 'captain'>('player');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /** Set after a successful registration: the request is waiting for the admin. */
+  const [sent, setSent] = useState<{ email: string; mode: 'player' | 'captain' } | null>(null);
   const toast = useToast();
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    const form = e.currentTarget;
+    const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
     setBusy(true);
     setErrors({});
     try {
-      const s = tab === 'login'
-        ? await api.login({ email: f.email, password: f.password })
-        : await api.register({ ...f, mode, joinCode: f.joinCode || undefined, teamName: f.teamName || undefined });
-      toast.success(tab === 'login' ? `Welcome back, ${s.user.ign}` : 'Account created. GG!');
-      onDone(s);
+      if (tab === 'login') {
+        const s = await api.login({ email: f.email, password: f.password });
+        toast.success(`Welcome back, ${s.user.ign}`);
+        onDone(s);
+      } else {
+        await api.register({ ...f, mode });
+        form.reset();
+        setSent({ email: f.email, mode });
+        setTab('login');
+        toast.success('Request sent to the admin');
+      }
     } catch (err) {
       if (err instanceof ApiError && err.details) setErrors(Object.fromEntries(err.details.map((d) => [d.path, d.message])));
       toast.error(err);
@@ -127,7 +136,7 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
       className="glass gborder w-full max-w-md justify-self-center p-6 shadow-glow sm:p-7 lg:justify-self-end">
       <div role="tablist" aria-label="Sign in or register" className="relative mb-6 grid grid-cols-2 rounded-xl bg-white/[0.04] p-1">
         {(['login', 'register'] as const).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => { setTab(t); setErrors({}); }}
             className={cx('relative z-10 rounded-lg py-2 text-sm font-semibold transition-colors', tab === t ? 'text-ink-950' : 'text-zinc-400 hover:text-zinc-200')}>
             {tab === t && <motion.span layoutId="auth-tab" className="absolute inset-0 -z-10 rounded-lg bg-gradient-to-b from-ember-400 to-ember-500" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
             {t === 'login' ? 'Sign in' : 'Register'}
@@ -135,6 +144,12 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
         ))}
       </div>
 
+      {sent && (
+        <div role="status" className="mb-5 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-200 ring-1 ring-emerald-400/25">
+          <p className="font-semibold text-emerald-100">Request sent</p>
+          <p className="mt-0.5">The admin will review your {sent.mode} request for {sent.email}. You can sign in here once it's approved.</p>
+        </div>
+      )}
       <form onSubmit={submit} className="space-y-4" noValidate>
         <AnimatePresence mode="popLayout" initial={false}>
           {tab === 'register' && (
@@ -152,14 +167,11 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
                 <Field label="Name" error={errors.name}><input name="name" className="input" autoComplete="name" required /></Field>
                 <Field label="IGN" error={errors.ign}><input name="ign" className="input" placeholder="RARE丨…" required /></Field>
               </div>
-              <Field label="BGMI UID" error={errors.bgmiId}><input name="bgmiId" className="input" inputMode="numeric" placeholder="5577363210" /></Field>
-              {mode === 'captain' ? (
-                <Field label="Team name" error={errors.teamName}><input name="teamName" className="input" placeholder="TEAM RARE" required /></Field>
-              ) : (
-                <Field label="Join code (optional)" hint="Ask your captain for the 6-letter code" error={errors.joinCode}>
-                  <input name="joinCode" className="input font-mono uppercase tracking-[0.3em]" maxLength={8} />
-                </Field>
-              )}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="BGMI UID" error={errors.bgmiId}><input name="bgmiId" className="input" inputMode="numeric" placeholder="5577363210" required /></Field>
+                <Field label="Phone" error={errors.phone}><input name="phone" type="tel" className="input" autoComplete="tel" placeholder="+91 98765 43210" required /></Field>
+              </div>
+              <p className="text-xs text-zinc-500">Your request goes to the TEAM RARE admin. You can sign in after they approve it.</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -167,7 +179,7 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
         <Field label="Password" error={errors.password}>
           <input name="password" type="password" className="input" autoComplete={tab === 'login' ? 'current-password' : 'new-password'} required minLength={tab === 'register' ? 8 : 1} />
         </Field>
-        <Button type="submit" loading={busy} className="w-full py-3">{tab === 'login' ? 'Sign in' : mode === 'captain' ? 'Create team' : 'Join SquadSync'}</Button>
+        <Button type="submit" loading={busy} className="w-full py-3">{tab === 'login' ? 'Sign in' : `Request to join as ${mode}`}</Button>
       </form>
     </motion.div>
   );

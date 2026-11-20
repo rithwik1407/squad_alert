@@ -118,11 +118,11 @@ export default function SquadSelect() {
       <Link to={`/matches/${m.id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white"><ArrowLeft className="h-4 w-4" aria-hidden />Match</Link>
       <PageHeader eyebrow={`${mapLabel(m.map)} · ${relativeDay(m.startAt)} · ${timeIST(m.startAt)}`} title={`Squad · ${m.title}`}
         action={locked ? <LockBadge className="text-sm" /> : undefined}>
-        Tap to pick exactly {SQUAD_SIZE}. The fifth sits on the bench and gets no alert.
+        Tap to pick exactly {SQUAD_SIZE}. Everyone else sits on the bench and gets no alert.
       </PageHeader>
 
       {members.length < SQUAD_SIZE ? (
-        <Card><EmptyState title="Not enough players" text={`You need at least ${SQUAD_SIZE} players on the team. Share your join code ${team?.joinCode}.`} /></Card>
+        <Card><EmptyState title="Not enough players" text={`You need at least ${SQUAD_SIZE} players on the team. New players register on the sign-in page and the admin approves them.`} /></Card>
       ) : (
         <LayoutGroup>
           <motion.div variants={list} initial="initial" animate="animate" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

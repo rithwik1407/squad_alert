@@ -20,14 +20,13 @@ All timestamps are ISO 8601 **UTC**. The client renders them in `Asia/Kolkata`.
 |---|---|---|---|
 | GET | `/health` | | `{ ok, db, time }` |
 | GET | `/config` | | `{ telegramBot, pushServerReady, timeZone }` |
-| GET | `/team/preview/:code` | | `{ name, tag, slotsLeft }` for the join screen |
 | POST | `/telegram/webhook` | Telegram update | Checks `X-Telegram-Bot-Api-Secret-Token`. Handles `/start <token>` to link a chat |
 
 ## Auth
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/auth/register` | `{ name, email, password(≥8), ign, bgmiId?, mode: "captain"\|"player", teamName? (captain), joinCode? (player) }` | `{ user, team }` + cookie. A captain gets a new team with a join code |
+| POST | `/auth/register` | `{ name, email, password(≥8), ign, bgmiId, phone, mode: "captain"\|"player" }` | `202 { pending: true }`. No cookie: the account is pending until the admin approves it. Sign-in returns 403 while pending |
 | POST | `/auth/login` | `{ email, password }` | `{ user, team }` + cookie |
 | POST | `/auth/logout` | | clears cookie |
 | GET | `/auth/me` | | `{ user, team }` |
@@ -37,8 +36,9 @@ All timestamps are ISO 8601 **UTC**. The client renders them in `Asia/Kolkata`.
 | Method | Path | Role | Body | Notes |
 |---|---|---|---|---|
 | GET | `/team` | any | | `{ team: { id, name, tag, logo, joinCode, drops, captain, members[] } }` |
-| POST | `/team/join` | player | `{ code }` | Max 5 players |
-| POST | `/team/code/regenerate` | captain | | Old code and link stop working |
+| GET | `/team/requests` | admin | | `{ requests: [{ id, name, email, ign, bgmiId, phone, role, createdAt }] }` pending signups |
+| POST | `/team/requests/:userId/approve` | admin | | Adds them to the admin's team (TEAM RARE) with the role they asked for |
+| POST | `/team/requests/:userId/reject` | admin | | Deletes the pending account |
 | PATCH | `/team` | captain | `{ name?, tag?, logo?, drops?: { Erangel: "Quarry", ... } }` | `drops` = default drop per map |
 | PATCH | `/team/members/:userId` | captain | `{ name?, ign?, bgmiId?, email?, password? }` | Edit a player's profile and login. Captains also see members' `email` in team responses |
 | DELETE | `/team/members/:userId` | captain | | |

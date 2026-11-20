@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useJoinRequests } from '@/lib/useJoinRequests';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
 
@@ -11,6 +12,8 @@ export function Layout() {
   const { user, team, isCaptain, logout } = useAuth();
   const loc = useLocation();
   const nav = useNavigate();
+  const { requests } = useJoinRequests();
+  const badges: Record<string, number> = { '/team': requests.length };
   const items = isCaptain
     ? [
         { to: '/', label: 'Home', icon: Home },
@@ -49,6 +52,7 @@ export function Layout() {
                   )}
                   <I className={cx('h-[18px] w-[18px]', isActive && 'text-ember-400')} aria-hidden />
                   {label}
+                  {badges[to] ? <span className="ml-auto rounded-full bg-ember-500 px-2 py-0.5 text-[10px] font-bold text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
                 </span>
               )}
             </NavLink>
@@ -96,8 +100,9 @@ export function Layout() {
                 {({ isActive }) => (
                   <>
                     {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-0.5 w-8 rounded-full bg-ember-400 shadow-glow" />}
-                    <motion.span animate={{ scale: isActive ? 1.12 : 1, y: isActive ? -1 : 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+                    <motion.span className="relative" animate={{ scale: isActive ? 1.12 : 1, y: isActive ? -1 : 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
                       <I className={cx('h-5 w-5', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
+                      {badges[to] ? <span className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-ember-500 px-1 text-center text-[9px] font-bold leading-4 text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
                     </motion.span>
                     <span className={isActive ? 'text-white' : 'text-zinc-500'}>{label}</span>
                   </>

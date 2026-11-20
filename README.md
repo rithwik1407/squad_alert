@@ -63,7 +63,7 @@ Seeded logins (every account uses the password `rare@123`):
 Team join code: `RARE25`. Default drops: Erangel → Quarry, Miramar → Monte, Sanhok → Ruins.
 The seed creates no matches. Add your own from the app.
 To wipe all matches later (teams and players stay): `npm run clear-matches`.
-These are demo accounts: change the emails/passwords or have players register with the join code.
+New players register on the sign-in page (name, email, password, IGN, BGMI ID, phone, player or captain). Their account stays pending until the admin (`admin@rare.com`, or `ADMIN_EMAIL`) approves it from the Team page; then they join TEAM RARE with that role. The old join code no longer works.
 
 **`querySrv ECONNREFUSED _mongodb._tcp…`**: your DNS refused Atlas's SRV lookup. SquadSync resolves `mongodb+srv` URIs through
 `MONGO_DNS_SERVERS` (default `8.8.8.8,1.1.1.1`), which fixes this. If your network blocks public DNS, set it to your own resolver, or `off`.

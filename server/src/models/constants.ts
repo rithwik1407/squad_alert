@@ -27,4 +27,8 @@ export const LOG_KINDS = ['squad', 'captain_alert'] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 
 export const SQUAD_SIZE = 4;
-export const TEAM_SIZE = 5;
+/** Max players on a team (besides the main captain). Room for subs beyond the 4 picked per match. */
+export const TEAM_SIZE = 15;
+
+export const USER_STATUS = ['active', 'pending'] as const;
+export type UserStatus = (typeof USER_STATUS)[number];
