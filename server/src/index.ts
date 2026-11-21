@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { closeQueue, getQueue } from './scheduler/bull.js';
 import { startWorker } from './scheduler/worker.js';
 import { startCatchupLoop } from './scheduler/catchup.js';
+import { startDailySummaryLoop } from './scheduler/dailySummary.js';
 import { seedTeamRare } from './seed-data.js';
 import { runStartupMigrations } from './lib/deleteMatches.js';
 
@@ -49,11 +50,14 @@ async function main() {
   const inline = config.runWorkerInApi;
   const worker = inline ? startWorker() : null;
   const stopCatchup = inline ? startCatchupLoop(getQueue(), undefined, 60_000, config.catchupGraceMin) : null;
+  // Nightly Telegram team summary (runs with the worker so a split API/worker setup sends it once from the worker).
+  const stopSummary = inline ? startDailySummaryLoop() : null;
   if (inline) console.log('[api] running the alert worker in this process');
 
   const shutdown = async () => {
     server.close();
     stopCatchup?.();
+    stopSummary?.();
     await worker?.close();
     await closeQueue();
     process.exit(0);

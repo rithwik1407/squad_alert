@@ -35,6 +35,7 @@ Notification: **"Match in 2 minutes!"** / *"Scrim 1 · Erangel · 9:00 PM. Join 
 - **4-of-5 squad picker** with bench, confirm, lock after the alert, and emergency substitution.
 - **Alerts** N minutes before start, to the selected 4 only: push first, Telegram fallback, captain-only alert if no squad is confirmed, Send now, Resend to failed.
 - **"I'm joining" replies** from the app, the push notification button, or the Telegram button. The captain sees who's on the way.
+- **Nightly team summary on Telegram** at 12:00 AM IST: the day's matches played, MVP of the day, top fragger, a player board and each match's result. Sent once to every player with Telegram linked; skipped on days with no matches.
 - **Delivery history**, player inbox, attendance, kills/damage/MVP stats with charts, tournament placements.
 
 ## Local setup
@@ -92,6 +93,8 @@ FCM → Telegram fallback, unreachable players + Resend to failed, captain-only 
 | `VITE_FIREBASE_VAPID_KEY` | Vercel | Firebase → Cloud Messaging → Web Push certificates → Generate key pair |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` | API + worker | @BotFather → `/newbot` |
 | `TELEGRAM_WEBHOOK_SECRET` | API | Any random string |
+| `CRON_SECRET` | API, optional | Any random string. Turns on `/api/cron/daily-summary?key=...` for cron-job.org (backup trigger and preview for the nightly summary) |
+| `DAILY_SUMMARY_ENABLED` | API + worker, optional | `false` turns the nightly Telegram summary off (on by default) |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | later | Meta WhatsApp Cloud API (provider is a stub) |
 | `GEMINI_API_KEY` | optional, free | Google Gemini key from aistudio.google.com/apikey. Reads uploaded BGMI results screenshots; used first when set |
 | `GROQ_API_KEY`, `OPENROUTER_API_KEY` | optional, free | More free screenshot readers (console.groq.com/keys, openrouter.ai/keys), tried in turn after Gemini when it's busy or out of free uses |
@@ -112,6 +115,12 @@ A free Render service sleeps after about 15 minutes without traffic. Two things 
 - If it sleeps anyway, on startup and every minute after, the server looks in MongoDB for matches whose alert time has passed
   but were never notified and sends them straight away (still sent up to `CATCHUP_GRACE_MIN`, default 10, minutes after the match starts).
   Sending is idempotent, so nobody gets the same alert twice.
+
+**Nightly Telegram summary**: the server checks every minute and sends the previous day's report from 12:00 AM IST.
+If the instance was asleep at midnight it sends it when it wakes (until noon). Each player gets it once, however often it's triggered.
+As a backup, set `CRON_SECRET` on Render and add a cron-job.org job at 00:01 (Asia/Kolkata) that opens
+`https://<service>.onrender.com/api/cron/daily-summary?key=<CRON_SECRET>`. Add `&preview=1` to see the message without sending it,
+or `&day=2026-11-20` to send a missed day.
 
 For a paid always-on setup you can still run `worker/` as a separate Render background worker instead.
 
