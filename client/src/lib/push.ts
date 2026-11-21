@@ -50,6 +50,30 @@ export async function enablePush(): Promise<string> {
   return token;
 }
 
+/**
+ * Quietly re-register this device on app start. Push tokens rotate, get pruned by the server when a send
+ * fails, or were saved on another account; without this the phone silently stops getting alerts.
+ * Only runs when the user already allowed notifications, so it never shows a permission prompt.
+ */
+export async function syncPush(serverHasDevice: boolean): Promise<void> {
+  if (!pushConfigured() || pushSupport() !== 'ok' || permission() !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    const { initializeApp, getApps } = await import('firebase/app');
+    const { getMessaging, getToken, isSupported } = await import('firebase/messaging');
+    if (!(await isSupported())) return;
+    const app = getApps()[0] ?? initializeApp(firebaseConfig);
+    const token = await getToken(getMessaging(app), { vapidKey: VAPID, serviceWorkerRegistration: reg });
+    if (!token) return;
+    if (token === storedToken() && serverHasDevice) return;
+    await api.addFcmToken(token);
+    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* private mode */ }
+  } catch {
+    /* best effort: the Settings page shows the real error when the user taps Enable push */
+  }
+}
+
 export async function disablePush() {
   const token = storedToken();
   if (token) await api.removeFcmToken(token).catch(() => {});

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { Types } from 'mongoose';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAdmin, requireAuth, requireCaptain } from '../middleware/auth.js';
-import { isAdmin, MAPS, Team, TEAM_SIZE, User } from '../models/index.js';
+import { ALL_MAPS, isAdmin, Team, TEAM_SIZE, User } from '../models/index.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhone } from '../lib/phone.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
@@ -83,7 +83,7 @@ const patchSchema = z.object({
   name: z.string().trim().min(2).max(40).optional(),
   tag: z.string().trim().max(8).optional(),
   logo: z.string().url().or(z.literal('')).optional(),
-  drops: z.record(z.enum(MAPS), z.string().trim().max(30)).optional(),
+  drops: z.record(z.enum(ALL_MAPS), z.string().trim().max(30)).optional(),
 });
 
 teamRouter.patch('/', requireCaptain, ah(async (req, res) => {

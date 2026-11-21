@@ -42,7 +42,7 @@ export default function TeamPage() {
         <Card className="lg:col-span-2">
           <h2 className="mb-1 flex items-center gap-2 text-xl font-bold text-white"><MapPin className="h-5 w-5 text-ember-400" aria-hidden />Default drops</h2>
           <p className="mb-4 text-sm text-zinc-400">Pre-filled when you schedule a match on that map.</p>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-3">
             {MAPS.map((m) => (
               <label key={m} className="block">
                 <span className="label">{m}</span>
@@ -52,7 +52,7 @@ export default function TeamPage() {
           </div>
           <Button className="mt-4" loading={busy === 'drops'} onClick={async () => {
             setBusy('drops');
-            try { await api.updateTeam({ drops }); await refresh(); toast.success('Drops saved'); } catch (e) { toast.error(e); } finally { setBusy(null); }
+            try { await api.updateTeam({ drops: Object.fromEntries(MAPS.map((m) => [m, drops[m] ?? ''])) }); await refresh(); toast.success('Drops saved'); } catch (e) { toast.error(e); } finally { setBusy(null); }
           }}>Save drops</Button>
         </Card>
       </motion.div>

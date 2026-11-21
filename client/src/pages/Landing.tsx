@@ -74,7 +74,7 @@ export default function Landing() {
             ))}
           </motion.ul>
           <motion.div style={{ y: midY }} className="pointer-events-none mt-10 hidden gap-3 lg:flex" aria-hidden>
-            {(['Erangel', 'Miramar', 'Sanhok'] as const).map((m, i) => (
+            {(['Erangel', 'Miramar', 'Rondo'] as const).map((m, i) => (
               <motion.div key={m} initial={{ opacity: 0, y: 30, rotate: -4 + i * 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 + i * 0.1 }}
                 className="relative h-24 w-40 overflow-hidden rounded-xl ring-1 ring-white/10">
                 <MapArt map={m} />

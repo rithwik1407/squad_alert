@@ -101,7 +101,7 @@ export default function MatchForm() {
         <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
           <Card>
             <h2 className="mb-3 text-lg font-bold text-white">Map</h2>
-            <div role="radiogroup" aria-label="Map" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div role="radiogroup" aria-label="Map" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {MAPS.map((mp) => (
                 <motion.button key={mp} type="button" role="radio" aria-checked={map === mp} onClick={() => pickMap(mp)}
                   variants={item} whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }} transition={spring}

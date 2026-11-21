@@ -1,4 +1,5 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { syncPush } from '@/lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 import type { Team, User } from '@/lib/types';
@@ -30,6 +31,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
     retry: 1,
   });
+  const userId = q.data?.user._id;
+  const serverHasDevice = q.data?.user.pushEnabled ?? false;
+  useEffect(() => {
+    if (!userId) return;
+    void syncPush(serverHasDevice).then(() => { if (!serverHasDevice) void q.refetch(); });
+    // Once per signed-in user per app open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   const value: AuthState = {
     user: q.data?.user ?? null,
     team: q.data?.team ?? null,

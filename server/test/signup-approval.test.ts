@@ -40,7 +40,7 @@ vi.mock('../src/models/index.js', () => {
     },
   };
   return {
-    User, Team, TEAM_SIZE: 15, MAPS: ['Erangel'],
+    User, Team, TEAM_SIZE: 15, MAPS: ['Erangel'], ALL_MAPS: ['Erangel'],
     isAdmin: (u: { email?: string } | null | undefined) => u?.email === 'admin@rare.com',
   };
 });

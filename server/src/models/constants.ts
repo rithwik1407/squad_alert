@@ -1,11 +1,15 @@
 export const ROLES = ['captain', 'player'] as const;
 export type Role = (typeof ROLES)[number];
 
-export const MAPS = ['Erangel', 'Miramar', 'Sanhok', 'Vikendi', 'Livik'] as const;
+/** Maps the team plays now: offered when scheduling a match and for default drops. */
+export const MAPS = ['Erangel', 'Miramar', 'Rondo'] as const;
 export type MapName = (typeof MAPS)[number];
+/** Maps no longer offered. Still accepted so older matches and saved drops keep loading and saving. */
+export const RETIRED_MAPS = ['Sanhok', 'Vikendi', 'Livik'] as const;
+export const ALL_MAPS = [...MAPS, ...RETIRED_MAPS] as const;
 /** A match can be scheduled before the map is known. */
 export const MAP_TBD = 'TBD' as const;
-export const MATCH_MAPS = [...MAPS, MAP_TBD] as const;
+export const MATCH_MAPS = [...ALL_MAPS, MAP_TBD] as const;
 export type MatchMap = (typeof MATCH_MAPS)[number];
 
 export const AVAILABILITY = ['available', 'maybe', 'unavailable'] as const;

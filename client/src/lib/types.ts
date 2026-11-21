@@ -1,6 +1,8 @@
 export type Role = 'captain' | 'player';
-export const MAPS = ['Erangel', 'Miramar', 'Sanhok', 'Vikendi', 'Livik'] as const;
-export type MapName = (typeof MAPS)[number];
+/** Maps offered when scheduling. Sanhok, Vikendi and Livik were removed but old matches may still show them. */
+export const MAPS = ['Erangel', 'Miramar', 'Rondo'] as const;
+export type RetiredMap = 'Sanhok' | 'Vikendi' | 'Livik';
+export type MapName = (typeof MAPS)[number] | RetiredMap;
 export const MAP_TBD = 'TBD' as const;
 /** A match's map: one of the maps, or 'TBD' (not decided yet). */
 export type MatchMap = MapName | typeof MAP_TBD;
