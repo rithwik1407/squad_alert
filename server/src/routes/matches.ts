@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth, requireCaptain } from '../middleware/auth.js';
 import {
-  Attendance, AVAILABILITY, Availability, MAP_TBD, MATCH_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team, User,
+  Attendance, AVAILABILITY, Availability, MAP_TBD, MATCH_MAPS, PICKABLE_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team, User,
   type MatchDoc,
 } from '../models/index.js';
 import { badRequest, locked, notFound } from '../lib/errors.js';
@@ -128,7 +128,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
   const matchBody = z.object({
     title: z.string().trim().min(1).max(60),
     type: z.enum(MATCH_TYPES).default('scrim'),
-    map: z.enum(MATCH_MAPS).default(MAP_TBD),
+    map: z.enum(PICKABLE_MAPS).default(MAP_TBD),
     drop: z.string().trim().max(30).optional(),
     startAt: z.coerce.date(),
     notifyOffsetMin: z.coerce.number().int().min(0).max(120).default(2),
@@ -188,7 +188,10 @@ export function matchesRouter(getQueue: () => QueueLike) {
   r.patch('/:id', requireCaptain, ah(async (req, res) => {
     const match = await loadMatch(req);
     if (match.status === 'cancelled' || match.status === 'done') throw badRequest(`Match is ${match.status}`);
-    const body = parse(matchBody.partial(), req.body);
+    // An old match can keep its retired map (e.g. Sanhok) when other fields are edited, but can't be moved onto one.
+    const body = parse(matchBody.partial().extend({
+      map: z.enum(MATCH_MAPS).refine((v) => (PICKABLE_MAPS as readonly string[]).includes(v) || v === match.map, 'That map is no longer available').optional(),
+    }), req.body);
     if (match.notifiedAt && (body.startAt || body.notifyOffsetMin !== undefined)) {
       throw locked('Notification already sent; time can no longer change');
     }

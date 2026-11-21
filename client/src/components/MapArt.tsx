@@ -5,6 +5,7 @@ import { cx } from './ui';
 const PALETTE: Record<MatchMap, { a: string; b: string; c: string; land: string; tag: string }> = {
   Erangel: { a: '#2d4a2b', b: '#4f7a3a', c: '#7fa35a', land: '#1c3a52', tag: '8×8 · Classic' },
   Miramar: { a: '#5a3a1e', b: '#a8693a', c: '#e2a35e', land: '#3a2410', tag: '8×8 · Desert' },
+  Rondo: { a: '#3a1e4a', b: '#7a3a8a', c: '#e05a9a', land: '#14203a', tag: '8×8 · Neon City' },
   Sanhok: { a: '#0f4a3a', b: '#1f7a55', c: '#4fbf7a', land: '#0d3b4a', tag: '4×4 · Jungle' },
   Vikendi: { a: '#3a4a5e', b: '#8fa6c2', c: '#e6eef7', land: '#1d2c40', tag: '6×6 · Snow' },
   Livik: { a: '#2a4a3a', b: '#5a8a5a', c: '#e0b04a', land: '#13405a', tag: '2×2 · Fast' },
