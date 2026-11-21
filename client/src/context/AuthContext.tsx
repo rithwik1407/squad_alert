@@ -1,13 +1,15 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { syncPush } from '@/lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, isTransient, retryDelay } from '@/lib/api';
 import type { Team, User } from '@/lib/types';
 
 interface AuthState {
   user: User | null;
   team: Team | null;
   loading: boolean;
+  /** The server could not be reached or was busy, so we don't know yet whether anyone is signed in. */
+  unreachable: boolean;
   isCaptain: boolean;
   refresh: () => Promise<unknown>;
   setSession: (s: { user: User; team: Team | null } | null) => void;
@@ -28,9 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw e;
       }
     },
-    // Short, so teammates' new profile photos show up soon after they change them.
-    staleTime: 15_000,
-    retry: 1,
+    // A minute is plenty for teammates' new profile photos, and keeps /auth/me from firing on every tab switch.
+    staleTime: 60_000,
+    // Keep trying through a busy or sleeping server instead of treating it as "signed out".
+    retry: (count, e) => isTransient(e) && count < 5,
+    retryDelay,
   });
   const userId = q.data?.user._id;
   const serverHasDevice = q.data?.user.pushEnabled ?? false;
@@ -45,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: q.data?.user ?? null,
     team: q.data?.team ?? null,
     loading: q.isLoading,
+    unreachable: q.isError && q.data === undefined,
     isCaptain: q.data?.user.role === 'captain',
     refresh: () => q.refetch(),
     setSession: (s) => qc.setQueryData(['session'], s),

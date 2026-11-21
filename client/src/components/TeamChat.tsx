@@ -32,7 +32,7 @@ function useMobileSheetBox() {
   return box;
 }
 
-const OPEN_POLL_MS = 3000;
+const OPEN_POLL_MS = 5000;
 const CLOSED_POLL_MS = 20_000;
 
 const seenKey = (uid: string) => `ss_chat_seen_${uid}`;

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
@@ -11,7 +11,38 @@ import { config } from '../config.js';
 import { loadTeamView } from './team.js';
 
 export const authRouter = Router();
-const limiter = rateLimit({ windowMs: 15 * 60_000, limit: 50, standardHeaders: 'draft-7', legacyHeaders: false });
+/*
+ * Every request reaches us through Vercel's rewrite, so for most users req.ip is one of a few shared
+ * Vercel addresses, not the player's phone. A plain per-IP limit therefore locked the whole team out
+ * once a handful of people signed in. Instead:
+ * - wrong-password guessing is limited per email (successful sign-ins never count), and
+ * - a generous per-IP backstop only counts failed attempts, so normal logins can't trip it.
+ */
+const tooMany = (message: string) => (_req: Request, res: Response) => res.status(429).json({ error: message });
+const loginPerEmail = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => `login:${String(req.body?.email ?? '').trim().toLowerCase()}`,
+  handler: tooMany('Too many wrong passwords for this account. Wait 15 minutes and try again.'),
+});
+const failedPerIp = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 200,
+  skipSuccessfulRequests: true,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: tooMany('Too many failed attempts from this network. Wait a few minutes and try again.'),
+});
+const registerPerIp = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: tooMany('Too many join requests right now. Wait a few minutes and try again.'),
+});
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(40),
@@ -29,7 +60,7 @@ const registerSchema = z.object({
  */
 authRouter.post(
   '/register',
-  limiter,
+  registerPerIp,
   ah(async (req, res) => {
     const body = parse(registerSchema, req.body);
     if (body.email === config.adminEmail) throw conflict('That email is already registered');
@@ -60,7 +91,8 @@ const loginSchema = z.object({ email: z.string().trim().email(), password: z.str
 
 authRouter.post(
   '/login',
-  limiter,
+  failedPerIp,
+  loginPerEmail,
   ah(async (req, res) => {
     const body = parse(loginSchema, req.body);
     const user = await User.findOne({ email: body.email.toLowerCase() }).select('+passwordHash');

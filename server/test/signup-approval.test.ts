@@ -137,3 +137,21 @@ describe('signup approval', () => {
     expect((await call('/team/join', { code: 'RARE25' }, admin.cookie)).status).toBe(404);
   });
 });
+
+describe('sign-in rate limits', () => {
+  it('a whole team signing in from one shared address is never blocked', async () => {
+    // All traffic arrives via Vercel's few IPs; the old per-IP limit of 50 locked everyone out.
+    for (let i = 0; i < 60; i++) {
+      expect((await call('/auth/login', { email: 'admin@rare.com', password: 'rare@123' })).status).toBe(200);
+    }
+  });
+
+  it('wrong passwords are limited per account, and other accounts still sign in', async () => {
+    db.users.push({ _id: id(), email: 'p3@x.com', name: 'P3', ign: 'P3', role: 'player', status: 'active', teamId: db.team!._id, passwordHash: db.users[0].passwordHash });
+    for (let i = 0; i < 10; i++) expect((await call('/auth/login', { email: 'P3@x.com', password: 'nope' })).status).toBe(401);
+    const blocked = await call('/auth/login', { email: 'p3@x.com', password: 'nope' });
+    expect(blocked.status).toBe(429);
+    expect(blocked.data.error).toMatch(/wrong passwords/);
+    expect((await call('/auth/login', { email: 'admin@rare.com', password: 'rare@123' })).status).toBe(200);
+  });
+});
