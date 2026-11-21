@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Bell, MessageCircle, Smartphone, XCircle } from 'lucide-react';
+import { BarChart3, Bell, MessageCircle, Smartphone, Trophy, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST, ago, timeIST } from '@/lib/time';
@@ -93,22 +93,84 @@ export default function Notifications() {
 
       {q.isLoading ? <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div> :
         !logs.length ? <Card><EmptyState title="All quiet" text="Alerts show up here once a match notification goes out." /></Card> :
-        isCaptain ? <Card key={filter}><LogTable logs={logs} /></Card> : (
-          <motion.ul variants={list} initial="initial" animate="animate" className="space-y-3">
-            {logs.map((l) => (
-              <motion.li key={l.id} variants={item}>
-                <Link to={`/matches/${l.matchId}`} className="glass group flex gap-3 p-4 hover:border-ember-400/25 hover:bg-white/[0.05]">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ember-500/15 text-ember-300 transition-transform duration-200 group-hover:scale-105"><Bell className="h-5 w-5" aria-hidden /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-white">{l.title}</p>
-                    <p className="text-sm text-zinc-400">{l.body}</p>
-                    <p className="mt-1 text-xs text-zinc-500">{CH[l.channel].label} · {ago(l.sentAt)}</p>
-                  </div>
-                </Link>
-              </motion.li>
-            ))}
-          </motion.ul>
-        )}
+        isCaptain ? <Card key={filter}><LogTable logs={logs} /></Card> : <PlayerInbox logs={logs} />}
     </div>
+  );
+}
+
+type Pane = 'alerts' | 'stats';
+
+/** Player inbox: alerts (room/IDP, reminders, squad picks) on the left, per-match stats on the right. */
+function PlayerInbox({ logs }: { logs: NotificationLog[] }) {
+  const alerts = useMemo(() => logs.filter((l) => l.kind !== 'results'), [logs]);
+  const stats = useMemo(() => logs.filter((l) => l.kind === 'results'), [logs]);
+  const [pane, setPane] = useState<Pane>('alerts');
+  const tabs: { id: Pane; label: string; count: number }[] = [
+    { id: 'alerts', label: 'Notifications', count: alerts.length },
+    { id: 'stats', label: 'Your stats', count: stats.length },
+  ];
+
+  return (
+    <div>
+      {/* Mobile: one column at a time behind tabs. Desktop shows both side by side. */}
+      <div className="mb-4 flex gap-2 lg:hidden" role="tablist" aria-label="Inbox section">
+        {tabs.map((t) => (
+          <button key={t.id} role="tab" aria-selected={pane === t.id} aria-controls={`inbox-${t.id}`} onClick={() => setPane(t.id)}
+            className={cx('relative rounded-full px-3.5 py-1.5 text-xs font-semibold', pane === t.id ? 'text-ink-950' : 'text-zinc-400 hover:text-white')}>
+            {pane === t.id && <motion.span layoutId="inbox-pane" className="absolute inset-0 -z-0 rounded-full bg-ember-400" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+            <span className="relative">{t.label} · {t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <InboxColumn id="alerts" hidden={pane !== 'alerts'} title="Notifications" count={alerts.length}
+          icon={<Bell className="h-4 w-4" aria-hidden />} empty="Room/IDP updates, match reminders and squad picks land here.">
+          {alerts.map((l) => <InboxItem key={l.id} log={l} />)}
+        </InboxColumn>
+        <InboxColumn id="stats" hidden={pane !== 'stats'} title="Your stats" count={stats.length}
+          icon={<BarChart3 className="h-4 w-4" aria-hidden />} empty="Your kills, damage and assists show up here after each match.">
+          {stats.map((l) => <InboxItem key={l.id} log={l} stat />)}
+        </InboxColumn>
+      </div>
+    </div>
+  );
+}
+
+function InboxColumn({ id, hidden, title, count, icon, empty, children }: {
+  id: Pane; hidden: boolean; title: string; count: number; icon: ReactNode; empty: string; children: ReactNode;
+}) {
+  return (
+    <section id={`inbox-${id}`} aria-label={title} className={cx('min-w-0', hidden && 'hidden lg:block')}>
+      <h2 className="mb-3 hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 lg:flex">
+        <span className="text-ember-300">{icon}</span>{title}
+        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] tracking-normal text-zinc-400">{count}</span>
+      </h2>
+      {count ? (
+        <motion.ul variants={list} initial="initial" animate="animate" className="space-y-3">{children}</motion.ul>
+      ) : (
+        <Card><EmptyState title="Nothing yet" text={empty} /></Card>
+      )}
+    </section>
+  );
+}
+
+function InboxItem({ log: l, stat }: { log: NotificationLog; stat?: boolean }) {
+  const mvp = stat && l.title.startsWith('🏆');
+  const Icon = stat ? (mvp ? Trophy : BarChart3) : Bell;
+  return (
+    <motion.li variants={item}>
+      <Link to={`/matches/${l.matchId}`} className="glass group flex gap-3 p-4 hover:border-ember-400/25 hover:bg-white/[0.05]">
+        <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-transform duration-200 group-hover:scale-105',
+          stat ? 'bg-emerald-500/15 text-emerald-300' : 'bg-ember-500/15 text-ember-300')}>
+          <Icon className="h-5 w-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-white">{l.title}</p>
+          <p className="break-words text-sm text-zinc-400">{l.body}</p>
+          <p className="mt-1 text-xs text-zinc-500">{CH[l.channel].label} · {ago(l.sentAt)}</p>
+        </div>
+      </Link>
+    </motion.li>
   );
 }
