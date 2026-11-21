@@ -2,7 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ErrorBoundary } from './ErrorBoundary';
-import { Bell, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
+import { Bell, BookUser, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { Avatar, cx, Skeleton } from './ui';
@@ -24,6 +24,7 @@ export function Layout() {
     ? [
         { to: '/', label: 'Home', icon: Home },
         { to: '/matches', label: 'Matches', icon: CalendarClock },
+        { to: '/scrims', label: 'Scrims', icon: BookUser },
         { to: '/team', label: 'Team', icon: Users },
         { to: '/notifications', label: 'Alerts', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
@@ -31,6 +32,7 @@ export function Layout() {
     : [
         { to: '/', label: 'Home', icon: Home },
         { to: '/stats', label: 'Stats', icon: BarChart3 },
+        { to: '/scrims', label: 'Scrims', icon: BookUser },
         { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
       ];

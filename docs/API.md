@@ -87,6 +87,17 @@ Players only see full match details (room ID, squad) for matches where they are 
 | PUT | `/matches/:id/attendance` | captain | `{ entries: [{ userId, joined }] }` | |
 | PUT | `/matches/:id/stats` | captain | `{ entries: [{ userId, kills, damage, mvp }] }` | One MVP max |
 
+## Scrim organizers
+
+Discord links and organizer contacts per scrim/tournament series. A match shows the card whose name matches its `tournamentName` (case, spaces and punctuation ignored).
+
+| Method | Path | Who | Body | Notes |
+|---|---|---|---|---|
+| GET | `/scrims` | any | | `{ canEdit, series: [{ id, name, key, organizer, discordInvite, discordChannel, contact, notes, matchCount }], unsaved: [{ name, matchCount }] }` |
+| POST | `/scrims` | captain/admin | `{ name, organizer?, discordInvite?, discordChannel?, contact?, notes? }` | 409 if the name is already saved |
+| PATCH | `/scrims/:id` | captain/admin | same as POST | |
+| DELETE | `/scrims/:id` | captain/admin | | |
+
 ## Notifications
 
 | Method | Path | Notes |

@@ -241,3 +241,27 @@ export interface ParsedSchedule {
   /** time is the IDP time (24h HH:MM): the match is scheduled at it. startTime is the start shown, for reference. */
   matches: { number: number; time: string; startTime: string; map: MatchMap }[];
 }
+
+/** Organizer contact card for one scrim / tournament series. */
+export interface ScrimSeries {
+  id: string;
+  name: string;
+  /** Name with case, spaces and punctuation removed. Matches link to it through tournamentName. */
+  key: string;
+  organizer: string;
+  discordInvite: string;
+  discordChannel: string;
+  contact: string;
+  notes: string;
+  updatedAt: string | null;
+  matchCount: number;
+}
+
+export interface ScrimSeriesList {
+  canEdit: boolean;
+  series: ScrimSeries[];
+  /** Series names used on matches that have no contact card yet. */
+  unsaved: { name: string; matchCount: number }[];
+}
+
+export type ScrimSeriesInput = Pick<ScrimSeries, 'name' | 'organizer' | 'discordInvite' | 'discordChannel' | 'contact' | 'notes'>;

@@ -21,6 +21,9 @@ import { useToast } from '@/components/Toast';
 import { JoinButton } from './Dashboard';
 import { AVAIL_STYLE } from '@/components/CheckinBoard';
 import { Modal, useDialog } from '@/components/Modal';
+import { OrganizerDetails } from '@/components/OrganizerCard';
+import { ScrimEditor } from '@/components/ScrimEditor';
+import { useSeriesFor } from '@/lib/useScrims';
 
 export default function MatchDetail() {
   const { id = '' } = useParams();
@@ -62,6 +65,8 @@ export default function MatchDetail() {
             </div>
           </div>
         </Card>
+
+        <SeriesCard name={m.tournamentName} />
 
         {isCaptain && <CaptainActions m={m} members={members} />}
 
@@ -516,6 +521,34 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
           ))}
         </ul>
       )}
+    </Card>
+  );
+}
+
+/** Organizer contacts for this match's scrim series, so the room/slot Discord channel is one tap away. */
+function SeriesCard({ name }: { name: string }) {
+  const { series, canEdit, loading } = useSeriesFor(name);
+  const [editing, setEditing] = useState(false);
+  if (!name || loading || (!series && !canEdit)) return null;
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="eyebrow">Organizer</p>
+          <h2 className="break-words text-xl font-bold text-white">{series?.name ?? name}</h2>
+        </div>
+        <div className="flex gap-2">
+          {canEdit && series && <Button variant="ghost" icon={<Pencil className="h-4 w-4" aria-hidden />} onClick={() => setEditing(true)}>Edit</Button>}
+          <Link to="/scrims" className="btn-ghost">All organizers</Link>
+        </div>
+      </div>
+      {series ? <OrganizerDetails s={series} /> : (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-white/10 p-3">
+          <p className="text-sm text-zinc-400">No Discord link or contact saved for {name} yet.</p>
+          <Button onClick={() => setEditing(true)}>Add organizer</Button>
+        </div>
+      )}
+      <ScrimEditor open={editing} onClose={() => setEditing(false)} series={series} name={name} />
     </Card>
   );
 }

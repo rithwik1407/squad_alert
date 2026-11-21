@@ -12,6 +12,7 @@ import { meRouter } from './routes/me.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { telegramRouter } from './routes/telegram.js';
 import { chatRouter } from './routes/chat.js';
+import { scrimsRouter } from './routes/scrims.js';
 import { cronRouter } from './routes/cron.js';
 import type { QueueLike } from './scheduler/queue.js';
 
@@ -53,6 +54,7 @@ export function createApp(getQueue: () => QueueLike) {
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/telegram', telegramRouter);
   app.use('/api/chat', chatRouter);
+  app.use('/api/scrims', scrimsRouter);
   app.use('/api/cron', cronRouter);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
