@@ -100,52 +100,45 @@ export default function Notifications() {
 
 type Pane = 'alerts' | 'stats';
 
-/** Player inbox: alerts (room/IDP, reminders, squad picks) on the left, per-match stats on the right. */
+/** Player inbox: two tabs, alerts (room/IDP, reminders, squad picks) and per-match stats. Only the selected one shows. */
 function PlayerInbox({ logs }: { logs: NotificationLog[] }) {
   const alerts = useMemo(() => logs.filter((l) => l.kind !== 'results'), [logs]);
   const stats = useMemo(() => logs.filter((l) => l.kind === 'results'), [logs]);
   const [pane, setPane] = useState<Pane>('alerts');
-  const tabs: { id: Pane; label: string; count: number }[] = [
-    { id: 'alerts', label: 'Notifications', count: alerts.length },
-    { id: 'stats', label: 'Your stats', count: stats.length },
+  const tabs: { id: Pane; label: string; count: number; icon: typeof Bell }[] = [
+    { id: 'alerts', label: 'Notifications', count: alerts.length, icon: Bell },
+    { id: 'stats', label: 'Your stats', count: stats.length, icon: BarChart3 },
   ];
 
   return (
     <div>
-      {/* Mobile: one column at a time behind tabs. Desktop shows both side by side. */}
-      <div className="mb-4 flex gap-2 lg:hidden" role="tablist" aria-label="Inbox section">
+      <div className="mb-4 flex gap-2" role="tablist" aria-label="Inbox section">
         {tabs.map((t) => (
-          <button key={t.id} role="tab" aria-selected={pane === t.id} aria-controls={`inbox-${t.id}`} onClick={() => setPane(t.id)}
-            className={cx('relative rounded-full px-3.5 py-1.5 text-xs font-semibold', pane === t.id ? 'text-ink-950' : 'text-zinc-400 hover:text-white')}>
+          <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={pane === t.id} aria-controls={`inbox-${t.id}`} onClick={() => setPane(t.id)}
+            className={cx('relative inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold', pane === t.id ? 'text-ink-950' : 'text-zinc-400 hover:text-white')}>
             {pane === t.id && <motion.span layoutId="inbox-pane" className="absolute inset-0 -z-0 rounded-full bg-ember-400" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+            <t.icon className="relative h-4 w-4" aria-hidden />
             <span className="relative">{t.label} · {t.count}</span>
           </button>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        <InboxColumn id="alerts" hidden={pane !== 'alerts'} title="Notifications" count={alerts.length}
-          icon={<Bell className="h-4 w-4" aria-hidden />} empty="Room/IDP updates, match reminders and squad picks land here.">
+      {pane === 'alerts' ? (
+        <InboxList key="alerts" id="alerts" count={alerts.length} empty="Room/IDP updates, match reminders and squad picks land here.">
           {alerts.map((l) => <InboxItem key={l.id} log={l} />)}
-        </InboxColumn>
-        <InboxColumn id="stats" hidden={pane !== 'stats'} title="Your stats" count={stats.length}
-          icon={<BarChart3 className="h-4 w-4" aria-hidden />} empty="Your kills, damage and assists show up here after each match.">
+        </InboxList>
+      ) : (
+        <InboxList key="stats" id="stats" count={stats.length} empty="Your kills, damage and assists show up here after each match.">
           {stats.map((l) => <InboxItem key={l.id} log={l} stat />)}
-        </InboxColumn>
-      </div>
+        </InboxList>
+      )}
     </div>
   );
 }
 
-function InboxColumn({ id, hidden, title, count, icon, empty, children }: {
-  id: Pane; hidden: boolean; title: string; count: number; icon: ReactNode; empty: string; children: ReactNode;
-}) {
+function InboxList({ id, count, empty, children }: { id: Pane; count: number; empty: string; children: ReactNode }) {
   return (
-    <section id={`inbox-${id}`} aria-label={title} className={cx('min-w-0', hidden && 'hidden lg:block')}>
-      <h2 className="mb-3 hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400 lg:flex">
-        <span className="text-ember-300">{icon}</span>{title}
-        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] tracking-normal text-zinc-400">{count}</span>
-      </h2>
+    <section id={`inbox-${id}`} role="tabpanel" aria-labelledby={`tab-${id}`} className="max-w-3xl">
       {count ? (
         <motion.ul variants={list} initial="initial" animate="animate" className="space-y-3">{children}</motion.ul>
       ) : (
