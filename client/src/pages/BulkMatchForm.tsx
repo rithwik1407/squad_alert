@@ -56,7 +56,7 @@ export default function BulkMatchForm() {
     setFromImage(s);
     setDate(s.date);
     setType(s.type);
-    setTournamentName(s.type === 'tournament' ? s.name : '');
+    setTournamentName(s.name.slice(0, 60));
     setDays(1);
     setRows(s.matches.map((m) => row(m.time, scheduleTitle(s, m.number), m.map)));
     toast.success(`Read ${s.matches.length} match${s.matches.length === 1 ? '' : 'es'} from the image. Check them, then Schedule.`);
@@ -96,7 +96,7 @@ export default function BulkMatchForm() {
     e.preventDefault();
     setBusy(true);
     try {
-      const { matches } = await api.createMatches(planned.map((p) => ({ ...p, type, notifyOffsetMin: offset, tournamentName: type === 'tournament' ? tournamentName.trim() : '' })));
+      const { matches } = await api.createMatches(planned.map((p) => ({ ...p, type, notifyOffsetMin: offset, tournamentName: tournamentName.trim() })));
       qc.invalidateQueries({ queryKey: ['matches'] });
       toast.success(`${matches.length} matches scheduled. Pick each squad before its alert.`);
       nav('/matches');
@@ -138,11 +138,11 @@ export default function BulkMatchForm() {
                 </select>
               </Field>
               <Field label="Notify before (min)"><input type="number" min={0} max={120} className="input" value={offset} onChange={(e) => setOffset(Number(e.target.value))} /></Field>
-              {type === 'tournament' && (
-                <div className="sm:col-span-3">
-                  <Field label="Tournament"><input className="input" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="BGIS 2026" maxLength={60} /></Field>
-                </div>
-              )}
+              <div className="sm:col-span-3">
+                <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required for every scrim and tournament">
+                  <input className="input" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
+                </Field>
+              </div>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
               <Repeat className="h-4 w-4 text-ember-400" aria-hidden />

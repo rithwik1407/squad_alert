@@ -11,7 +11,7 @@ export const mongoDispatchRepo: DispatchRepo = {
     if (!m) return null;
     return {
       id: String(m._id), teamId: String(m.teamId), title: m.title, map: m.map, startAt: m.startAt,
-      notifyOffsetMin: m.notifyOffsetMin, roomId: m.roomId ?? '', roomPassword: m.roomPassword ?? '',
+      notifyOffsetMin: m.notifyOffsetMin, roomId: m.roomId ?? '', roomPassword: m.roomPassword ?? '', slot: m.slot ?? '',
       status: m.status, notifiedAt: m.notifiedAt ?? null,
     };
   },

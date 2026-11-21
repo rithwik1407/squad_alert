@@ -14,6 +14,8 @@ const matchSchema = new Schema(
     notifyOffsetMin: { type: Number, default: 2, min: 0, max: 120 },
     roomId: { type: String, default: '' },
     roomPassword: { type: String, default: '' },
+    /** Our team's slot number in the custom room, e.g. "12". */
+    slot: { type: String, default: '' },
     status: { type: String, enum: MATCH_STATUS, default: 'scheduled', index: true },
     /** Set when the squad notification went out. Squad edits lock from then on. */
     notifiedAt: { type: Date, default: null },

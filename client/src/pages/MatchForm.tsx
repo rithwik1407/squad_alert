@@ -40,6 +40,7 @@ export default function MatchForm() {
   const [offset, setOffset] = useState(2);
   const [roomId, setRoomId] = useState('');
   const [roomPassword, setRoomPassword] = useState('');
+  const [slot, setSlot] = useState('');
   const [tournamentName, setTournamentName] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -52,7 +53,7 @@ export default function MatchForm() {
     setMap(retired ? MAP_TBD : m.map); setDrop(retired ? '' : m.drop);
     setOffset(m.notifyOffsetMin); setTournamentName(m.tournamentName);
     if (editing) {
-      setStart(toISTInput(m.startAt)); setRoomId(m.roomId); setRoomPassword(m.roomPassword);
+      setStart(toISTInput(m.startAt)); setRoomId(m.roomId); setRoomPassword(m.roomPassword); setSlot(m.slot ?? '');
     } else {
       // Duplicate: same setup, one day later, fresh room.
       const next = new Date(new Date(m.startAt).getTime() + 864e5);
@@ -80,7 +81,7 @@ export default function MatchForm() {
     const base = new Date(`${s.date}T00:00:00+05:30`).getTime() + (Number(m.time.slice(0, 2)) < 6 ? 864e5 : 0);
     setTitle(`${s.name.slice(0, 52)} M${m.number}`);
     setType(s.type);
-    setTournamentName(s.type === 'tournament' ? s.name : '');
+    setTournamentName(s.name.slice(0, 60));
     pickMap(m.map);
     setStart(`${toISTInput(new Date(base)).slice(0, 10)}T${m.time}`);
     toast.success(`Filled from the image: ${s.name}, IDP ${m.time}${s.dateNote ? ` (the image said "${s.dateNote}", check the date)` : ''}. Check it, then Schedule.`);
@@ -94,7 +95,7 @@ export default function MatchForm() {
     e.preventDefault();
     if (!startIso) return;
     setBusy(true);
-    const body = { title, type, map, drop, startAt: startIso, notifyOffsetMin: offset, roomId, roomPassword, tournamentName: type === 'tournament' ? tournamentName : '' };
+    const body = { title, type, map, drop, startAt: startIso, notifyOffsetMin: offset, roomId, roomPassword, slot, tournamentName: tournamentName.trim() };
     try {
       if (timeLocked) {
         delete (body as Partial<typeof body>).startAt;
@@ -175,9 +176,9 @@ export default function MatchForm() {
                   ))}
                 </div>
               </Field>
-              {type === 'tournament' && (
-                <Field label="Tournament"><input className="input" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="BGIS 2026" /></Field>
-              )}
+              <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required, e.g. the organiser's scrims or the tournament">
+                <input className="input" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
+              </Field>
               <Field label="Start (IST)" hint={timeLocked ? 'Locked: the alert already went out' : undefined}>
                 <input type="datetime-local" className="input [color-scheme:dark]" value={start} onChange={(e) => setStart(e.target.value)} required disabled={timeLocked} />
               </Field>
@@ -186,6 +187,9 @@ export default function MatchForm() {
               </Field>
               <Field label="Room ID" hint="Can be added later, right before the match"><input className="input font-mono" value={roomId} onChange={(e) => setRoomId(e.target.value)} inputMode="numeric" /></Field>
               <Field label="Room password"><input className="input font-mono" value={roomPassword} onChange={(e) => setRoomPassword(e.target.value)} /></Field>
+              <Field label="Slot number" hint={roomId ? 'Your team\'s slot in the room' : 'Add with the room ID'}>
+                <input className="input font-mono" value={slot} onChange={(e) => setSlot(e.target.value)} inputMode="numeric" placeholder="e.g. 12" maxLength={10} required={Boolean(roomId)} />
+              </Field>
             </div>
           </Card>
         </motion.div>
@@ -199,7 +203,7 @@ export default function MatchForm() {
               </div>
               <p className="mt-1.5 font-semibold text-white">Match in {offset} minute{offset === 1 ? '' : 's'}!</p>
               <p className="text-sm text-zinc-300">
-                {title} · {mapLabel(map)} · {startIso ? timeIST(startIso) : '--'}. Join the lobby now. Room: {roomId || 'TBA'}{roomId ? ` / Pass: ${roomPassword || '-'}` : ''}
+                {title} · {mapLabel(map)} · {startIso ? timeIST(startIso) : '--'}. Join the lobby now. Room: {roomId || 'TBA'}{roomId ? ` / Pass: ${roomPassword || '-'}` : ''}{roomId && slot ? ` / Slot: ${slot}` : ''}
               </p>
             </div>
             <p className="mt-4 flex items-start gap-2 text-sm text-zinc-300">

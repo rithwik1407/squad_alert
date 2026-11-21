@@ -67,6 +67,8 @@ export interface Match {
   notifyOffsetMin: number;
   roomId: string;
   roomPassword: string;
+  /** Our slot number in the room. */
+  slot: string;
   status: MatchStatus;
   notifiedAt: string | null;
   captainAlertedAt: string | null;
