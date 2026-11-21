@@ -54,6 +54,11 @@ services:
       # Free: a Google Gemini key from https://aistudio.google.com/apikey. Used first when set.
       - key: GEMINI_API_KEY
         sync: false
+      # More free readers, used when Gemini is busy or out of free uses: console.groq.com/keys and openrouter.ai/keys.
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
       # Paid alternative (console.anthropic.com > API keys). Without either key the admin types the numbers in.
       - key: ANTHROPIC_API_KEY
         sync: false
