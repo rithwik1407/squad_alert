@@ -1,4 +1,4 @@
-import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, TeamStats, ScorecardRow, Team, User } from './types';
+import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -69,6 +69,8 @@ export const api = {
   report: (id: string) => request<MatchReport>('GET', `/matches/${id}/report`),
   /** image: a data: URL. Returns the numbers read from the screenshot; nothing is saved yet. */
   readScorecard: (id: string, image: string) => readScorecard(id, image),
+  /** image: a data: URL of a schedule screenshot. Returns what it says; nothing is created. */
+  readSchedule: (image: string, onWait?: (seconds: number) => void) => readSchedule(image, onWait),
   saveAttendance: (id: string, entries: { userId: string; joined: boolean }[]) => request('PUT', `/matches/${id}/attendance`, { entries }),
   saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[]) =>
     request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries }),
@@ -126,3 +128,25 @@ async function readScorecard(id: string, image: string, onWait?: (seconds: numbe
   throw new ApiError(0, 'Reading the screenshot took too long. Try again, or type the numbers in.');
 }
 export { readScorecard as readScorecardWithProgress };
+
+/** Upload a schedule screenshot and poll until the server has read it (same background reading as results). */
+async function readSchedule(image: string, onWait?: (seconds: number) => void): Promise<ParsedSchedule> {
+  const { jobId } = await request<{ jobId: string }>('POST', '/matches/schedule-image', { image }, 60_000);
+  const started = Date.now();
+  while (Date.now() - started < 230_000) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const job = await request<{ status: 'reading' | 'done' | 'failed'; schedule?: ParsedSchedule; error?: string; notSchedule?: boolean; seconds?: number }>(
+      'GET', `/matches/schedule-image/${jobId}`, undefined, 20_000,
+    ).catch((e: ApiError) => {
+      if (e.status === 0 || e.status >= 500) return null;
+      throw e;
+    });
+    if (!job) continue;
+    if (job.status === 'done' && job.schedule) return job.schedule;
+    if (job.status === 'failed') {
+      throw new ApiError(422, job.error ?? 'Could not read the image', job.notSchedule ? [{ path: 'image', message: 'not_schedule' }] : undefined);
+    }
+    onWait?.(job.seconds ?? Math.round((Date.now() - started) / 1000));
+  }
+  throw new ApiError(0, 'Reading the image took too long. Try again, or fill the matches in by hand.');
+}

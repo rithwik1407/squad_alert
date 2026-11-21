@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
  */
 export type ScorecardJob<T> =
   | { status: 'reading'; matchId: string; startedAt: number }
-  | { status: 'done'; matchId: string; startedAt: number; rows: T[] }
+  | { status: 'done'; matchId: string; startedAt: number; rows: T }
   | { status: 'failed'; matchId: string; startedAt: number; error: string; notResults: boolean };
 
 const jobs = new Map<string, ScorecardJob<unknown>>();
@@ -18,7 +18,8 @@ function sweep() {
   for (const [id, j] of jobs) if (now - j.startedAt > TTL) jobs.delete(id);
 }
 
-export function startScorecardJob<T>(matchId: string, work: () => Promise<T[]>): string {
+/** matchId is the owner key: a match id for results screenshots, `schedule:<teamId>` for schedule images. */
+export function startScorecardJob<T>(matchId: string, work: () => Promise<T>): string {
   sweep();
   const id = randomUUID();
   const startedAt = Date.now();
@@ -29,7 +30,8 @@ export function startScorecardJob<T>(matchId: string, work: () => Promise<T[]>):
       console.warn('[scorecard] job failed:', e.message);
       jobs.set(id, {
         status: 'failed', matchId, startedAt, error: e.message || 'Could not read the screenshot',
-        notResults: e.name === 'NotResultsScreenError' || e.constructor?.name === 'NotResultsScreenError',
+        notResults: e.name === 'NotResultsScreenError' || e.constructor?.name === 'NotResultsScreenError'
+          || e.name === 'NotScheduleError',
       });
     },
   );

@@ -14,6 +14,7 @@ import { markJoining } from '../lib/availability.js';
 import { enqueueImmediate, removeMatchJob, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
 import { readScorecard, scorecardReaderReady } from '../lib/scorecard.js';
 import { getScorecardJob, startScorecardJob } from '../lib/scorecardJobs.js';
+import { readSchedule } from '../lib/schedule.js';
 import { saveScorecardStats } from '../lib/matchStats.js';
 import { matchPlayer, scoreMvp } from '../lib/mvp.js';
 import { deleteMatchData } from '../lib/deleteMatches.js';
@@ -197,6 +198,26 @@ export function matchesRouter(getQueue: () => QueueLike) {
     const created = await Match.find({ _id: { $in: docs.map((d) => d._id) } }).sort({ startAt: 1 });
     await Promise.all(created.map((m) => upsertMatchJob(getQueue(), { id: String(m._id), ...m.toObject() })));
     res.status(201).json({ matches: await view(created, String(req.user!._id)), batchId });
+  }));
+
+  /**
+   * Read a scrim / tournament schedule screenshot so the admin doesn't have to type it: name, date, and one
+   * match per entry at its IDP time, plus the map when shown. Nothing is created here; the app fills the form
+   * and the admin presses Schedule. Runs in the background like results screenshots; poll GET /schedule-image/:jobId.
+   */
+  r.post('/schedule-image', requireCaptain, ah(async (req, res) => {
+    const { image } = parse(z.object({ image: z.string().min(50).max(7_000_000, 'Image is too big') }), req.body);
+    if (!scorecardReaderReady()) throw badRequest('Screenshot reading is not set up (GEMINI_API_KEY is missing on the server). Fill the matches in by hand.');
+    const jobId = startScorecardJob(`schedule:${teamIdOf(req)}`, () => readSchedule(image));
+    res.status(202).json({ jobId });
+  }));
+
+  r.get('/schedule-image/:jobId', requireCaptain, ah(async (req, res) => {
+    const job = getScorecardJob(String(req.params.jobId), `schedule:${teamIdOf(req)}`);
+    if (!job) throw notFound('That upload expired. Upload the image again.');
+    if (job.status === 'done') res.json({ status: 'done', schedule: job.rows });
+    else if (job.status === 'failed') res.json({ status: 'failed', error: job.error, notSchedule: job.notResults });
+    else res.json({ status: 'reading', seconds: Math.round((Date.now() - job.startedAt) / 1000) });
   }));
 
   r.get('/:id', ah(async (req, res) => {
