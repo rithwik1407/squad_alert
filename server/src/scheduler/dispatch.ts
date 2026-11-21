@@ -1,9 +1,9 @@
 import type { Channel, LogKind, LogStatus, MatchStatus } from '../models/constants.js';
 import type { NotificationPayload, NotificationProvider, Recipient } from '../notifications/types.js';
-import { captainAlert, squadNotification } from '../notifications/content.js';
+import { captainAlert, selectedNotification, squadNotification } from '../notifications/content.js';
 import { fireAt } from '../lib/time.js';
 
-export type Trigger = 'scheduled' | 'manual' | 'resend' | 'substitute';
+export type Trigger = 'scheduled' | 'manual' | 'resend' | 'substitute' | 'selected';
 
 export interface DispatchMatch {
   id: string;
@@ -34,6 +34,8 @@ export interface LogEntry {
   body: string;
   sentAt: Date;
   error: string | null;
+  /** Extra channels that also delivered it. */
+  alsoVia?: Channel[];
 }
 
 /** Storage the dispatcher needs. Mongo implementation in repo.ts; in-memory one in the tests. */
@@ -55,6 +57,8 @@ export interface DispatchRepo {
   markNotified(matchId: string, at: Date): Promise<void>;
   markCaptainAlerted(matchId: string, at: Date): Promise<void>;
   removeFcmTokens(userId: string, tokens: string[]): Promise<void>;
+  /** Optional: forget a Telegram chat that can no longer receive messages. */
+  clearTelegramChat?(userId: string): Promise<void>;
 }
 
 export interface DispatchDeps {
@@ -71,7 +75,7 @@ export interface DispatchOptions {
 }
 
 export interface DispatchResult {
-  outcome: 'squad' | 'captain_alert' | 'skipped';
+  outcome: 'squad' | 'captain_alert' | 'selected' | 'skipped';
   reason?: string;
   sent: string[];
   failed: string[];
@@ -112,39 +116,52 @@ async function attemptDelivery(
   const base = { matchId, userId: user.id, kind, trigger, title: payload.title, body: payload.body };
   let attempted = false;
 
-  // Meta's free test number allows only 5 verified recipients (the players), so captain alerts try WhatsApp last.
-  const providers = kind === 'captain_alert'
-    ? [...deps.providers.filter((p) => p.channel !== 'whatsapp'), ...deps.providers.filter((p) => p.channel === 'whatsapp')]
-    : deps.providers;
-  for (const provider of providers) {
-    if (!provider.canReach(user)) continue;
-    attempted = true;
-    let res;
-    try {
-      res = await provider.send(user, payload);
-    } catch (e) {
-      res = { ok: false, error: (e as Error).message };
-    }
-    if (res.invalidTokens?.length) await deps.repo.removeFcmTokens(user.id, res.invalidTokens);
-
-    if (res.ok) {
-      const inserted = await deps.repo.writeLog({
-        ...base, channel: provider.channel, status: 'sent', sentAt: now(), error: null,
-      });
-      return inserted ? 'sent' : 'duplicate';
-    }
-    await deps.repo.writeLog({
-      ...base, channel: provider.channel, status: 'failed', sentAt: now(), error: res.error ?? 'unknown error',
-    });
-  }
-
-  if (!attempted) {
+  const reachable = deps.providers.filter((p) => p.canReach(user));
+  if (!reachable.length) {
     await deps.repo.writeLog({
       ...base, channel: 'none', status: 'failed', sentAt: now(),
       error: 'No reachable channel: enable push or link Telegram',
     });
+    return 'failed';
   }
-  return 'failed';
+
+  // Send on every channel the player has turned on (push AND Telegram), not just the first that works,
+  // so a push that lands silently on a sleeping phone is backed up by Telegram.
+  const sendAll = (list: NotificationProvider[]) => Promise.all(list.map(async (provider) => {
+    let res;
+    try {
+      res = await provider.send(user, payload);
+    } catch (e) {
+      res = { ok: false, error: (e as Error).message } as const;
+    }
+    if (res.invalidTokens?.length) await deps.repo.removeFcmTokens(user.id, res.invalidTokens);
+    if (res.telegramGone) await deps.repo.clearTelegramChat?.(user.id);
+    return { channel: provider.channel, res };
+  }));
+
+  // Meta's free test number allows only 5 verified recipients (the players), so captain alerts use WhatsApp
+  // only when nothing else reached the captain.
+  let outcomes;
+  if (kind === 'captain_alert') {
+    const first = reachable.filter((p) => p.channel !== 'whatsapp');
+    outcomes = await sendAll(first);
+    if (!outcomes.some((o) => o.res.ok)) outcomes.push(...(await sendAll(reachable.filter((p) => p.channel === 'whatsapp'))));
+  } else {
+    outcomes = await sendAll(reachable);
+  }
+
+  for (const o of outcomes) {
+    if (o.res.ok) continue;
+    await deps.repo.writeLog({
+      ...base, channel: o.channel, status: 'failed', sentAt: now(), error: o.res.error ?? 'unknown error',
+    });
+  }
+  const ok = outcomes.filter((o) => o.res.ok).map((o) => o.channel);
+  if (!ok.length) return 'failed';
+  const inserted = await deps.repo.writeLog({
+    ...base, channel: ok[0], alsoVia: ok.slice(1), status: 'sent', sentAt: now(), error: null,
+  });
+  return inserted ? 'sent' : 'duplicate';
 }
 
 /**
@@ -169,6 +186,25 @@ export async function dispatchMatch(matchId: string, opts: DispatchOptions, deps
   }
 
   const squad = await deps.repo.getSquad(matchId);
+
+  // "You're in the squad" the moment the captain confirms. Only before the room-ID alert goes out.
+  if (opts.trigger === 'selected') {
+    if (!squad?.confirmed) return { ...result, reason: 'squad not confirmed' };
+    if (match.notifiedAt) return { ...result, reason: 'room alert already sent' };
+    if (match.startAt.getTime() <= now().getTime()) return { ...result, reason: 'match already started' };
+    result.outcome = 'selected';
+    let ids = squad.selectedIds.map(String);
+    if (opts.onlyUserIds) ids = ids.filter((id) => opts.onlyUserIds!.includes(id));
+    const payload = selectedNotification(match, deps.timeZone);
+    const users = await deps.repo.getRecipients(ids);
+    await Promise.all(ids.map(async (id) => {
+      const u = users.find((x) => x.id === id);
+      if (!u) return void result.failed.push(id);
+      const status = await deliver(deps, matchId, u, 'selected', opts.trigger, payload);
+      (status === 'sent' ? result.sent : status === 'duplicate' ? result.alreadySent : result.failed).push(id);
+    }));
+    return result;
+  }
 
   if (!squad || !squad.confirmed) {
     if (opts.trigger !== 'scheduled') return { ...result, reason: 'squad not confirmed' };

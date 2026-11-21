@@ -13,6 +13,8 @@ const logSchema = new Schema(
     body: { type: String, default: '' },
     sentAt: { type: Date, default: () => new Date() },
     error: { type: String, default: null },
+    /** Other channels that also delivered this alert (alerts go out on every channel the player has on). */
+    alsoVia: { type: [String], default: [] },
   },
   { timestamps: true },
 );

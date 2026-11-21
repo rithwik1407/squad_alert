@@ -24,6 +24,8 @@ export interface SendResult {
   error?: string;
   /** FCM tokens the provider found to be dead; the caller prunes them. */
   invalidTokens?: string[];
+  /** The user's Telegram chat is gone (bot blocked, chat deleted); the caller unlinks it. */
+  telegramGone?: boolean;
 }
 
 /**

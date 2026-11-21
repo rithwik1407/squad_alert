@@ -39,6 +39,7 @@ export function LogTable({ logs, compact }: { logs: NotificationLog[]; compact?:
                 <td className="p-2">
                   <p className="font-semibold text-white">{l.user?.ign ?? 'Player'}</p>
                   {l.kind === 'captain_alert' && <p className="text-[10px] uppercase tracking-wider text-amber-300">Captain alert</p>}
+                  {l.kind === 'selected' && <p className="text-[10px] uppercase tracking-wider text-sky-300">Squad pick</p>}
                 </td>
                 {!compact && (
                   <td className="p-2">
@@ -46,7 +47,7 @@ export function LogTable({ logs, compact }: { logs: NotificationLog[]; compact?:
                     {l.match && <p className="text-xs text-zinc-500">{l.match.map} · {timeIST(l.match.startAt)}</p>}
                   </td>
                 )}
-                <td className="p-2"><span className="inline-flex items-center gap-1.5 text-zinc-300"><C.icon className="h-3.5 w-3.5" aria-hidden />{C.label}</span></td>
+                <td className="p-2"><span className="inline-flex items-center gap-1.5 text-zinc-300"><C.icon className="h-3.5 w-3.5" aria-hidden />{C.label}{l.alsoVia?.length ? ` + ${l.alsoVia.map((c) => CH[c].label).join(' + ')}` : ''}</span></td>
                 <td className="p-2">
                   {l.status === 'sent' ? <StatusChip status="sent">Sent</StatusChip> : <StatusChip status="failed">Failed</StatusChip>}
                 </td>

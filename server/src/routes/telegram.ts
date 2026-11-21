@@ -38,10 +38,11 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
   res.sendStatus(200); // always ack fast so Telegram does not retry
 
   if (!chatId) return;
-  const m = text.match(/^\/start\s+([a-f0-9]{32})$/);
+  // "/start <code>" from the deep link, "/start@Bot <code>", or the code pasted on its own.
+  const m = text.trim().match(/^(?:\/start(?:@\w+)?\s+)?([a-f0-9]{32})$/i);
   if (m) {
     const user = await User.findOneAndUpdate(
-      { telegramLinkToken: m[1] },
+      { telegramLinkToken: m[1].toLowerCase() },
       { $set: { telegramChatId: String(chatId), telegramLinkToken: null } },
       { new: true },
     );
@@ -52,7 +53,7 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
   } else if (text.startsWith('/start')) {
     await telegramApi('sendMessage', {
       chat_id: chatId,
-      text: 'Hi! Open SquadSync → Settings → Link Telegram to connect this chat.',
+      text: 'Hi! Open SquadSync → Settings → Link Telegram, then send me the code shown there to connect this chat.',
     }).catch(() => {});
   }
 }));

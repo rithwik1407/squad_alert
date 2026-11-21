@@ -1,4 +1,4 @@
-import { formatTimeIST } from '../lib/time.js';
+import { formatDateTimeIST, formatTimeIST } from '../lib/time.js';
 
 export interface MatchForContent {
   id: string;
@@ -26,6 +26,18 @@ export function squadNotification(m: MatchForContent, now: Date, tz?: string) {
     url: `/matches/${m.id}`,
     matchId: m.id,
     tag: `match-${m.id}`,
+  };
+}
+
+/** Sent the moment the captain confirms the squad: "You're in the squad" with the date and IDP time. */
+export function selectedNotification(m: MatchForContent & { notifyOffsetMin?: number }, tz?: string) {
+  const alertNote = m.notifyOffsetMin !== undefined ? ` You'll get the room ID ${m.notifyOffsetMin} min before.` : '';
+  return {
+    title: "You're in the squad! 🎯",
+    body: `${m.title} · ${mapLabel(m.map)} · ${formatDateTimeIST(m.startAt, tz)}.${alertNote}`,
+    url: `/matches/${m.id}`,
+    matchId: m.id,
+    tag: `selected-${m.id}`,
   };
 }
 
