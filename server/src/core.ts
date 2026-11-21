@@ -11,3 +11,4 @@ export type { NotificationProvider, Recipient, NotificationPayload, SendResult }
 export { startWorker } from './scheduler/worker.js';
 export { startCatchupLoop, catchUpDueMatches, mongoCatchupRepo } from './scheduler/catchup.js';
 export { getQueue, closeQueue } from './scheduler/bull.js';
+export { startDailySummaryLoop, runDailySummaries } from './scheduler/dailySummary.js';
