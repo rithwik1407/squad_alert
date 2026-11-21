@@ -1,5 +1,5 @@
 /* SquadSync service worker: web push (FCM data messages) + light offline shell. */
-const CACHE = 'squadsync-v3';
+const CACHE = 'squadsync-v4';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/badge-96.png'];
 
 self.addEventListener('install', (e) => {

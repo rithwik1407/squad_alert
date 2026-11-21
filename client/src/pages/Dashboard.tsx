@@ -21,6 +21,7 @@ import { MapArt } from '@/components/MapArt';
 import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
 import { CheckinBoard } from '@/components/CheckinBoard';
+import { WHATSAPP_ENABLED } from '@/lib/features';
 
 export default function Dashboard() {
   const { isCaptain } = useAuth();
@@ -100,7 +101,7 @@ function CaptainDashboard() {
 
   return (
     <div>
-      <PageHeader eyebrow="Captain HQ" title={team?.name ?? 'Dashboard'} action={
+      <PageHeader eyebrow={team?.name ?? 'Admin'} title="Welcome ADMIN" action={
         <Link to="/matches/new" className="btn-primary"><CalendarPlus className="h-4 w-4" aria-hidden />Schedule</Link>
       } />
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
@@ -160,9 +161,9 @@ export function RosterCard({ p }: { p: Member }) {
         <p className="font-mono text-xs text-zinc-500">UID {p.bgmiId || '-'}</p>
       </div>
       <div className="flex gap-1" aria-label="Notification channels">
-        <span title={p.whatsappLinked ? 'WhatsApp on' : 'No WhatsApp number'} className={cx('grid h-7 w-7 place-items-center rounded-lg text-[10px] font-bold', p.whatsappLinked ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/5 text-zinc-600')}>
+        {WHATSAPP_ENABLED && <span title={p.whatsappLinked ? 'WhatsApp on' : 'No WhatsApp number'} className={cx('grid h-7 w-7 place-items-center rounded-lg text-[10px] font-bold', p.whatsappLinked ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/5 text-zinc-600')}>
           WA<span className="sr-only">{p.whatsappLinked ? ' enabled' : ' not set'}</span>
-        </span>
+        </span>}
         <span title={p.pushEnabled ? 'Push on' : 'Push off'} className={cx('grid h-7 w-7 place-items-center rounded-lg', p.pushEnabled ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/5 text-zinc-600')}>
           <BellRing className="h-3.5 w-3.5" aria-hidden /><span className="sr-only">{p.pushEnabled ? 'Push enabled' : 'Push not enabled'}</span>
         </span>
@@ -214,8 +215,7 @@ function QuickPicker({ m, members }: { m: Match; members: Member[] }) {
 }
 
 function PlayerDashboard() {
-  const { user, team } = useAuth();
-  const mates = [team?.captain, ...(team?.members ?? [])].filter((p): p is Member => Boolean(p));
+  const { user } = useAuth();
   const q = useUpcoming();
   const inbox = useQuery({ queryKey: ['notifications'], queryFn: () => api.notifications().then((r) => r.logs) });
   const stats = useQuery({ queryKey: ['mystats'], queryFn: api.myStats });
@@ -228,7 +228,7 @@ function PlayerDashboard() {
     <div>
       <PageHeader eyebrow="Player" title={`Welcome, ${user?.ign.replace(/^RARE\s*[|丨]\s*/i, '') ?? ''}`}>Your team's scheduled matches. Tap one to see the details.</PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
-        {!user?.pushEnabled && !user?.telegramLinked && !user?.whatsappLinked && (
+        {!user?.pushEnabled && !user?.telegramLinked && !(WHATSAPP_ENABLED && user?.whatsappLinked) && (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-ember-400/30">
             <p className="text-sm text-zinc-200"><BellRing className="mr-2 inline h-4 w-4 text-ember-400" aria-hidden />Turn on alerts so you don't miss the lobby.</p>
             <Link to="/settings" className="btn-primary">Enable alerts</Link>
@@ -242,25 +242,10 @@ function PlayerDashboard() {
           <StatTile label="Matches" value={stats.data?.totals.matches ?? null} icon={<Swords className="h-3.5 w-3.5" aria-hidden />} />
           <StatTile label="Kills" value={stats.data?.totals.kills ?? null} icon={<Target className="h-3.5 w-3.5" aria-hidden />} />
           <StatTile label="MVPs" value={stats.data?.totals.mvps ?? null} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
-          <StatTile label="Attendance" value={stats.data?.totals.attendanceRate ?? null} suffix="%" icon={<Check className="h-3.5 w-3.5" aria-hidden />} />
+          <StatTile label="Attendance" value={stats.data?.totals.attendanceOf ? stats.data.totals.attended ?? 0 : null} of={stats.data?.totals.attendanceOf} icon={<Check className="h-3.5 w-3.5" aria-hidden />} />
         </motion.div>
 
         <CheckinBoard />
-
-        {mates.length > 0 && (
-          <section aria-labelledby="mates-h">
-            <h2 id="mates-h" className="mb-3 text-xl font-bold text-white">Your team</h2>
-            <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
-              {mates.map((p) => (
-                <li key={p.id} className="glass flex flex-col items-center gap-2 p-3 text-center">
-                  <Avatar name={p.ign} src={p.avatar} size={48} />
-                  <p className="w-full truncate text-xs font-semibold text-white">{p.id === user?._id ? `${p.ign} (you)` : p.ign}</p>
-                  {p.id === team?.captain?.id && <span className="text-[10px] uppercase tracking-wider text-ember-300">Admin</span>}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section aria-labelledby="up-h" className="min-w-0">

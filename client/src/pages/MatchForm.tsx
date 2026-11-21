@@ -195,7 +195,7 @@ export default function MatchForm() {
             <p className="eyebrow">Alert preview</p>
             <div className="mt-3 rounded-2xl bg-ink-800/90 p-4 ring-1 ring-white/10">
               <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-                <img src="/icons/icon.svg" alt="" className="h-4 w-4" />SquadSync · {notifyIso ? timeIST(notifyIso) : '--'}
+                <img src="/icons/logo.png" alt="" className="h-4 w-4" />SquadSync · {notifyIso ? timeIST(notifyIso) : '--'}
               </div>
               <p className="mt-1.5 font-semibold text-white">Match in {offset} minute{offset === 1 ? '' : 's'}!</p>
               <p className="text-sm text-zinc-300">

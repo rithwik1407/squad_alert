@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig } from 'framer-motion';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
+import { DialogProvider } from './components/Modal';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
@@ -17,11 +18,13 @@ createRoot(document.getElementById('root')!).render(
       <MotionConfig reducedMotion="user">
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ToastProvider>
-            <AuthProvider>
-              <ErrorBoundary fullScreen>
-                <App />
-              </ErrorBoundary>
-            </AuthProvider>
+            <DialogProvider>
+              <AuthProvider>
+                <ErrorBoundary fullScreen>
+                  <App />
+                </ErrorBoundary>
+              </AuthProvider>
+            </DialogProvider>
           </ToastProvider>
         </BrowserRouter>
       </MotionConfig>

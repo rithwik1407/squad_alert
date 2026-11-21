@@ -39,7 +39,8 @@ export function createApp(getQueue: () => QueueLike) {
     res.json({
       telegramBot: config.telegram.botUsername || null,
       pushServerReady: Boolean(config.firebase.projectId && config.firebase.privateKey),
-      whatsappReady: Boolean(config.whatsapp.token && config.whatsapp.phoneNumberId),
+      whatsappEnabled: config.whatsapp.enabled,
+      whatsappReady: Boolean(config.whatsapp.enabled && config.whatsapp.token && config.whatsapp.phoneNumberId),
       timeZone: config.displayTimeZone,
     });
   });

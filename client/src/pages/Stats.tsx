@@ -174,7 +174,7 @@ export default function Stats() {
                     <StatTile label="Avg dmg" value={Math.round(avg(mine.map((l) => l.damage)))} icon={<Flame className="h-3.5 w-3.5" aria-hidden />} />
                     <StatTile label="Assists" value={mine.reduce((a, l) => a + l.assists, 0)} icon={<Handshake className="h-3.5 w-3.5" aria-hidden />} />
                     <StatTile label="Avg survival" value={round1(avg(mine.map((l) => l.survivalMin)))} decimals={1} suffix="m" icon={<Clock className="h-3.5 w-3.5" aria-hidden />} />
-                    <StatTile label="MVPs" value={mine.filter((l) => l.mvp).length} hint={me.data?.totals.attendanceRate != null ? `${me.data.totals.attendanceRate}% attendance` : undefined} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
+                    <StatTile label="MVPs" value={mine.filter((l) => l.mvp).length} hint={me.data?.totals.attendanceOf ? `${me.data.totals.attended ?? 0}/${me.data.totals.attendanceOf} attended` : undefined} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
                   </>
                 ) : (
                   <>

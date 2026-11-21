@@ -183,7 +183,7 @@ export interface TeamStats {
 
 export interface MyStats {
   rows: StatsRow[];
-  totals: { matches: number; kills: number; damage: number; mvps: number; attendanceRate: number | null };
+  totals: { matches: number; kills: number; damage: number; mvps: number; attendanceRate: number | null; attended?: number; attendanceOf?: number };
 }
 
 /** Someone who registered and is waiting for the admin to approve them. */

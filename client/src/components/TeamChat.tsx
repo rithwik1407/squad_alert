@@ -9,6 +9,29 @@ import { Avatar, cx } from './ui';
 import { dayIST, isTodayIST, timeIST, splitDuration } from '@/lib/time';
 import type { ChatMessage, ChatMode, ChatMute, ChatState, Member } from '@/lib/types';
 
+/**
+ * Phones: keep the chat sheet inside the part of the screen you can actually see. On iPhone the keyboard
+ * doesn't shrink the page, so a plain fixed sheet slides up under the status bar when you start typing.
+ */
+function useMobileSheetBox() {
+  const [box, setBox] = useState<{ top: number; height: number } | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      if (window.innerWidth >= 1024) { setBox(null); return; }
+      const gap = Math.min(vv.height * 0.08, 64);
+      setBox({ top: vv.offsetTop + gap, height: vv.height - gap });
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
+  }, []);
+  return box;
+}
+
 const OPEN_POLL_MS = 3000;
 const CLOSED_POLL_MS = 20_000;
 
@@ -128,6 +151,7 @@ function ChatPanel({ teamName, members, meId, onClose, onSeen }: {
 }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const box = useMobileSheetBox();
   const [showAdmin, setShowAdmin] = useState(false);
   const q = useQuery({ queryKey: ['chat'], queryFn: () => api.chat(), refetchInterval: OPEN_POLL_MS });
   const state = q.data?.state;
@@ -158,7 +182,7 @@ function ChatPanel({ teamName, members, meId, onClose, onSeen }: {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.6, y: 40, transition: { duration: 0.18 } }}
         transition={{ type: 'spring', stiffness: 360, damping: 30 }}
-        style={{ transformOrigin: 'bottom right' }}
+        style={{ transformOrigin: 'bottom right', ...(box ? { top: box.top, height: box.height, bottom: 'auto' } : {}) }}
         className="glass gborder fixed inset-x-0 bottom-0 top-[8vh] z-[60] flex flex-col overflow-hidden rounded-b-none bg-ink-900 shadow-2xl lg:inset-x-auto lg:bottom-6 lg:right-6 lg:top-auto lg:h-[min(600px,calc(100vh-3rem))] lg:w-[400px] lg:rounded-b-2xl"
       >
         <header className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3">
