@@ -42,6 +42,10 @@ services:
       # Any made-up password-like word; you reuse it once when you connect the Telegram webhook.
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      # Optional: any random string. Lets cron-job.org trigger/preview the nightly Telegram summary:
+      # https://<service>.onrender.com/api/cron/daily-summary?key=<CRON_SECRET>
+      - key: CRON_SECRET
+        generateValue: true
       # Web push to phones (Firebase console > Project settings > Service accounts > Generate new private key).
       # Paste project_id, client_email and the whole private_key value from that JSON file.
       - key: FIREBASE_PROJECT_ID

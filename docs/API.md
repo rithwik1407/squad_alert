@@ -20,6 +20,7 @@ All timestamps are ISO 8601 **UTC**. The client renders them in `Asia/Kolkata`.
 |---|---|---|---|
 | GET | `/health` | | `{ ok, db, time }` |
 | GET | `/config` | | `{ telegramBot, pushServerReady, timeZone }` |
+| GET | `/cron/daily-summary?key=CRON_SECRET` | | Sends last night's Telegram team summary if due and not sent yet (12:00 AM to noon IST). `&preview=1` returns the message without sending; `&day=YYYY-MM-DD` sends that day's report. Each player gets a report once. 503 when `CRON_SECRET` is unset |
 | POST | `/telegram/webhook` | Telegram update | Checks `X-Telegram-Bot-Api-Secret-Token`. Handles `/start <token>` to link a chat |
 
 ## Auth
