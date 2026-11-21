@@ -240,10 +240,10 @@ function MatchLogs({ m }: { m: Match }) {
 /** One line per player: Sent if any channel reached them, otherwise Failed. */
 function DeliveryList({ logs }: { logs: NotificationLog[] }) {
   const rows = useMemo(() => {
-    const by = new Map<string, { name: string; captain: boolean; pick: boolean; stats: boolean; sent: boolean }>();
+    const by = new Map<string, { name: string; captain: boolean; pick: boolean; stats: boolean; room: boolean; sent: boolean }>();
     for (const l of logs) {
       const k = `${l.userId}:${l.kind}`;
-      const cur = by.get(k) ?? { name: l.user?.ign ?? 'Player', captain: l.kind === 'captain_alert', pick: l.kind === 'selected', stats: l.kind === 'results', sent: false };
+      const cur = by.get(k) ?? { name: l.user?.ign ?? 'Player', captain: l.kind === 'captain_alert', pick: l.kind === 'selected', stats: l.kind === 'results', room: l.kind === 'room', sent: false };
       cur.sent ||= l.status === 'sent';
       by.set(k, cur);
     }
@@ -253,7 +253,7 @@ function DeliveryList({ logs }: { logs: NotificationLog[] }) {
     <ul className="divide-y divide-white/5">
       {rows.map(([k, r]) => (
         <li key={k} className="flex items-center justify-between gap-3 py-2.5">
-          <span className="min-w-0 truncate font-semibold text-white">{r.name}{r.captain && <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-300">Captain alert</span>}{r.pick && <span className="ml-2 text-[10px] uppercase tracking-wider text-sky-300">Squad pick</span>}{r.stats && <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-300">Match stats</span>}</span>
+          <span className="min-w-0 truncate font-semibold text-white">{r.name}{r.captain && <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-300">Captain alert</span>}{r.pick && <span className="ml-2 text-[10px] uppercase tracking-wider text-sky-300">Squad pick</span>}{r.stats && <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-300">Match stats</span>}{r.room && <span className="ml-2 text-[10px] uppercase tracking-wider text-ember-300">Room update</span>}</span>
           {r.sent ? <StatusChip status="sent">Sent</StatusChip> : <StatusChip status="failed">Failed</StatusChip>}
         </li>
       ))}

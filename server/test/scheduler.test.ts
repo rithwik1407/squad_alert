@@ -282,4 +282,21 @@ describe('dispatch: who gets notified', () => {
     const again = await dispatchMatch('m1', { trigger: 'results' }, deps);
     expect(again.alreadySent.sort()).toEqual(['bittu', 'vasanth']);
   });
+
+  it('sends the room ID to the whole squad on every room update, with a send-off', async () => {
+    const first = await dispatchMatch('m1', { trigger: 'room' }, deps);
+    expect(first.outcome).toBe('room');
+    expect(first.sent.sort()).toEqual(['akshay', 'bittu', 'dheeraj', 'vasanth']);
+    expect(tg.calls[0].title).toBe('🎮 IDP updated · Scrim 1');
+    expect(tg.calls[0].body).toContain('Room ID: 4471823 / Pass: rare21');
+    expect(tg.calls[0].body).toContain('All the best');
+    repo.matches.get('m1')!.roomPassword = 'newpass';
+    const second = await dispatchMatch('m1', { trigger: 'room' }, deps);
+    expect(second.sent).toHaveLength(4);
+    expect(tg.calls.filter((c) => c.userId === 'bittu')).toHaveLength(2);
+    expect(tg.calls.at(-1)!.body).toContain('Pass: newpass');
+    expect(repo.logs.filter((l) => l.kind === 'room' && l.userId === 'bittu' && l.status === 'sent')).toHaveLength(1);
+    // The scheduled room alert still goes out as usual.
+    expect((await dispatchMatch('m1', { trigger: 'scheduled' }, deps)).sent).toHaveLength(4);
+  });
 });

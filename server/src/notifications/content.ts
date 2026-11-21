@@ -41,6 +41,18 @@ export function selectedNotification(m: MatchForContent & { notifyOffsetMin?: nu
   };
 }
 
+/** The admin saved or changed the room ID / password: tell the squad straight away, with a send-off. */
+export function roomNotification(m: MatchForContent, tz?: string) {
+  return {
+    title: `🎮 IDP updated · ${m.title}`,
+    body: `${mapLabel(m.map)} · ${formatTimeIST(m.startAt, tz)}. Room ID: ${m.roomId || '-'} / Pass: ${m.roomPassword || '-'}. ` +
+      'Join the lobby now. All the best, squad! Play smart, stay together and bring home the chicken dinner 🍗🔥',
+    url: `/matches/${m.id}`,
+    matchId: m.id,
+    tag: `match-${m.id}`,
+  };
+}
+
 export interface PlayerResult { kills: number; damage: number; assists: number; survivalMin: number; mvp: boolean }
 
 /** After the results are saved: this player's own numbers only. */

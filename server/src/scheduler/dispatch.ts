@@ -1,9 +1,9 @@
 import type { Channel, LogKind, LogStatus, MatchStatus } from '../models/constants.js';
 import type { NotificationPayload, NotificationProvider, Recipient } from '../notifications/types.js';
-import { captainAlert, resultsNotification, selectedNotification, squadNotification, type PlayerResult } from '../notifications/content.js';
+import { captainAlert, resultsNotification, roomNotification, selectedNotification, squadNotification, type PlayerResult } from '../notifications/content.js';
 import { fireAt } from '../lib/time.js';
 
-export type Trigger = 'scheduled' | 'manual' | 'resend' | 'substitute' | 'selected' | 'results';
+export type Trigger = 'scheduled' | 'manual' | 'resend' | 'substitute' | 'selected' | 'results' | 'room';
 
 export interface DispatchMatch {
   id: string;
@@ -36,6 +36,8 @@ export interface LogEntry {
   error: string | null;
   /** Extra channels that also delivered it. */
   alsoVia?: Channel[];
+  /** Alerts that are sent again on every change (room updates): replace the previous "sent" row. */
+  repeatable?: boolean;
 }
 
 /** Storage the dispatcher needs. Mongo implementation in repo.ts; in-memory one in the tests. */
@@ -77,7 +79,7 @@ export interface DispatchOptions {
 }
 
 export interface DispatchResult {
-  outcome: 'squad' | 'captain_alert' | 'selected' | 'results' | 'skipped';
+  outcome: 'squad' | 'captain_alert' | 'selected' | 'results' | 'room' | 'skipped';
   reason?: string;
   sent: string[];
   failed: string[];
@@ -162,6 +164,7 @@ async function attemptDelivery(
   if (!ok.length) return 'failed';
   const inserted = await deps.repo.writeLog({
     ...base, channel: ok[0], alsoVia: ok.slice(1), status: 'sent', sentAt: now(), error: null,
+    ...(kind === 'room' ? { repeatable: true } : {}),
   });
   return inserted ? 'sent' : 'duplicate';
 }
@@ -180,6 +183,26 @@ export async function dispatchMatch(matchId: string, opts: DispatchOptions, deps
 
   const match = await deps.repo.getMatch(matchId);
   if (!match) return { ...result, reason: 'match not found' };
+
+  // Room ID / password saved or changed: every squad player, every time (no once-only dedupe).
+  if (opts.trigger === 'room') {
+    if (match.status === 'cancelled' || match.status === 'done') return { ...result, reason: `match ${match.status}` };
+    if (!match.roomId) return { ...result, reason: 'no room id' };
+    const squad = await deps.repo.getSquad(matchId);
+    if (!squad?.confirmed) return { ...result, reason: 'squad not confirmed' };
+    result.outcome = 'room';
+    let ids = squad.selectedIds.map(String);
+    if (opts.onlyUserIds) ids = ids.filter((id) => opts.onlyUserIds!.includes(id));
+    const payload = roomNotification(match, deps.timeZone);
+    const users = await deps.repo.getRecipients(ids);
+    await Promise.all(ids.map(async (id) => {
+      const u = users.find((x) => x.id === id);
+      if (!u) return void result.failed.push(id);
+      const status = await attemptDelivery(deps, matchId, u, 'room', opts.trigger, payload);
+      (status === 'failed' ? result.failed : result.sent).push(id);
+    }));
+    return result;
+  }
 
   // After the admin saves results: each player gets only their own stats.
   if (opts.trigger === 'results') {

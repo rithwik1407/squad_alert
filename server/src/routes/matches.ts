@@ -251,9 +251,15 @@ export function matchesRouter(getQueue: () => QueueLike) {
       const team = await Team.findById(match.teamId);
       body.drop = body.map === MAP_TBD ? '' : team?.drops.get(body.map) ?? '';
     }
+    const oldRoom = `${match.roomId ?? ''}\u0000${match.roomPassword ?? ''}`;
     match.set(body);
     await match.save();
     const schedule = await upsertMatchJob(getQueue(), { id: String(match._id), ...match.toObject() });
+    // New or changed room ID / password: tell the squad right away, every time.
+    if (match.roomId && `${match.roomId}\u0000${match.roomPassword ?? ''}` !== oldRoom) {
+      await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'room' })
+        .catch((e) => console.error('[room] could not queue room update alert:', (e as Error).message));
+    }
     res.json({ match: (await view([match], String(req.user!._id)))[0], schedule });
   }));
 
