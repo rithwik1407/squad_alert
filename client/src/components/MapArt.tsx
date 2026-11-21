@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { MatchMap } from '@/lib/types';
 import { cx } from './ui';
 
@@ -144,7 +144,34 @@ const DRAW: Record<MatchMap, (id: string) => ReactNode> = {
   TBD: () => null,
 };
 
+/**
+ * Real map images (client/public/maps). Cropped to the playable island; objectPosition keeps the
+ * busiest part of each map in view when a wide banner or a narrow card thumbnail crops it.
+ */
+const PHOTO: Partial<Record<MatchMap, { src: string; pos: string }>> = {
+  Erangel: { src: '/maps/erangel.webp', pos: '50% 55%' },
+  Miramar: { src: '/maps/miramar.webp', pos: '50% 50%' },
+  Rondo: { src: '/maps/rondo.webp', pos: '50% 50%' },
+};
+
 export function MapArt({ map, className }: { map: MatchMap; className?: string }) {
+  const photo = PHOTO[map];
+  const [broken, setBroken] = useState(false);
+  if (photo && !broken) {
+    return (
+      <div className={cx('relative h-full w-full overflow-hidden bg-ink-900', className)} aria-hidden>
+        <img src={photo.src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)}
+          className="absolute inset-0 h-full w-full object-cover saturate-[1.1] transition-transform duration-700 ease-out will-change-transform group-hover:scale-[1.06]"
+          style={{ objectPosition: photo.pos }} />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent from-40% to-ink-950/90" />
+      </div>
+    );
+  }
+  return <DrawnMap map={map} className={className} />;
+}
+
+/** Drawn fallback: retired maps, TBD, or when an image fails to load. */
+function DrawnMap({ map, className }: { map: MatchMap; className?: string }) {
   const id = `m${useId().replace(/:/g, '')}`;
   const meta = META[map] ?? META.TBD;
   const draw = DRAW[map] ?? DRAW.TBD;

@@ -112,7 +112,7 @@ export default function MatchForm() {
               {mapChoices.map((mp) => (
                 <motion.button key={mp} type="button" role="radio" aria-checked={map === mp} onClick={() => pickMap(mp)}
                   variants={item} whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }} transition={spring}
-                  className={cx('relative h-28 overflow-hidden rounded-xl text-left ring-1 transition-shadow', map === mp ? 'ring-2 ring-ember-400 shadow-glow' : 'ring-white/10')}>
+                  className={cx('group relative h-28 overflow-hidden rounded-xl text-left ring-1 transition-shadow', map === mp ? 'ring-2 ring-ember-400 shadow-glow' : 'ring-white/10')}>
                   <MapArt map={mp} />
                   <span className="absolute bottom-2 left-2.5">
                     <span className="block font-display text-lg font-bold leading-none text-white">{mp}</span>
