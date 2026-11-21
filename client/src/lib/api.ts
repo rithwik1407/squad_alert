@@ -9,15 +9,22 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}/api${path}`, {
-    method,
-    credentials: 'include',
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+async function request<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api${path}`, {
+      method,
+      credentials: 'include',
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+  } catch (e) {
+    const timedOut = (e as Error).name === 'TimeoutError' || (e as Error).name === 'AbortError';
+    throw new ApiError(0, timedOut ? 'The server took too long to answer. Check your connection and try again.' : 'Could not reach the server. Check your connection and try again.');
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.error ?? `Request failed (${res.status})`, data.details);
+  if (!res.ok) throw new ApiError(res.status, data.error ?? (res.status === 504 ? 'The server took too long to answer. Try again.' : `Request failed (${res.status})`), data.details);
   return data as T;
 }
 
@@ -61,7 +68,7 @@ export const api = {
   deleteMatch: (id: string) => request<{ ok: true }>('DELETE', `/matches/${id}`),
   report: (id: string) => request<MatchReport>('GET', `/matches/${id}/report`),
   /** image: a data: URL. Returns the numbers read from the screenshot; nothing is saved yet. */
-  readScorecard: (id: string, image: string) => request<{ rows: ScorecardRow[] }>('POST', `/matches/${id}/scorecard`, { image }),
+  readScorecard: (id: string, image: string) => readScorecard(id, image),
   saveAttendance: (id: string, entries: { userId: string; joined: boolean }[]) => request('PUT', `/matches/${id}/attendance`, { entries }),
   saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[]) =>
     request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries }),
@@ -93,3 +100,27 @@ export interface TestNotificationResult {
   telegramLinked: boolean;
   results: { channel: string; ok: boolean; error?: string }[];
 }
+
+/**
+ * Upload the screenshot, then poll until the server has read it. Reading runs in the background on the
+ * server because Google's free tier can be slow, longer than one web request may stay open.
+ */
+async function readScorecard(id: string, image: string, onWait?: (seconds: number) => void): Promise<{ rows: ScorecardRow[] }> {
+  const { jobId } = await request<{ jobId: string }>('POST', `/matches/${id}/scorecard`, { image }, 60_000);
+  const started = Date.now();
+  while (Date.now() - started < 200_000) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const job = await request<{ status: 'reading' | 'done' | 'failed'; rows?: ScorecardRow[]; error?: string; seconds?: number }>(
+      'GET', `/matches/${id}/scorecard/${jobId}`, undefined, 20_000,
+    ).catch((e: ApiError) => {
+      if (e.status === 0 || e.status >= 500) return null; // a blip while polling: keep waiting
+      throw e;
+    });
+    if (!job) continue;
+    if (job.status === 'done') return { rows: job.rows ?? [] };
+    if (job.status === 'failed') throw new ApiError(422, job.error ?? 'Could not read the screenshot');
+    onWait?.(job.seconds ?? Math.round((Date.now() - started) / 1000));
+  }
+  throw new ApiError(0, 'Reading the screenshot took too long. Try again, or type the numbers in.');
+}
+export { readScorecard as readScorecardWithProgress };

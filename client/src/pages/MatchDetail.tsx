@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft, Ban, CheckCircle2, Copy, CopyPlus, Crown, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, readScorecardWithProgress } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST, timeIST, ago } from '@/lib/time';
 import { list } from '@/lib/motion';
@@ -295,6 +295,8 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   const [unmatched, setUnmatched] = useState<ScorecardRow[]>([]);
   const [busy, setBusy] = useState<'read' | 'save' | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [readErr, setReadErr] = useState<string | null>(null);
+  const [waited, setWaited] = useState(0);
   const byId = new Map(members.map((p) => [p.id, p]));
 
   useEffect(() => {
@@ -316,13 +318,18 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
 
   async function upload(file: File) {
     setBusy('read');
+    setReadErr(null);
+    setWaited(0);
     try {
-      const { rows: read } = await api.readScorecard(m.id, await toDataUrl(file));
+      const { rows: read } = await readScorecardWithProgress(m.id, await toDataUrl(file), setWaited);
       const matched = read.filter((r) => r.userId);
       for (const r of matched) set(r.userId!, fromCard(r));
       setUnmatched(read.filter((r) => !r.userId));
       toast.success(`Read ${read.length} players${matched.length < read.length ? `, ${read.length - matched.length} need a name picked` : ''}. Check the numbers, then Save.`);
-    } catch (e) { toast.error(e); } finally {
+    } catch (e) {
+      setReadErr((e as Error).message || 'Could not read the screenshot');
+      toast.error(e);
+    } finally {
       setBusy(null);
       if (fileRef.current) fileRef.current.value = '';
     }
@@ -352,9 +359,22 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
         <h2 className="flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Attendance & stats</h2>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
         <Button variant="ghost" loading={busy === 'read'} icon={<ImageUp className="h-4 w-4" aria-hidden />} onClick={() => fileRef.current?.click()}>
-          {busy === 'read' ? 'Reading screenshot…' : 'Upload results screenshot'}
+          {busy === 'read' ? `Reading screenshot…${waited >= 5 ? ` ${waited}s` : ''}` : 'Upload results screenshot'}
         </Button>
       </div>
+      {busy === 'read' && waited >= 10 && (
+        <p className="mb-3 text-xs text-zinc-400">Google's free reader is slow right now. It keeps trying for up to about 2 minutes. You can keep this page open.</p>
+      )}
+      {readErr && busy !== 'read' && (
+        <div role="alert" className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm">
+          <div>
+            <p className="font-semibold text-red-200">Couldn't read the screenshot</p>
+            <p className="mt-0.5 text-red-200/80">{readErr}</p>
+            <p className="mt-1 text-zinc-300">You can type each player's kills, damage, survival and assists in the table below and tap Save. The MVP is still worked out for you.</p>
+          </div>
+          <button aria-label="Dismiss" className="rounded p-1 text-zinc-400 hover:text-white" onClick={() => setReadErr(null)}><X className="h-4 w-4" /></button>
+        </div>
+      )}
       <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers fill in automatically. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
 
       {unmatched.length > 0 && (
