@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
-import { badRequest } from './errors.js';
+import { badRequest, HttpError } from './errors.js';
 
 /** One player row read from a BGMI results screenshot. */
 export interface ScorecardRow {
@@ -15,8 +15,9 @@ export interface ScorecardRow {
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['players'],
+  required: ['isResultsScreen', 'players'],
   properties: {
+    isResultsScreen: { type: 'boolean', description: 'true only for a BGMI end-of-match team results table' },
     players: {
       type: 'array',
       items: {
@@ -39,7 +40,15 @@ const PROMPT = `This is a BGMI (Battlegrounds Mobile India) end-of-match results
 It has a table with the columns Player, Rating, Finishes, Assists, Damage, Survived, Rescue, Recalls.
 Read every player row (usually 4) and return each player's name exactly as written (keep the team tag, e.g. "RARE | NAME"),
 Finishes, Assists, Damage, and Survived converted to minutes (e.g. "20.2m" -> 20.2, "12:30" -> 12.5).
-Ignore the Rating column and any "MVP" label. If the image is not a BGMI results screen, return an empty players list.`;
+Ignore the Rating column and any "MVP" label.
+Set isResultsScreen to true only if the image really is this BGMI results table. For anything else (lobby, map,
+inventory, chat, a photo, another game, another screen) set isResultsScreen to false and return an empty players list.`;
+
+/** The image isn't a BGMI match results screen. The app shows a "results screenshot only" pop-up for this. */
+export class NotResultsScreenError extends HttpError {
+  name = 'NotResultsScreenError';
+  constructor() { super(422, 'This is not a match results screenshot. Upload the BGMI results screen (Player, Finishes, Damage...).'); }
+}
 
 export const scorecardReaderReady = () => Boolean(config.geminiApiKey || config.anthropicApiKey);
 
@@ -89,8 +98,9 @@ async function askClaude(media: Media, data: string): Promise<string> {
 /** Gemini's schema format (an OpenAPI subset). */
 const GEMINI_SCHEMA = {
   type: 'OBJECT',
-  required: ['players'],
+  required: ['isResultsScreen', 'players'],
   properties: {
+    isResultsScreen: { type: 'BOOLEAN' },
     players: {
       type: 'ARRAY',
       items: {
@@ -229,7 +239,7 @@ async function askGemini(mime: string, data: string): Promise<string> {
 }
 
 function toRows(text: string): ScorecardRow[] {
-  let parsed: { players?: ScorecardRow[] };
+  let parsed: { isResultsScreen?: boolean; players?: ScorecardRow[] };
   const json = text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
   try { parsed = JSON.parse(json); } catch { throw badRequest('Could not read that screenshot. Type the numbers in instead.'); }
   const rows = (parsed.players ?? []).map((p) => ({
@@ -239,7 +249,7 @@ function toRows(text: string): ScorecardRow[] {
     damage: clampInt(p.damage, 9999),
     survivedMin: Math.max(0, Math.min(60, Math.round(Number(p.survivedMin || 0) * 10) / 10)),
   })).filter((p) => p.name);
-  if (!rows.length) throw badRequest('No player rows found. Make sure it is the BGMI results screen.');
+  if (parsed.isResultsScreen === false || !rows.length) throw new NotResultsScreenError();
   return rows;
 }
 

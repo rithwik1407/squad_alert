@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 export type ScorecardJob<T> =
   | { status: 'reading'; matchId: string; startedAt: number }
   | { status: 'done'; matchId: string; startedAt: number; rows: T[] }
-  | { status: 'failed'; matchId: string; startedAt: number; error: string };
+  | { status: 'failed'; matchId: string; startedAt: number; error: string; notResults: boolean };
 
 const jobs = new Map<string, ScorecardJob<unknown>>();
 const TTL = 15 * 60_000;
@@ -25,9 +25,12 @@ export function startScorecardJob<T>(matchId: string, work: () => Promise<T[]>):
   jobs.set(id, { status: 'reading', matchId, startedAt });
   work().then(
     (rows) => jobs.set(id, { status: 'done', matchId, startedAt, rows }),
-    (e: Error) => {
+    (e: Error & { status?: number }) => {
       console.warn('[scorecard] job failed:', e.message);
-      jobs.set(id, { status: 'failed', matchId, startedAt, error: e.message || 'Could not read the screenshot' });
+      jobs.set(id, {
+        status: 'failed', matchId, startedAt, error: e.message || 'Could not read the screenshot',
+        notResults: e.name === 'NotResultsScreenError' || e.constructor?.name === 'NotResultsScreenError',
+      });
     },
   );
   return id;

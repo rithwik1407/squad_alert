@@ -110,7 +110,7 @@ async function readScorecard(id: string, image: string, onWait?: (seconds: numbe
   const started = Date.now();
   while (Date.now() - started < 200_000) {
     await new Promise((r) => setTimeout(r, 2500));
-    const job = await request<{ status: 'reading' | 'done' | 'failed'; rows?: ScorecardRow[]; error?: string; seconds?: number }>(
+    const job = await request<{ status: 'reading' | 'done' | 'failed'; rows?: ScorecardRow[]; error?: string; notResults?: boolean; seconds?: number }>(
       'GET', `/matches/${id}/scorecard/${jobId}`, undefined, 20_000,
     ).catch((e: ApiError) => {
       if (e.status === 0 || e.status >= 500) return null; // a blip while polling: keep waiting
@@ -118,7 +118,9 @@ async function readScorecard(id: string, image: string, onWait?: (seconds: numbe
     });
     if (!job) continue;
     if (job.status === 'done') return { rows: job.rows ?? [] };
-    if (job.status === 'failed') throw new ApiError(422, job.error ?? 'Could not read the screenshot');
+    if (job.status === 'failed') {
+      throw new ApiError(422, job.error ?? 'Could not read the screenshot', job.notResults ? [{ path: 'image', message: 'not_results' }] : undefined);
+    }
     onWait?.(job.seconds ?? Math.round((Date.now() - started) / 1000));
   }
   throw new ApiError(0, 'Reading the screenshot took too long. Try again, or type the numbers in.');

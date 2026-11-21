@@ -66,6 +66,11 @@ describe('Gemini screenshot reader', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1][1].body)).generationConfig.thinkingConfig).toBeUndefined();
   });
 
+  it('rejects an image that is not a results screen', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ isResultsScreen: false, players: [] }) }] } }] })));
+    await expect(readScorecard(IMG)).rejects.toMatchObject({ name: 'NotResultsScreenError', status: 422 });
+  });
+
   it('says when the free daily limit is used up', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('/models?') ? json(200, { models: [] })
       : json(429, { error: { message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: GenerateRequestsPerDayPerProjectPerModel' } }))));
@@ -82,6 +87,13 @@ describe('scorecard jobs', () => {
     finish(['row']);
     await new Promise((r) => setTimeout(r, 0));
     expect(getScorecardJob(id, 'm1')).toMatchObject({ status: 'done', rows: ['row'] });
+  });
+
+  it('flags a wrong image so the app can show the pop-up', async () => {
+    const { NotResultsScreenError } = await import('../src/lib/scorecard.js');
+    const id = startScorecardJob('m1', async () => { throw new NotResultsScreenError(); });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getScorecardJob(id, 'm1')).toMatchObject({ status: 'failed', notResults: true });
   });
 
   it('keeps the error message when reading fails', async () => {

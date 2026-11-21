@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft, Ban, CheckCircle2, Copy, CopyPlus, Crown, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
 } from 'lucide-react';
-import { api, readScorecardWithProgress } from '@/lib/api';
+import { api } from '@/lib/api';
+import { isNotResultsError, pendingRead, startRead } from '@/lib/scorecardUpload';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST, timeIST, ago } from '@/lib/time';
 import { list } from '@/lib/motion';
@@ -316,24 +317,58 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   const set = (id: string, patch: Partial<Row>) => { setDirty(true); setRows((r) => ({ ...r, [id]: { ...(r[id] ?? { joined: true, kills: 0, damage: 0, survivalMin: 0, assists: 0 }), ...patch } })); };
   const fromCard = (c: ScorecardRow): Partial<Row> => ({ joined: true, kills: c.finishes, damage: c.damage, survivalMin: c.survivedMin, assists: c.assists });
 
-  async function upload(file: File) {
+  const [notResults, setNotResults] = useState(false);
+
+  /** Show progress and results for a read, whether it started now or before the admin left this page. */
+  async function follow(read: ReturnType<typeof startRead>) {
+    readRef.current = read;
     setBusy('read');
     setReadErr(null);
-    setWaited(0);
+    setWaited(read.seconds);
+    read.listeners.add(setWaited);
     try {
-      const { rows: read } = await readScorecardWithProgress(m.id, await toDataUrl(file), setWaited);
-      const matched = read.filter((r) => r.userId);
+      const got = await read.promise;
+      if (!mounted.current) return;
+      const matched = got.filter((r) => r.userId);
       for (const r of matched) set(r.userId!, fromCard(r));
-      setUnmatched(read.filter((r) => !r.userId));
-      toast.success(`Read ${read.length} players${matched.length < read.length ? `, ${read.length - matched.length} need a name picked` : ''}. Check the numbers, then Save.`);
+      setDirty(false);
+      setUnmatched(got.filter((r) => !r.userId));
+      toast.success(`Read ${got.length} players and saved ${matched.length}${matched.length < got.length ? `. Pick who the other ${got.length - matched.length} are` : ''}. Fix anything wrong, then Save.`);
     } catch (e) {
-      setReadErr((e as Error).message || 'Could not read the screenshot');
-      toast.error(e);
+      if (!mounted.current) return;
+      if (isNotResultsError(e)) setNotResults(true);
+      else { setReadErr((e as Error).message || 'Could not read the screenshot'); toast.error(e); }
     } finally {
+      read.listeners.delete(setWaited);
       setBusy(null);
       if (fileRef.current) fileRef.current.value = '';
     }
   }
+
+  async function upload(file: File) {
+    setBusy('read');
+    let image: string;
+    try { image = await toDataUrl(file); } catch {
+      setBusy(null);
+      setNotResults(true);
+      return;
+    }
+    follow(startRead(m.id, image, qc, toast));
+  }
+
+  // Came back to this match while a read was still going: pick it up again. On leaving, stop listening
+  // so the read reports its result with a toast instead (it keeps going either way).
+  const mounted = useRef(true);
+  const readRef = useRef<ReturnType<typeof startRead> | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    const read = pendingRead(m.id);
+    if (read) follow(read);
+    return () => {
+      mounted.current = false;
+      readRef.current?.listeners.delete(setWaited);
+    };
+  }, [m.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
     setBusy('save');
@@ -363,7 +398,20 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
         </Button>
       </div>
       {busy === 'read' && waited >= 10 && (
-        <p className="mb-3 text-xs text-zinc-400">Google's free reader is slow right now. It keeps trying for up to about 2 minutes. You can keep this page open.</p>
+        <p className="mb-3 text-xs text-zinc-400">Google's free reader is slow right now. It keeps trying for up to about 2 minutes. You can leave this page: the stats are saved when it finishes.</p>
+      )}
+      {notResults && (
+        <div role="dialog" aria-modal="true" aria-labelledby="nr-title" className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={() => setNotResults(false)}>
+          <div className="glass w-full max-w-sm rounded-2xl p-5 text-center" onClick={(e) => e.stopPropagation()}>
+            <ImageUp className="mx-auto h-10 w-10 text-ember-400" aria-hidden />
+            <h3 id="nr-title" className="mt-3 text-lg font-bold text-white">Match results screenshot only</h3>
+            <p className="mt-2 text-sm text-zinc-300">That image isn't a BGMI match results screen. Upload the screenshot of the results table that shows Player, Finishes, Assists, Damage and Survived.</p>
+            <div className="mt-4 flex justify-center gap-2">
+              <Button onClick={() => { setNotResults(false); fileRef.current?.click(); }}>Choose another</Button>
+              <Button variant="ghost" onClick={() => setNotResults(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
       )}
       {readErr && busy !== 'read' && (
         <div role="alert" className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm">
