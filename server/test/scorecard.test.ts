@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.GEMINI_API_KEY = 'test-key';
 const { readScorecard, _resetGeminiForTests } = await import('../src/lib/scorecard.js');
+const { startScorecardJob, getScorecardJob } = await import('../src/lib/scorecardJobs.js');
 
 const IMG = 'data:image/jpeg;base64,' + 'A'.repeat(100);
 const answer = { players: [{ name: 'RARE | VASANTH', finishes: 1, assists: 1, damage: 550, survivedMin: 20.1 }] };
@@ -53,5 +54,51 @@ describe('Gemini screenshot reader', () => {
   it('says the free reader is busy when every model stays busy', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('/models?') ? json(200, { models: [] }) : busy())));
     await expect(readScorecard(IMG)).rejects.toThrow(/busy/);
+  });
+
+  it('asks again without the thinking setting when a model rejects it', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json(400, { error: { message: 'Unknown name "thinkingLevel" at generation_config.thinking_config' } }))
+      .mockResolvedValueOnce(good());
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await readScorecard(IMG)).toHaveLength(1);
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body)).generationConfig.thinkingConfig).toBeUndefined();
+  });
+
+  it('rejects an image that is not a results screen', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ isResultsScreen: false, players: [] }) }] } }] })));
+    await expect(readScorecard(IMG)).rejects.toMatchObject({ name: 'NotResultsScreenError', status: 422 });
+  });
+
+  it('says when the free daily limit is used up', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('/models?') ? json(200, { models: [] })
+      : json(429, { error: { message: 'Quota exceeded for metric: generate_content_free_tier_requests, limit: GenerateRequestsPerDayPerProjectPerModel' } }))));
+    await expect(readScorecard(IMG)).rejects.toThrow(/daily limit/);
+  });
+});
+
+describe('scorecard jobs', () => {
+  it('reports reading, then the rows', async () => {
+    let finish!: (v: string[]) => void;
+    const id = startScorecardJob('m1', () => new Promise<string[]>((r) => { finish = r; }));
+    expect(getScorecardJob(id, 'm1')?.status).toBe('reading');
+    expect(getScorecardJob(id, 'other-match')).toBeNull();
+    finish(['row']);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getScorecardJob(id, 'm1')).toMatchObject({ status: 'done', rows: ['row'] });
+  });
+
+  it('flags a wrong image so the app can show the pop-up', async () => {
+    const { NotResultsScreenError } = await import('../src/lib/scorecard.js');
+    const id = startScorecardJob('m1', async () => { throw new NotResultsScreenError(); });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getScorecardJob(id, 'm1')).toMatchObject({ status: 'failed', notResults: true });
+  });
+
+  it('keeps the error message when reading fails', async () => {
+    const id = startScorecardJob('m1', async () => { throw new Error('busy'); });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getScorecardJob(id, 'm1')).toMatchObject({ status: 'failed', error: 'busy' });
   });
 });

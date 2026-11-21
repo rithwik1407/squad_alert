@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
-import { badRequest } from './errors.js';
+import { badRequest, HttpError } from './errors.js';
 
 /** One player row read from a BGMI results screenshot. */
 export interface ScorecardRow {
@@ -15,8 +15,9 @@ export interface ScorecardRow {
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['players'],
+  required: ['isResultsScreen', 'players'],
   properties: {
+    isResultsScreen: { type: 'boolean', description: 'true only for a BGMI end-of-match team results table' },
     players: {
       type: 'array',
       items: {
@@ -39,7 +40,15 @@ const PROMPT = `This is a BGMI (Battlegrounds Mobile India) end-of-match results
 It has a table with the columns Player, Rating, Finishes, Assists, Damage, Survived, Rescue, Recalls.
 Read every player row (usually 4) and return each player's name exactly as written (keep the team tag, e.g. "RARE | NAME"),
 Finishes, Assists, Damage, and Survived converted to minutes (e.g. "20.2m" -> 20.2, "12:30" -> 12.5).
-Ignore the Rating column and any "MVP" label. If the image is not a BGMI results screen, return an empty players list.`;
+Ignore the Rating column and any "MVP" label.
+Set isResultsScreen to true only if the image really is this BGMI results table. For anything else (lobby, map,
+inventory, chat, a photo, another game, another screen) set isResultsScreen to false and return an empty players list.`;
+
+/** The image isn't a BGMI match results screen. The app shows a "results screenshot only" pop-up for this. */
+export class NotResultsScreenError extends HttpError {
+  name = 'NotResultsScreenError';
+  constructor() { super(422, 'This is not a match results screenshot. Upload the BGMI results screen (Player, Finishes, Damage...).'); }
+}
 
 export const scorecardReaderReady = () => Boolean(config.geminiApiKey || config.anthropicApiKey);
 
@@ -89,8 +98,9 @@ async function askClaude(media: Media, data: string): Promise<string> {
 /** Gemini's schema format (an OpenAPI subset). */
 const GEMINI_SCHEMA = {
   type: 'OBJECT',
-  required: ['players'],
+  required: ['isResultsScreen', 'players'],
   properties: {
+    isResultsScreen: { type: 'BOOLEAN' },
     players: {
       type: 'ARRAY',
       items: {
@@ -146,16 +156,27 @@ export async function discoverGeminiModels(): Promise<string[]> {
 
 type GeminiTry = { text: string } | { retry: true; err: string } | { skip: true; err: string };
 
-async function callGemini(model: string, mime: string, data: string): Promise<GeminiTry> {
+/** Less "thinking" = faster answers; reading a table needs none. Field names differ by model generation. */
+function thinkingFor(model: string): Record<string, unknown> | undefined {
+  const v = Number(/gemini-(\d+(?:\.\d+)?)/.exec(model)?.[1] ?? 0);
+  if (v >= 3) return { thinkingLevel: 'low' };
+  if (v >= 2.5) return { thinkingBudget: 0 };
+  return undefined;
+}
+
+async function callGemini(model: string, mime: string, data: string, timeoutMs: number, withThinking = true): Promise<GeminiTry> {
   let res: Response;
   try {
     res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': config.geminiApiKey },
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(Math.max(5_000, timeoutMs)),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mime, data } }, { text: PROMPT }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA },
+        generationConfig: {
+          temperature: 0, responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA,
+          ...(withThinking && thinkingFor(model) ? { thinkingConfig: thinkingFor(model) } : {}),
+        },
       }),
     });
   } catch (e) {
@@ -172,45 +193,53 @@ async function callGemini(model: string, mime: string, data: string): Promise<Ge
   const err = body.error?.message ?? `HTTP ${res.status}`;
   console.warn(`[scorecard] Gemini ${model} failed (${res.status}): ${err}`);
   if (/api key not valid|api_key_invalid/i.test(err)) throw badRequest('The GEMINI_API_KEY on the server is not valid');
+  // Older/newer models reject the other generation's thinking field: ask again without it.
+  if (res.status === 400 && withThinking && /thinking/i.test(err)) return callGemini(model, mime, data, timeoutMs, false);
+  // Free daily allowance used up: waiting a few seconds won't help.
+  if (res.status === 429 && /per ?day|daily|PerDay/i.test(err)) return { skip: true, err: 'daily free limit reached' };
   // Busy ("high demand", overloaded) or a per-minute limit: worth waiting and trying again.
   if (res.status === 503 || res.status === 500 || res.status === 429 || /high demand|overloaded|try again/i.test(err)) return { retry: true, err };
   // Retired, unknown or not allowed for this key: move on to another model.
   return { skip: true, err };
 }
 
+/** Whole budget for one screenshot. The app polls for the result, so this can outlast the proxy timeout. */
+const READ_BUDGET_MS = 150_000;
+
 /**
  * Google Gemini over plain REST (free tier key from aistudio.google.com).
  * Order: GEMINI_MODEL if set, the model that last worked, current defaults, then whatever ListModels offers.
- * Busy models get a couple of retries with a growing pause before moving on.
+ * Busy models get up to three tries with a growing pause before moving on.
  */
 async function askGemini(mime: string, data: string): Promise<string> {
   const first = [config.geminiModel, lastGoodModel, ...GEMINI_DEFAULTS].filter(Boolean) as string[];
   const tried = new Set<string>();
   let lastErr = '';
   let busy = false;
-  const started = Date.now();
+  const deadline = Date.now() + READ_BUDGET_MS;
+  const left = () => deadline - Date.now();
   const attempt = async (model: string) => {
     if (tried.has(model)) return null;
     tried.add(model);
-    for (let i = 0; i < 2; i++) {
-      if (Date.now() - started > 45_000) return null; // keep the whole upload under about a minute
-      const r = await callGemini(model, mime, data);
+    for (let i = 0; i < 3 && left() > 5_000; i++) {
+      const r = await callGemini(model, mime, data, Math.min(60_000, left()));
       if ('text' in r) { lastGoodModel = model; return r.text; }
       lastErr = r.err;
       if ('skip' in r) return null;
       busy = true;
-      if (i === 0) await sleep(2500);
+      if (i < 2) await sleep(Math.min([3000, 8000][i], Math.max(0, left() - 5_000)));
     }
     return null;
   };
   for (const m of first) { const t = await attempt(m); if (t) return t; }
   for (const m of (await discoverGeminiModels()).slice(0, 4)) { const t = await attempt(m); if (t) return t; }
+  if (/daily free limit/.test(lastErr)) throw badRequest('Google\'s free daily limit for screenshot reading is used up. It resets tomorrow; type the numbers in for now.');
   if (busy) throw badRequest('Google\'s free screenshot reader is busy right now. Try again in a few minutes, or type the numbers in.');
   throw badRequest(`Could not read the screenshot (${lastErr || 'no Gemini model available'}). Type the numbers in instead.`);
 }
 
 function toRows(text: string): ScorecardRow[] {
-  let parsed: { players?: ScorecardRow[] };
+  let parsed: { isResultsScreen?: boolean; players?: ScorecardRow[] };
   const json = text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
   try { parsed = JSON.parse(json); } catch { throw badRequest('Could not read that screenshot. Type the numbers in instead.'); }
   const rows = (parsed.players ?? []).map((p) => ({
@@ -220,7 +249,7 @@ function toRows(text: string): ScorecardRow[] {
     damage: clampInt(p.damage, 9999),
     survivedMin: Math.max(0, Math.min(60, Math.round(Number(p.survivedMin || 0) * 10) / 10)),
   })).filter((p) => p.name);
-  if (!rows.length) throw badRequest('No player rows found. Make sure it is the BGMI results screen.');
+  if (parsed.isResultsScreen === false || !rows.length) throw new NotResultsScreenError();
   return rows;
 }
 
