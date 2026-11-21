@@ -23,7 +23,7 @@ const players = [
   { name: 'Vignesh', email: 'vignesh@rare.com', ign: 'RARE丨VIGNESH', bgmiId: '55522353757' },
 ];
 
-const DROPS = { Erangel: 'Quarry', Miramar: 'Monte', Rondo: 'Jadena' };
+const DROPS = { Erangel: 'Quarry', Miramar: 'Monte', Rondo: 'Jadena City' };
 
 export interface SeedOptions {
   /** true: delete the seeded users/team (and their matches) first. false: do nothing if the captain already exists. */
