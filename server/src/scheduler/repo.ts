@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { DeliveryClaim, Match, NotificationLog, Squad, Team, User } from '../models/index.js';
+import { DeliveryClaim, Match, NotificationLog, Squad, Stats, Team, User } from '../models/index.js';
 import type { DispatchRepo } from './dispatch.js';
 import type { Recipient } from '../notifications/types.js';
 
@@ -72,6 +72,13 @@ export const mongoDispatchRepo: DispatchRepo = {
   },
   async markCaptainAlerted(matchId, at) {
     await Match.updateOne({ _id: oid(matchId) }, { $set: { captainAlertedAt: at } });
+  },
+  async getResults(matchId) {
+    const rows = await Stats.find({ matchId: oid(matchId) }).lean();
+    return rows.map((s) => ({
+      userId: String(s.userId), kills: s.kills ?? 0, damage: s.damage ?? 0, assists: s.assists ?? 0,
+      survivalMin: s.survivalMin ?? 0, mvp: Boolean(s.mvp),
+    }));
   },
   async clearTelegramChat(userId) {
     await User.updateOne({ _id: oid(userId) }, { $set: { telegramChatId: null } });

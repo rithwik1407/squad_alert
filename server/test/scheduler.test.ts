@@ -263,4 +263,23 @@ describe('dispatch: who gets notified', () => {
     expect(res.sent).toEqual([]);
     expect(fcm.calls).toHaveLength(0);
   });
+
+  it('sends each player only their own stats after results are saved, once', async () => {
+    repo.results = [
+      { userId: 'bittu', kills: 7, damage: 1203, assists: 2, survivalMin: 24.4, mvp: true },
+      { userId: 'vasanth', kills: 2, damage: 310, assists: 1, survivalMin: 18, mvp: false },
+    ];
+    const res = await dispatchMatch('m1', { trigger: 'results' }, deps);
+    expect(res.outcome).toBe('results');
+    expect(res.sent.sort()).toEqual(['bittu', 'vasanth']);
+    const bittu = tg.calls.filter((c) => c.userId === 'bittu');
+    expect(bittu).toHaveLength(1);
+    expect(bittu[0].title).toBe("🏆 You're the MVP of Scrim 1!");
+    expect(bittu[0].body).toBe('Kills 7 · Damage 1203 · Assists 2 · Survived 24 min · MVP 🏆');
+    const vasanth = tg.calls.find((c) => c.userId === 'vasanth')!;
+    expect(vasanth.body).not.toContain('1203');
+    expect(tg.calls.map((c) => c.userId)).not.toContain('akshay');
+    const again = await dispatchMatch('m1', { trigger: 'results' }, deps);
+    expect(again.alreadySent.sort()).toEqual(['bittu', 'vasanth']);
+  });
 });

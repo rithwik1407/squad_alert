@@ -1,9 +1,9 @@
 import type { Channel, LogKind, LogStatus, MatchStatus } from '../models/constants.js';
 import type { NotificationPayload, NotificationProvider, Recipient } from '../notifications/types.js';
-import { captainAlert, selectedNotification, squadNotification } from '../notifications/content.js';
+import { captainAlert, resultsNotification, selectedNotification, squadNotification, type PlayerResult } from '../notifications/content.js';
 import { fireAt } from '../lib/time.js';
 
-export type Trigger = 'scheduled' | 'manual' | 'resend' | 'substitute' | 'selected';
+export type Trigger = 'scheduled' | 'manual' | 'resend' | 'substitute' | 'selected' | 'results';
 
 export interface DispatchMatch {
   id: string;
@@ -59,6 +59,8 @@ export interface DispatchRepo {
   removeFcmTokens(userId: string, tokens: string[]): Promise<void>;
   /** Optional: forget a Telegram chat that can no longer receive messages. */
   clearTelegramChat?(userId: string): Promise<void>;
+  /** Saved per-player stats for a match (kills, damage, MVP...). */
+  getResults?(matchId: string): Promise<(PlayerResult & { userId: string })[]>;
 }
 
 export interface DispatchDeps {
@@ -75,7 +77,7 @@ export interface DispatchOptions {
 }
 
 export interface DispatchResult {
-  outcome: 'squad' | 'captain_alert' | 'selected' | 'skipped';
+  outcome: 'squad' | 'captain_alert' | 'selected' | 'results' | 'skipped';
   reason?: string;
   sent: string[];
   failed: string[];
@@ -178,6 +180,23 @@ export async function dispatchMatch(matchId: string, opts: DispatchOptions, deps
 
   const match = await deps.repo.getMatch(matchId);
   if (!match) return { ...result, reason: 'match not found' };
+
+  // After the admin saves results: each player gets only their own stats.
+  if (opts.trigger === 'results') {
+    if (match.status === 'cancelled') return { ...result, reason: 'match cancelled' };
+    result.outcome = 'results';
+    let rows = (await deps.repo.getResults?.(matchId)) ?? [];
+    if (opts.onlyUserIds) rows = rows.filter((r) => opts.onlyUserIds!.includes(r.userId));
+    const users = await deps.repo.getRecipients(rows.map((r) => r.userId));
+    await Promise.all(rows.map(async (row) => {
+      const u = users.find((x) => x.id === row.userId);
+      if (!u) return void result.failed.push(row.userId);
+      const status = await deliver(deps, matchId, u, 'results', opts.trigger, resultsNotification(match, row));
+      (status === 'sent' ? result.sent : status === 'duplicate' ? result.alreadySent : result.failed).push(row.userId);
+    }));
+    return result;
+  }
+
   if (match.status === 'cancelled' || match.status === 'done') return { ...result, reason: `match ${match.status}` };
 
   if (opts.trigger === 'scheduled') {

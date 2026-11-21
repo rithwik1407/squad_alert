@@ -40,6 +40,7 @@ export function LogTable({ logs, compact }: { logs: NotificationLog[]; compact?:
                   <p className="font-semibold text-white">{l.user?.ign ?? 'Player'}</p>
                   {l.kind === 'captain_alert' && <p className="text-[10px] uppercase tracking-wider text-amber-300">Captain alert</p>}
                   {l.kind === 'selected' && <p className="text-[10px] uppercase tracking-wider text-sky-300">Squad pick</p>}
+                  {l.kind === 'results' && <p className="text-[10px] uppercase tracking-wider text-emerald-300">Match stats</p>}
                 </td>
                 {!compact && (
                   <td className="p-2">

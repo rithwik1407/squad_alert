@@ -60,6 +60,8 @@ export class MemoryRepo implements DispatchRepo {
     if (!m.notifiedAt) Object.assign(m, { notifiedAt: at, status: 'notified' });
   }
   async markCaptainAlerted(id: string) { this.captainAlerted.add(id); }
+  results: { userId: string; kills: number; damage: number; assists: number; survivalMin: number; mvp: boolean }[] = [];
+  async getResults() { return this.results; }
   async clearTelegramChat(uid: string) { this.users.get(uid)!.telegramChatId = null; }
   async removeFcmTokens(uid: string, tokens: string[]) {
     const u = this.users.get(uid)!;
