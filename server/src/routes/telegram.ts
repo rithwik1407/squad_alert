@@ -13,6 +13,22 @@ import { Match } from '../models/index.js';
  */
 export const telegramRouter = Router();
 
+/**
+ * Send the SquadSync alert sound so the player can set it as this chat's notification sound
+ * (Telegram: long-press → Save for notifications; then chat → Notifications → Sound).
+ */
+async function sendAlertSound(chatId: number | string) {
+  const url = new URL('/sounds/squadsync-alert.mp3', config.clientUrl).toString();
+  if (!url.startsWith('https://')) return;
+  await telegramApi('sendAudio', {
+    chat_id: chatId,
+    audio: url,
+    title: 'squadsync-alert',
+    performer: 'SquadSync',
+    caption: '🔊 Make match alerts loud and different: long-press this sound → "Save for notifications". Then tap this chat\'s name → Notifications → Sound → squadsync-alert.',
+  }).catch((e) => console.error('[telegram] could not send alert sound:', (e as Error).message));
+}
+
 telegramRouter.post('/webhook', ah(async (req, res) => {
   if (config.telegram.webhookSecret && req.get('x-telegram-bot-api-secret-token') !== config.telegram.webhookSecret) {
     return res.sendStatus(401);
@@ -50,6 +66,9 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
       ? `✅ Linked to SquadSync as ${user.ign}. You'll get match alerts here when push isn't available.`
       : '⚠️ That link has expired. Open SquadSync → Settings → Link Telegram again.';
     await telegramApi('sendMessage', { chat_id: chatId, text: reply }).catch(() => {});
+    if (user) await sendAlertSound(chatId);
+  } else if (/^\/sound(@\w+)?$/i.test(text.trim())) {
+    await sendAlertSound(chatId);
   } else if (text.startsWith('/start')) {
     await telegramApi('sendMessage', {
       chat_id: chatId,
