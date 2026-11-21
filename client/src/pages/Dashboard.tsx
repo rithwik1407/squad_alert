@@ -13,7 +13,8 @@ import { useJoinRequests } from '@/lib/useJoinRequests';
 import { celebrate } from '@/lib/confetti';
 import type { Match, Member } from '@/lib/types';
 import { mapLabel } from '@/lib/types';
-import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, Stat, StatusChip, cx } from '@/components/ui';
+import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, StatusChip, cx } from '@/components/ui';
+import { StatTile } from '@/components/StatsCharts';
 import { FlipCountdown } from '@/components/FlipCountdown';
 import { MatchCard, NotifyChips } from '@/components/MatchCard';
 import { MapArt } from '@/components/MapArt';
@@ -104,10 +105,15 @@ function CaptainDashboard() {
       } />
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
         {requests.length > 0 && (
-          <Link to="/team" className="flex items-center justify-between gap-3 rounded-xl bg-ember-500/10 p-3 text-sm ring-1 ring-ember-400/30 hover:bg-ember-500/15">
-            <span className="text-ember-100"><span className="font-bold">{requests.length}</span> new {requests.length === 1 ? 'player is' : 'players are'} waiting for your approval</span>
-            <span className="font-semibold text-ember-300">Review</span>
-          </Link>
+          <motion.div variants={item}>
+            <Link to="/team" className="group flex items-center justify-between gap-3 rounded-xl bg-ember-500/10 p-3 text-sm ring-1 ring-ember-400/30 hover:bg-ember-500/15">
+              <span className="flex items-center gap-2 text-ember-100">
+                <span className="relative flex h-2 w-2" aria-hidden><span className="absolute inset-0 animate-ping rounded-full bg-ember-400/60" /><span className="relative h-2 w-2 rounded-full bg-ember-400" /></span>
+                <span><span className="font-bold">{requests.length}</span> new {requests.length === 1 ? 'player is' : 'players are'} waiting for your approval</span>
+              </span>
+              <span className="font-semibold text-ember-300 transition-transform group-hover:translate-x-0.5">Review</span>
+            </Link>
+          </motion.div>
         )}
         {q.isLoading ? <Skeleton className="h-56" /> : next ? <NextMatchHero m={next} captain /> : (
           <Card><EmptyState title="No matches lined up" text="Schedule a scrim and SquadSync will ping your four right before it starts."
@@ -231,12 +237,12 @@ function PlayerDashboard() {
           <Card><EmptyState title="No matches scheduled" text="When the admin schedules a scrim it shows up here. If you're picked, you'll get pinged before it starts." /></Card>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Matches" value={stats.data?.totals.matches ?? '–'} icon={<Swords className="h-3.5 w-3.5" aria-hidden />} />
-          <Stat label="Kills" value={stats.data?.totals.kills ?? '–'} icon={<Target className="h-3.5 w-3.5" aria-hidden />} />
-          <Stat label="MVPs" value={stats.data?.totals.mvps ?? '–'} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
-          <Stat label="Attendance" value={stats.data?.totals.attendanceRate != null ? `${stats.data.totals.attendanceRate}%` : '–'} icon={<Check className="h-3.5 w-3.5" aria-hidden />} />
-        </div>
+        <motion.div variants={item} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile label="Matches" value={stats.data?.totals.matches ?? null} icon={<Swords className="h-3.5 w-3.5" aria-hidden />} />
+          <StatTile label="Kills" value={stats.data?.totals.kills ?? null} icon={<Target className="h-3.5 w-3.5" aria-hidden />} />
+          <StatTile label="MVPs" value={stats.data?.totals.mvps ?? null} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
+          <StatTile label="Attendance" value={stats.data?.totals.attendanceRate ?? null} suffix="%" icon={<Check className="h-3.5 w-3.5" aria-hidden />} />
+        </motion.div>
 
         <CheckinBoard />
 
@@ -257,8 +263,9 @@ function PlayerDashboard() {
                 inbox.data?.length ? (
                   <ul className="divide-y divide-white/5">
                     <AnimatePresence initial={false}>
-                      {inbox.data.slice(0, 5).map((n) => (
-                        <motion.li key={n.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                      {inbox.data.slice(0, 5).map((n, i) => (
+                        <motion.li key={n.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
+                          exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}>
                           <Link to={`/matches/${n.matchId}`} className="flex gap-3 p-4 hover:bg-white/[0.03]">
                             <Inbox className="mt-0.5 h-4 w-4 shrink-0 text-ember-400" aria-hidden />
                             <div className="min-w-0 flex-1">
