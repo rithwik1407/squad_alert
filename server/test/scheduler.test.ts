@@ -102,7 +102,10 @@ describe('dispatch: who gets notified', () => {
     expect(res.outcome).toBe('squad');
     expect(res.sent.sort()).toEqual(['akshay', 'bittu', 'dheeraj', 'vasanth']);
     expect(fcm.calls.map((c) => c.userId)).not.toContain('vignesh');
-    expect(tg.calls).toHaveLength(0);
+    // Every channel the player has on gets it: push AND Telegram.
+    expect(tg.calls.map((c) => c.userId).sort()).toEqual(['akshay', 'bittu', 'dheeraj', 'vasanth']);
+    const row = repo.logs.find((l) => l.userId === 'akshay' && l.status === 'sent')!;
+    expect([row.channel, row.alsoVia]).toEqual(['fcm', ['telegram']]);
     expect(repo.matches.get('m1')!.status).toBe('notified');
   });
 
@@ -239,5 +242,25 @@ describe('dispatch: who gets notified', () => {
     await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
     expect(repo.users.get('vasanth')!.telegramChatId).toBeNull();
     expect(repo.logs.find((l) => l.userId === 'vasanth')!.status).toBe('failed');
+  });
+
+  it('tells picked players right away when the squad is confirmed, once', async () => {
+    const res = await dispatchMatch('m1', { trigger: 'selected' }, deps);
+    expect(res.outcome).toBe('selected');
+    expect(res.sent.sort()).toEqual(['akshay', 'bittu', 'dheeraj', 'vasanth']);
+    expect(fcm.calls[0].title).toBe("You're in the squad! 🎯");
+    expect(fcm.calls[0].body).toContain('Scrim 1 · Erangel');
+    expect(repo.matches.get('m1')!.notifiedAt).toBeNull(); // the room-ID alert still fires on schedule
+    const again = await dispatchMatch('m1', { trigger: 'selected' }, deps);
+    expect(again.alreadySent.sort()).toEqual(['akshay', 'bittu', 'dheeraj', 'vasanth']);
+    const room = await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
+    expect(room.sent).toHaveLength(4);
+  });
+
+  it('does not send squad-pick alerts for an unconfirmed squad', async () => {
+    repo.squads.get('m1')!.confirmed = false;
+    const res = await dispatchMatch('m1', { trigger: 'selected' }, deps);
+    expect(res.sent).toEqual([]);
+    expect(fcm.calls).toHaveLength(0);
   });
 });

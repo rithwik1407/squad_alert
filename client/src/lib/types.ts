@@ -107,7 +107,9 @@ export interface NotificationLog {
   match?: { title: string; map: string; startAt: string };
   userId: string;
   user?: { name: string; ign: string };
-  kind: 'squad' | 'captain_alert';
+  kind: 'squad' | 'captain_alert' | 'selected';
+  /** Other channels that also delivered this alert. */
+  alsoVia?: ('fcm' | 'telegram' | 'whatsapp')[];
   channel: 'fcm' | 'telegram' | 'whatsapp' | 'none';
   status: 'sent' | 'failed' | 'skipped';
   trigger: string;

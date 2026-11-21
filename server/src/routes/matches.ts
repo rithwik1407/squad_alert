@@ -279,6 +279,11 @@ export function matchesRouter(getQueue: () => QueueLike) {
       { selectedIds: unique, benchedId: benched[0] ?? null, confirmed: body.confirm },
       { upsert: true, new: true, runValidators: true },
     ).lean();
+    // Tell the picked players right away (push + Telegram). Players already told for this match are skipped.
+    if (body.confirm && match.startAt.getTime() > Date.now()) {
+      await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'selected', onlyUserIds: unique })
+        .catch((e) => console.error('[squad] could not queue squad-pick alert:', (e as Error).message));
+    }
     res.json({ squad: serializeMatch(match, squad).squad, match: (await view([match], String(req.user!._id)))[0] });
   }));
 
@@ -301,6 +306,8 @@ export function matchesRouter(getQueue: () => QueueLike) {
     let jobId: string | null = null;
     if (match.notifiedAt) {
       jobId = await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'substitute', onlyUserIds: [inId] });
+    } else if (match.startAt.getTime() > Date.now()) {
+      jobId = await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'selected', onlyUserIds: [inId] });
     }
     res.json({ match: (await view([match], String(req.user!._id)))[0], jobId });
   }));
@@ -429,7 +436,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
 
 export function serializeLog(l: {
   _id: unknown; matchId: unknown; userId: unknown; kind: string; channel: string; status: string; trigger?: string | null;
-  title?: string | null; body?: string | null; sentAt: Date; error?: string | null;
+  title?: string | null; body?: string | null; sentAt: Date; error?: string | null; alsoVia?: string[] | null;
 }) {
   const u = l.userId as { _id?: unknown; name?: string; ign?: string } | null;
   const m = l.matchId as { _id?: unknown; title?: string; map?: string; startAt?: Date } | null;
@@ -441,6 +448,7 @@ export function serializeLog(l: {
     user: u?.name ? { name: u.name, ign: u.ign } : undefined,
     kind: l.kind,
     channel: l.channel,
+    alsoVia: l.alsoVia ?? [],
     status: l.status,
     trigger: l.trigger ?? 'scheduled',
     title: l.title ?? '',

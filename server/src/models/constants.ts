@@ -29,7 +29,7 @@ export type Channel = (typeof CHANNELS)[number];
 export const LOG_STATUS = ['sent', 'failed', 'skipped'] as const;
 export type LogStatus = (typeof LOG_STATUS)[number];
 
-export const LOG_KINDS = ['squad', 'captain_alert'] as const;
+export const LOG_KINDS = ['squad', 'captain_alert', 'selected'] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 
 export const SQUAD_SIZE = 4;
