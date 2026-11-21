@@ -9,3 +9,4 @@ export * from './Stats.js';
 export * from './DeliveryClaim.js';
 export * from './Availability.js';
 export * from './Chat.js';
+export * from './ScrimSeries.js';

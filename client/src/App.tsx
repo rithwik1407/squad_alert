@@ -16,6 +16,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const TeamPage = lazy(() => import('./pages/Team'));
 const Stats = lazy(() => import('./pages/Stats'));
 const Join = lazy(() => import('./pages/Join'));
+const Scrims = lazy(() => import('./pages/Scrims'));
 
 function Loading() {
   return (
@@ -66,6 +67,7 @@ export function App() {
           <Route path="team" element={<Protected captain><TeamPage /></Protected>} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="stats" element={<Stats />} />
+          <Route path="scrims" element={<Scrims />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

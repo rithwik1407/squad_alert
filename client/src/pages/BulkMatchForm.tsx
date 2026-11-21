@@ -10,6 +10,7 @@ import { dayIST, fromISTInput, timeIST, toISTInput } from '@/lib/time';
 import { Button, Card, Field, PageHeader, cx } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 import { ScheduleImageUpload } from '@/components/ScheduleImageUpload';
+import { SeriesNameOptions } from '@/components/OrganizerCard';
 
 interface Row { key: number; time: string; title: string; map: MatchMap }
 
@@ -140,7 +141,8 @@ export default function BulkMatchForm() {
               <Field label="Notify before (min)"><input type="number" min={0} max={120} className="input" value={offset} onChange={(e) => setOffset(Number(e.target.value))} /></Field>
               <div className="sm:col-span-3">
                 <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required for every scrim and tournament">
-                  <input className="input" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
+                  <input className="input" list="series-names" autoComplete="off" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
+                <SeriesNameOptions id="series-names" />
                 </Field>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, Team, User } from './types';
+import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinMatch, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -132,6 +132,11 @@ export const api = {
   chatSettings: (b: { mode: ChatMode; openFrom?: string; openTo?: string }) => request<{ state: ChatState }>('PUT', '/chat/settings', b),
   muteChat: (userId: string, minutes: number) => request<{ mutes: ChatMute[] }>('POST', '/chat/mutes', { userId, minutes }),
   unmuteChat: (userId: string) => request<{ mutes: ChatMute[] }>('DELETE', `/chat/mutes/${userId}`),
+
+  scrims: () => request<ScrimSeriesList>('GET', '/scrims'),
+  createScrim: (b: ScrimSeriesInput) => request<{ series: ScrimSeries }>('POST', '/scrims', b),
+  updateScrim: (id: string, b: ScrimSeriesInput) => request<{ series: ScrimSeries }>('PATCH', `/scrims/${id}`, b),
+  deleteScrim: (id: string) => request<{ ok: true }>('DELETE', `/scrims/${id}`),
 };
 
 export interface TestNotificationResult {
