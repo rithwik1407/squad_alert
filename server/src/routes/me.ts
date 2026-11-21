@@ -215,6 +215,9 @@ meRouter.get('/stats', ah(async (req, res) => {
       kills: played.reduce((a, r) => a + r.kills, 0),
       damage: played.reduce((a, r) => a + r.damage, 0),
       mvps: played.filter((r) => r.mvp).length,
+      /** Attendance as a fraction: matches joined out of matches picked for (with attendance taken). */
+      attended: withAtt.filter((r) => r.joined).length,
+      attendanceOf: withAtt.length,
       attendanceRate: withAtt.length ? Math.round((withAtt.filter((r) => r.joined).length / withAtt.length) * 100) : null,
     },
   });

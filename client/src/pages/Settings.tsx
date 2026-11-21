@@ -10,6 +10,7 @@ import { list } from '@/lib/motion';
 import { normalizeAvatarUrl, photoToAvatar } from '@/lib/avatar';
 import { Avatar, Button, Card, Field, PageHeader, cx } from '@/components/ui';
 import { useToast } from '@/components/Toast';
+import { WHATSAPP_ENABLED } from '@/lib/features';
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -105,15 +106,17 @@ export default function Settings() {
     <div>
       <PageHeader eyebrow="Settings" title="Alerts & profile" />
       <motion.div variants={list} initial="initial" animate="animate" className="grid gap-6 lg:grid-cols-2">
-        <WhatsAppCard number={user.whatsappNumber ?? ''} on={prefs.whatsapp !== false} ready={cfg.data?.whatsappReady}
-          onToggle={(v) => setPref('whatsapp', v)} onSaved={refresh} />
+        {WHATSAPP_ENABLED && (
+          <WhatsAppCard number={user.whatsappNumber ?? ''} on={prefs.whatsapp !== false} ready={cfg.data?.whatsappReady}
+            onToggle={(v) => setPref('whatsapp', v)} onSaved={refresh} />
+        )}
 
         <Card>
           <div className="flex items-start gap-3">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ember-500/15 text-ember-300"><Smartphone className="h-5 w-5" aria-hidden /></span>
             <div className="flex-1">
               <h2 className="text-xl font-bold text-white">Push notifications</h2>
-              <p className="text-sm text-zinc-400">Backup to WhatsApp. Works even when the app is closed.</p>
+              <p className="text-sm text-zinc-400">{WHATSAPP_ENABLED ? 'Backup to WhatsApp. ' : ''}Works even when the app is closed.</p>
             </div>
             <Toggle label="Use push" on={prefs.push} onChange={(v) => setPref('push', v)} />
           </div>

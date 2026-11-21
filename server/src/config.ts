@@ -54,6 +54,8 @@ export const config = {
     webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
   },
   whatsapp: {
+    /** WhatsApp alerts are parked: nothing is sent and the Settings option is hidden unless WHATSAPP_ENABLED=true. */
+    enabled: process.env.WHATSAPP_ENABLED === 'true',
     token: process.env.WHATSAPP_TOKEN ?? '',
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
     apiVersion: process.env.WHATSAPP_API_VERSION ?? 'v21.0',

@@ -16,6 +16,7 @@ import { useToast } from '@/components/Toast';
 import { EmptyState } from '@/components/EmptyState';
 import { AVAIL_STYLE } from '@/components/CheckinBoard';
 import type { Availability } from '@/lib/types';
+import { WHATSAPP_ENABLED } from '@/lib/features';
 
 function PlayerCard({ p, on, benched, locked, order, onToggle, avail, note }: {
   p: Member; on: boolean; benched: boolean; locked: boolean; order: number; onToggle: () => boolean; avail?: Availability; note?: string;
@@ -74,8 +75,10 @@ function PlayerCard({ p, on, benched, locked, order, onToggle, avail, note }: {
         {avail ? AVAIL_STYLE[avail].label : 'No check-in'}
       </span>
       <div className="relative flex gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
-        <span className={p.whatsappLinked ? 'text-emerald-300' : 'text-zinc-600'}>WA</span>
-        <span className="text-zinc-700">·</span>
+        {WHATSAPP_ENABLED && <>
+          <span className={p.whatsappLinked ? 'text-emerald-300' : 'text-zinc-600'}>WA</span>
+          <span className="text-zinc-700">·</span>
+        </>}
         <span className={p.pushEnabled ? 'text-emerald-300' : 'text-zinc-600'}>Push</span>
         <span className="text-zinc-700">·</span>
         <span className={p.telegramLinked ? 'text-sky-300' : 'text-zinc-600'}>Telegram</span>

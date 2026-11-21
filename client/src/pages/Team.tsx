@@ -10,6 +10,7 @@ import { Avatar, Button, Card, PageHeader } from '@/components/ui';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { ago } from '@/lib/time';
 import { useToast } from '@/components/Toast';
+import { useDialog } from '@/components/Modal';
 
 export default function TeamPage() {
   const { team, refresh } = useAuth();
@@ -64,10 +65,11 @@ export default function TeamPage() {
 function RequestsCard({ onChanged }: { onChanged: () => Promise<unknown> }) {
   const { requests, loading, refetch } = useJoinRequests();
   const toast = useToast();
+  const dialog = useDialog();
   const [busy, setBusy] = useState<string | null>(null);
 
   async function act(id: string, ign: string, approve: boolean) {
-    if (!approve && !window.confirm(`Reject ${ign}? Their request will be deleted and they can register again.`)) return;
+    if (!approve && !(await dialog.confirm(`Reject ${ign}?`, { text: 'Their request will be deleted and they can register again.', confirmLabel: 'Reject', danger: true }))) return;
     setBusy(id);
     try {
       if (approve) {

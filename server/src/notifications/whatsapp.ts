@@ -49,7 +49,7 @@ export class WhatsAppProvider implements NotificationProvider {
   readonly channel = 'whatsapp' as const;
 
   isConfigured() {
-    return Boolean(config.whatsapp.token && config.whatsapp.phoneNumberId);
+    return Boolean(config.whatsapp.enabled && config.whatsapp.token && config.whatsapp.phoneNumberId);
   }
 
   canReach(r: Recipient) {

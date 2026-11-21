@@ -39,8 +39,9 @@ export function CountUp({ value, decimals = 0, suffix = '' }: { value: number; d
 }
 
 /** Stat tile with a count-up value and a small delta line. */
-export function StatTile({ label, icon, value, decimals, suffix, hint, accent }: {
-  label: string; icon?: ReactNode; value: number | null; decimals?: number; suffix?: string; hint?: ReactNode; accent?: boolean;
+export function StatTile({ label, icon, value, of, decimals, suffix, hint, accent }: {
+  /** `of` shows the value as a fraction, e.g. 2/3. */
+  label: string; icon?: ReactNode; value: number | null; of?: number | null; decimals?: number; suffix?: string; hint?: ReactNode; accent?: boolean;
 }) {
   return (
     <motion.div
@@ -53,7 +54,7 @@ export function StatTile({ label, icon, value, decimals, suffix, hint, accent }:
     >
       <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-zinc-400">{icon}{label}</div>
       <div className="mt-1 font-display text-2xl font-bold text-white">
-        {value == null ? '–' : <CountUp value={value} decimals={decimals} suffix={suffix} />}
+        {value == null ? '–' : of != null ? <><CountUp value={value} /><span className="text-zinc-500">/</span>{of}</> : <CountUp value={value} decimals={decimals} suffix={suffix} />}
       </div>
       {hint && <div className="mt-0.5 text-[11px] text-zinc-500">{hint}</div>}
     </motion.div>

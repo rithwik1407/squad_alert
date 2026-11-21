@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
 import { JoinButton } from './Dashboard';
 import { AVAIL_STYLE } from '@/components/CheckinBoard';
+import { Modal, useDialog } from '@/components/Modal';
 
 export default function MatchDetail() {
   const { id = '' } = useParams();
@@ -125,6 +126,7 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
   const qc = useQueryClient();
   const nav = useNavigate();
   const toast = useToast();
+  const dialog = useDialog();
   const [busy, setBusy] = useState<string | null>(null);
   const [subOut, setSubOut] = useState('');
   const [subIn, setSubIn] = useState('');
@@ -174,15 +176,16 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
         ) : null}
         {m.status === 'live' && (
           <Button variant="ghost" loading={busy === 'done'} icon={<CheckCircle2 className="h-4 w-4" aria-hidden />}
-            onClick={() => {
-              const p = window.prompt('Final placement (1-25)? Leave empty to skip.');
+            onClick={async () => {
+              const p = await dialog.prompt('Finish match', { text: 'Final placement (1-25)? Leave empty to skip.', placeholder: 'e.g. 3', inputMode: 'numeric', confirmLabel: 'Finish' });
+              if (p === null) return;
               const n = p ? Number(p) : undefined;
               run('done', () => api.setStatus(m.id, 'done', n && n >= 1 && n <= 25 ? n : undefined), 'Match finished');
             }}>Finish</Button>
         )}
         <Button variant="danger" loading={busy === 'delete'} icon={<Trash2 className="h-4 w-4" aria-hidden />}
-          onClick={() => {
-            if (!window.confirm('Delete this match for everyone? Its squad, attendance and stats are removed from every player. This cannot be undone.')) return;
+          onClick={async () => {
+            if (!(await dialog.confirm('Delete this match for everyone?', { text: 'Its squad, attendance and stats are removed from every player. This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
             setBusy('delete');
             api.deleteMatch(m.id).then(() => {
               toast.success('Match deleted');
@@ -194,7 +197,7 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
           }}>Delete</Button>
         {!done && (
           <Button variant="danger" loading={busy === 'cancel'} icon={<Ban className="h-4 w-4" aria-hidden />}
-            onClick={() => { if (window.confirm('Cancel this match? The scheduled alert will be removed.')) run('cancel', () => api.cancelMatch(m.id), 'Match cancelled').then(() => nav('/matches')); }}>Cancel</Button>
+            onClick={async () => { if (await dialog.confirm('Cancel this match?', { text: 'The scheduled alert will be removed.', confirmLabel: 'Cancel match', danger: true })) run('cancel', () => api.cancelMatch(m.id), 'Match cancelled').then(() => nav('/matches')); }}>Cancel</Button>
         )}
       </div>
 
@@ -403,9 +406,8 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
       {busy === 'read' && waited >= 10 && (
         <p className="mb-3 text-xs text-zinc-400">The free readers are slow right now. It keeps trying (Google, then the backups) for up to about 3 minutes. You can leave this page: the stats are saved when it finishes.</p>
       )}
-      {notResults && (
-        <div role="dialog" aria-modal="true" aria-labelledby="nr-title" className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={() => setNotResults(false)}>
-          <div className="glass w-full max-w-sm rounded-2xl p-5 text-center" onClick={(e) => e.stopPropagation()}>
+      <Modal open={notResults} onClose={() => setNotResults(false)} labelledBy="nr-title">
+          <div className="text-center">
             <ImageUp className="mx-auto h-10 w-10 text-ember-400" aria-hidden />
             <h3 id="nr-title" className="mt-3 text-lg font-bold text-white">Match results screenshot only</h3>
             <p className="mt-2 text-sm text-zinc-300">That image isn't a BGMI match results screen. Upload the screenshot of the results table that shows Player, Finishes, Assists, Damage and Survived.</p>
@@ -414,8 +416,7 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
               <Button variant="ghost" onClick={() => setNotResults(false)}>Close</Button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
       {readErr && busy !== 'read' && (
         <div role="alert" className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm">
           <div>
