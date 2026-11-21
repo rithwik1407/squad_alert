@@ -1,7 +1,8 @@
-import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import { Loader2, Lock } from 'lucide-react';
 import { item, spring } from '@/lib/motion';
+import { normalizeAvatarUrl } from '@/lib/avatar';
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ');
@@ -101,8 +102,13 @@ export function Avatar({ name, src, size = 40, dim }: { name: string; src?: stri
   let hash = 0;
   for (const ch of clean) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const hue = 18 + (hash % 30);
-  return src ? (
-    <img src={src} alt="" width={size} height={size} className={cx('rounded-xl object-cover', dim && 'grayscale')} style={{ width: size, height: size }} />
+  // Drive / Dropbox share links are turned into direct image links; if the image still can't load
+  // (private file, dead link) fall back to the initials instead of a broken-image icon.
+  const url = src ? normalizeAvatarUrl(src) : '';
+  const [failed, setFailed] = useState<string | null>(null);
+  return url && failed !== url ? (
+    <img src={url} alt="" width={size} height={size} referrerPolicy="no-referrer" onError={() => setFailed(url)}
+      className={cx('shrink-0 rounded-xl object-cover', dim && 'grayscale')} style={{ width: size, height: size }} />
   ) : (
     <div
       aria-hidden

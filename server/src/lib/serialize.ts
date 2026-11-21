@@ -23,6 +23,16 @@ export function publicUser(u: {
   };
 }
 
+/**
+ * A match goes live by itself once its start (IDP) time passes, and stays live until the admin
+ * finishes it (Finish button or a results screenshot upload), so the stored status only moves forward
+ * on those actions. Cancelled and done matches keep their status.
+ */
+export function effectiveStatus(m: { status: string; startAt: Date }, now = Date.now()) {
+  if ((m.status === 'scheduled' || m.status === 'notified') && m.startAt.getTime() <= now) return 'live';
+  return m.status;
+}
+
 export function serializeMatch(
   m: {
     _id: Id; teamId: Id; title: string; type: string; map: string; drop?: string | null; startAt: Date;
@@ -44,7 +54,7 @@ export function serializeMatch(
     notifyOffsetMin: m.notifyOffsetMin,
     roomId: m.roomId ?? '',
     roomPassword: m.roomPassword ?? '',
-    status: m.status,
+    status: effectiveStatus(m),
     notifiedAt: m.notifiedAt?.toISOString() ?? null,
     captainAlertedAt: m.captainAlertedAt?.toISOString() ?? null,
     locked: Boolean(m.notifiedAt),

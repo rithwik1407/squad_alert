@@ -47,6 +47,9 @@ export function CheckinBoard() {
                   {m.squadPicked && <span className={m.selected ? ' text-emerald-300' : ' text-zinc-500'}>{m.selected ? ' · You’re in the squad' : ' · Squad picked'}</span>}
                 </p>
               </div>
+              {m.selected ? (
+                <span className="chip bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-400/25"><Check className="h-3 w-3" aria-hidden />Picked to play</span>
+              ) : (
               <div role="radiogroup" aria-label={`Availability for ${m.title}`} className="flex gap-1">
                 {OPTS.map((o) => {
                   const on = m.myAvailability === o.v;
@@ -59,6 +62,7 @@ export function CheckinBoard() {
                   );
                 })}
               </div>
+              )}
             </motion.li>
           ))}
         </motion.ul>

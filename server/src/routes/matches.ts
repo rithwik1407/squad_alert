@@ -18,6 +18,9 @@ import { saveScorecardStats } from '../lib/matchStats.js';
 import { matchPlayer, scoreMvp } from '../lib/mvp.js';
 import { deleteMatchData } from '../lib/deleteMatches.js';
 
+/** How long after its start an unfinished match stays on the Upcoming tab (as live) before moving to History. */
+const LIVE_WINDOW_MS = 12 * 3600_000;
+
 export function matchesRouter(getQueue: () => QueueLike) {
   const r = Router();
   r.use(requireAuth);
@@ -36,6 +39,21 @@ export function matchesRouter(getQueue: () => QueueLike) {
   }
 
   const hasStarted = (m: { startAt: Date }) => m.startAt.getTime() <= Date.now();
+
+  /** Matches a player played: picked in the confirmed squad (subs included), or has stats saved for them. */
+  async function playedMatchIds(uid: string) {
+    const [squads, stats] = await Promise.all([
+      Squad.find({ confirmed: true, selectedIds: uid }).select('matchId').lean(),
+      Stats.find({ userId: uid }).select('matchId').lean(),
+    ]);
+    return [...new Set([...squads, ...stats].map((x) => String(x.matchId)))].map((id) => new Types.ObjectId(id));
+  }
+
+  /** Mark a match finished and drop any job still queued for it. */
+  async function finish(matchId: string) {
+    await Match.updateOne({ _id: matchId, status: { $nin: ['cancelled', 'done'] } }, { $set: { status: 'done' } });
+    await removeMatchJob(getQueue(), matchId).catch(() => undefined);
+  }
 
   async function summaries(matchIds: Types.ObjectId[], selectedByMatch: Map<string, string[]>) {
     const rows = await NotificationLog.aggregate<{ _id: { m: Types.ObjectId; u: Types.ObjectId }; sent: number }>([
@@ -92,13 +110,20 @@ export function matchesRouter(getQueue: () => QueueLike) {
     const scope = String(req.query.scope ?? 'upcoming');
     const now = new Date();
     const filter: Record<string, unknown> = { teamId };
+    // A match is "current" (Upcoming tab) until the admin finishes it; it goes live on its own at the start
+    // time. Unfinished matches drop into History after LIVE_WINDOW so a forgotten one doesn't stick forever.
+    const current = { status: { $in: ['scheduled', 'notified', 'live'] }, startAt: { $gte: new Date(now.getTime() - LIVE_WINDOW_MS) } };
+    const finished = { $or: [{ status: { $in: ['done', 'cancelled'] } }, { startAt: { $lt: new Date(now.getTime() - LIVE_WINDOW_MS) } }] };
+    // Players only get the history of matches they actually played: the ones the admin put them in the squad for,
+    // whether or not they tapped "joining". Upcoming matches stay visible to everyone (room details stay hidden).
+    const played = isCaptain(req) ? null : { _id: { $in: await playedMatchIds(String(req.user!._id)) } };
     if (scope === 'upcoming') {
-      filter.startAt = { $gte: new Date(now.getTime() - 3 * 3600_000) };
-      filter.status = { $in: ['scheduled', 'notified', 'live'] };
+      Object.assign(filter, current);
     } else if (scope === 'past') {
-      filter.$or = [{ startAt: { $lt: now } }, { status: { $in: ['done', 'cancelled'] } }];
+      filter.$and = played ? [finished, played] : [finished];
+    } else if (played) {
+      filter.$or = [current, played];
     }
-    // Players see every team match the admin scheduled (room details stay hidden unless they're in the squad).
     const matches = await Match.find(filter).sort({ startAt: scope === 'past' ? -1 : 1 }).limit(100);
     res.json({ matches: await view(matches, String(req.user!._id), isCaptain(req)) });
   }));
@@ -223,6 +248,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
     );
     const match = await loadMatch(req);
     if (match.status === 'cancelled') throw badRequest('Match is cancelled');
+    if (status === 'live' && match.status === 'done') throw badRequest('Match is already finished');
     match.status = status;
     if (placement) match.placement = placement;
     await match.save();
@@ -377,6 +403,8 @@ export function matchesRouter(getQueue: () => QueueLike) {
       await saveScorecardStats(matchId, matched.filter((r) => r.userId).map((r) => ({
         userId: r.userId!, kills: r.finishes, damage: r.damage, survivalMin: r.survivedMin, assists: r.assists,
       })));
+      // Uploading the results screenshot means the match is over.
+      await finish(matchId);
       return matched;
     });
     res.status(202).json({ jobId });

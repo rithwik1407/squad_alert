@@ -33,6 +33,9 @@ export function startRead(
     qc.invalidateQueries({ queryKey: ['report', matchId] });
     qc.invalidateQueries({ queryKey: ['mystats'] });
     qc.invalidateQueries({ queryKey: ['teamstats'] });
+    // A results upload finishes the match, so its status changes too.
+    qc.invalidateQueries({ queryKey: ['match', matchId] });
+    qc.invalidateQueries({ queryKey: ['matches'] });
   });
   // If nobody is on the match page any more, still tell the admin how it went.
   read.promise.then(
