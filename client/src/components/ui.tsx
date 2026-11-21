@@ -29,19 +29,19 @@ type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: ReactNode;
 };
 
-export function Button({ variant = 'primary', loading, icon, children, className, disabled, ...p }: BtnProps) {
+/** Press and hover feedback come from the .btn CSS (compositor only), so buttons and button-styled links feel identical. */
+export function Button({ variant = 'primary', loading, icon, children, className, disabled, type = 'button', ...p }: BtnProps) {
   return (
-    <motion.button
-      whileHover={{ scale: disabled || loading ? 1 : 1.02 }}
-      whileTap={{ scale: disabled || loading ? 1 : 0.96 }}
-      transition={spring}
+    <button
+      type={type}
       className={cx(variant === 'primary' ? 'btn-primary' : variant === 'danger' ? 'btn-danger' : 'btn-ghost', className)}
       disabled={disabled || loading}
-      {...(p as HTMLMotionProps<'button'>)}
+      aria-busy={loading || undefined}
+      {...p}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : icon}
       {children}
-    </motion.button>
+    </button>
   );
 }
 
@@ -127,9 +127,9 @@ export function Field({ label, error, children, hint }: { label: string; error?:
   );
 }
 
-export function Stat({ label, value, icon, ...p }: { label: string; value: ReactNode; icon?: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+export function Stat({ label, value, icon, className, ...p }: { label: string; value: ReactNode; icon?: ReactNode } & HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3" {...p}>
+    <div className={cx('rounded-xl border border-white/[0.06] bg-white/[0.03] p-3', className)} {...p}>
       <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-zinc-400">{icon}{label}</div>
       <div className="mt-1 font-display text-2xl font-bold text-white">{value}</div>
     </div>

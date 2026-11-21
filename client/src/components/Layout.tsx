@@ -1,5 +1,5 @@
-import { Suspense } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Suspense, useEffect } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
@@ -13,6 +13,11 @@ export function Layout() {
   const { user, team, isCaptain, logout } = useAuth();
   const loc = useLocation();
   const nav = useNavigate();
+  const navType = useNavigationType();
+  // New page starts at the top (the old scroll position made pages open half-way down on mobile). Back/forward keeps the browser's position.
+  useEffect(() => {
+    if (navType !== 'POP') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  }, [loc.pathname, navType]);
   const { requests } = useJoinRequests();
   const badges: Record<string, number> = { '/team': requests.length };
   const items = isCaptain
@@ -45,13 +50,13 @@ export function Layout() {
         )}
         <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label="Main">
           {items.map(({ to, label, icon: I }) => (
-            <NavLink key={to} to={to} end={to === '/'} className="relative">
+            <NavLink key={to} to={to} end={to === '/'} className="group relative rounded-xl">
               {({ isActive }) => (
                 <span className={cx('relative z-10 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors', isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-100')}>
                   {isActive && (
                     <motion.span layoutId="side-active" className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-r from-ember-500/20 to-transparent ring-1 ring-ember-400/25" transition={{ type: 'spring', stiffness: 400, damping: 34 }} />
                   )}
-                  <I className={cx('h-[18px] w-[18px]', isActive && 'text-ember-400')} aria-hidden />
+                  <I className={cx('h-[18px] w-[18px] transition-[color,transform] duration-200', isActive ? 'text-ember-400' : 'group-hover:translate-x-0.5')} aria-hidden />
                   {label}
                   {badges[to] ? <span className="ml-auto rounded-full bg-ember-500 px-2 py-0.5 text-[10px] font-bold text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
                 </span>
@@ -84,8 +89,8 @@ export function Layout() {
         {/* Enter-only page transition (opacity + transform). No exit/wait phase, so a lazy page can never get stuck invisible. */}
         <ErrorBoundary resetKey={loc.pathname}>
           <Suspense fallback={<PageSkeleton />}>
-            <motion.div key={loc.pathname} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key={loc.pathname} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}>
               <Outlet />
             </motion.div>
           </Suspense>
@@ -99,15 +104,15 @@ export function Layout() {
         <ul className="mx-auto flex max-w-lg justify-around px-2">
           {items.map(({ to, label, icon: I }) => (
             <li key={to} className="flex-1">
-              <NavLink to={to} end={to === '/'} className="relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium">
+              <NavLink to={to} end={to === '/'} className="relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-transform duration-150 active:scale-90">
                 {({ isActive }) => (
                   <>
-                    {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-0.5 w-8 rounded-full bg-ember-400 shadow-glow" />}
+                    {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-0.5 w-8 rounded-full bg-ember-400 shadow-glow" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                     <motion.span className="relative" animate={{ scale: isActive ? 1.12 : 1, y: isActive ? -1 : 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
-                      <I className={cx('h-5 w-5', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
+                      <I className={cx('h-5 w-5 transition-colors duration-200', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
                       {badges[to] ? <span className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-ember-500 px-1 text-center text-[9px] font-bold leading-4 text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
                     </motion.span>
-                    <span className={isActive ? 'text-white' : 'text-zinc-500'}>{label}</span>
+                    <span className={cx('transition-colors duration-200', isActive ? 'text-white' : 'text-zinc-500')}>{label}</span>
                   </>
                 )}
               </NavLink>

@@ -144,16 +144,22 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
         ))}
       </div>
 
-      {sent && (
-        <div role="status" className="mb-5 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-200 ring-1 ring-emerald-400/25">
-          <p className="font-semibold text-emerald-100">Request sent</p>
-          <p className="mt-0.5">The admin will review your {sent.mode} request for {sent.email}. You can sign in here once it's approved.</p>
-        </div>
-      )}
-      <form onSubmit={submit} className="space-y-4" noValidate>
-        <AnimatePresence mode="popLayout" initial={false}>
+      <AnimatePresence initial={false}>
+        {sent && (
+          <motion.div role="status" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+            <div className="mb-5 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-200 ring-1 ring-emerald-400/25">
+              <p className="font-semibold text-emerald-100">Request sent</p>
+              <p className="mt-0.5">The admin will review your {sent.mode} request for {sent.email}. You can sign in here once it's approved.</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <form onSubmit={submit} noValidate>
+        <AnimatePresence initial={false}>
           {tab === 'register' && (
-            <motion.div key="reg" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="space-y-4 overflow-hidden">
+            <motion.div key="reg" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }} className="-m-1 overflow-hidden p-1">
+              <div className="space-y-4 pb-4">
               <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="I am a">
                 {(['player', 'captain'] as const).map((m) => (
                   <button type="button" key={m} role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
@@ -172,14 +178,17 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
                 <Field label="Phone" error={errors.phone}><input name="phone" type="tel" className="input" autoComplete="tel" placeholder="+91 98765 43210" required /></Field>
               </div>
               <p className="text-xs text-zinc-500">Your request goes to the TEAM RARE admin. You can sign in after they approve it.</p>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
+        <div className="space-y-4">
         <Field label="Email" error={errors.email}><input name="email" type="email" className="input" autoComplete="email" required /></Field>
         <Field label="Password" error={errors.password}>
           <input name="password" type="password" className="input" autoComplete={tab === 'login' ? 'current-password' : 'new-password'} required minLength={tab === 'register' ? 8 : 1} />
         </Field>
         <Button type="submit" loading={busy} className="w-full py-3">{tab === 'login' ? 'Sign in' : `Request to join as ${mode}`}</Button>
+        </div>
       </form>
     </motion.div>
   );
