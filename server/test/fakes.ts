@@ -51,6 +51,11 @@ export class MemoryRepo implements DispatchRepo {
     return this.logs.some((l) => l.matchId === m && l.userId === u && l.kind === k && l.status === 'sent');
   }
   async writeLog(e: LogEntry) {
+    if (e.repeatable && e.status === 'sent') {
+      this.logs = this.logs.filter((l) => !(l.matchId === e.matchId && l.userId === e.userId && l.kind === e.kind && l.status === 'sent'));
+      this.logs.push(e);
+      return true;
+    }
     if (e.status === 'sent' && (await this.hasSent(e.matchId, e.userId, e.kind))) return false; // unique index
     this.logs.push(e);
     return true;

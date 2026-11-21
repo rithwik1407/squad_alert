@@ -59,6 +59,12 @@ export const mongoDispatchRepo: DispatchRepo = {
     await DeliveryClaim.deleteOne({ matchId: oid(matchId), userId: oid(userId), kind });
   },
   async writeLog(entry) {
+    if (entry.repeatable && entry.status === 'sent') {
+      const { repeatable: _r, ...row } = entry;
+      const key = { matchId: oid(entry.matchId), userId: oid(entry.userId), kind: entry.kind, status: 'sent' };
+      await NotificationLog.updateOne(key, { $set: { ...row, ...key } }, { upsert: true });
+      return true;
+    }
     try {
       await NotificationLog.create({ ...entry, matchId: oid(entry.matchId), userId: oid(entry.userId) });
       return true;
