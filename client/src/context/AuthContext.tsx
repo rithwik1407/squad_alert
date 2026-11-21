@@ -28,7 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw e;
       }
     },
-    staleTime: 60_000,
+    // Short, so teammates' new profile photos show up soon after they change them.
+    staleTime: 15_000,
     retry: 1,
   });
   const userId = q.data?.user._id;
