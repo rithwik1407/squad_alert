@@ -107,6 +107,7 @@ meRouter.post('/test-notification', ah(async (req, res) => {
     try {
       const r = await provider.send(me, payload);
       if (r.invalidTokens?.length) await mongoDispatchRepo.removeFcmTokens(userId, r.invalidTokens);
+      if (r.telegramGone) await mongoDispatchRepo.clearTelegramChat?.(userId);
       results.push({ channel: provider.channel, ok: r.ok, error: r.ok ? undefined : r.error });
     } catch (e) {
       results.push({ channel: provider.channel, ok: false, error: (e as Error).message });

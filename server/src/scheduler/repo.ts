@@ -73,6 +73,9 @@ export const mongoDispatchRepo: DispatchRepo = {
   async markCaptainAlerted(matchId, at) {
     await Match.updateOne({ _id: oid(matchId) }, { $set: { captainAlertedAt: at } });
   },
+  async clearTelegramChat(userId) {
+    await User.updateOne({ _id: oid(userId) }, { $set: { telegramChatId: null } });
+  },
   async removeFcmTokens(userId, tokens) {
     await User.updateOne({ _id: oid(userId) }, { $pull: { fcmTokens: { $in: tokens } } });
   },

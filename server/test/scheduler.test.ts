@@ -232,4 +232,12 @@ describe('dispatch: who gets notified', () => {
     expect(repo.users.get('akshay')!.fcmTokens).toEqual([]);
     expect(repo.logs.find((l) => l.userId === 'akshay' && l.status === 'sent')!.channel).toBe('telegram');
   });
+
+  it('unlinks a Telegram chat the player blocked so the app shows it needs relinking', async () => {
+    deps.providers = [tg];
+    tg.send = async () => ({ ok: false, error: 'Forbidden: bot was blocked by the user', telegramGone: true });
+    await dispatchMatch('m1', { trigger: 'scheduled' }, deps);
+    expect(repo.users.get('vasanth')!.telegramChatId).toBeNull();
+    expect(repo.logs.find((l) => l.userId === 'vasanth')!.status).toBe('failed');
+  });
 });

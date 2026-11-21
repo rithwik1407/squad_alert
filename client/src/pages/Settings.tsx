@@ -28,6 +28,7 @@ export default function Settings() {
   const [busy, setBusy] = useState<string | null>(null);
   const [perm, setPerm] = useState(permission());
   const [test, setTest] = useState<TestNotificationResult | null>(null);
+  const [tgLink, setTgLink] = useState<string | null>(null);
   const support = pushSupport();
 
   useEffect(() => {
@@ -71,7 +72,10 @@ export default function Settings() {
     setBusy('tg');
     try {
       const { url } = await api.telegramLink();
-      window.open(url, '_blank', 'noopener');
+      setTgLink(url);
+      // Phones (iPhone home-screen apps especially) block window.open after a network call, so fall back to navigating.
+      const win = window.open(url, '_blank', 'noopener');
+      if (!win) window.location.href = url;
       toast.info('Tap Start in Telegram, then come back here.');
     } catch (e) { toast.error(e); } finally { setBusy(null); }
   }
@@ -162,6 +166,16 @@ export default function Settings() {
                   Link Telegram{cfg.data?.telegramBot ? ` (@${cfg.data.telegramBot})` : ''}
                 </Button>
                 <p className="mt-2 text-xs text-zinc-500">Opens the bot with a one-time code. Tap <b>Start</b> and you're linked.</p>
+                {tgLink && (
+                  <div className="mt-3 rounded-xl bg-white/[0.04] p-3 text-xs text-zinc-300 ring-1 ring-white/10">
+                    <p>Still says not linked? Open <a className="text-sky-300 underline" href={tgLink} target="_blank" rel="noopener noreferrer">the bot</a> and send it this code:</p>
+                    <button type="button" className="mt-2 w-full break-all rounded-lg bg-black/40 px-3 py-2 text-left font-mono text-[11px] text-white"
+                      onClick={() => { void navigator.clipboard?.writeText(tgLink.split('start=')[1] ?? '').then(() => toast.success('Code copied'), () => {}); }}>
+                      {tgLink.split('start=')[1]}
+                    </button>
+                    <p className="mt-1 text-zinc-500">Tap the code to copy it. Only the newest code works.</p>
+                  </div>
+                )}
                 {cfg.data && !cfg.data.telegramBot && <p className="mt-2 text-xs text-amber-300/80">Telegram bot isn't configured on the server yet.</p>}
               </>
             )}

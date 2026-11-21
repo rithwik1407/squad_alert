@@ -55,6 +55,8 @@ export interface DispatchRepo {
   markNotified(matchId: string, at: Date): Promise<void>;
   markCaptainAlerted(matchId: string, at: Date): Promise<void>;
   removeFcmTokens(userId: string, tokens: string[]): Promise<void>;
+  /** Optional: forget a Telegram chat that can no longer receive messages. */
+  clearTelegramChat?(userId: string): Promise<void>;
 }
 
 export interface DispatchDeps {
@@ -126,6 +128,7 @@ async function attemptDelivery(
       res = { ok: false, error: (e as Error).message };
     }
     if (res.invalidTokens?.length) await deps.repo.removeFcmTokens(user.id, res.invalidTokens);
+    if (res.telegramGone) await deps.repo.clearTelegramChat?.(user.id);
 
     if (res.ok) {
       const inserted = await deps.repo.writeLog({
