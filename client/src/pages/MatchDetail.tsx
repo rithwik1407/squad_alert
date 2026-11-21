@@ -398,7 +398,7 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
         </Button>
       </div>
       {busy === 'read' && waited >= 10 && (
-        <p className="mb-3 text-xs text-zinc-400">Google's free reader is slow right now. It keeps trying for up to about 2 minutes. You can leave this page: the stats are saved when it finishes.</p>
+        <p className="mb-3 text-xs text-zinc-400">The free readers are slow right now. It keeps trying (Google, then the backups) for up to about 3 minutes. You can leave this page: the stats are saved when it finishes.</p>
       )}
       {notResults && (
         <div role="dialog" aria-modal="true" aria-labelledby="nr-title" className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={() => setNotResults(false)}>

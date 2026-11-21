@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config.js';
 import { badRequest, HttpError } from './errors.js';
+import { askCompat, groqProvider, openRouterProvider } from './openaiVision.js';
 
 /** One player row read from a BGMI results screenshot. */
 export interface ScorecardRow {
@@ -50,23 +51,68 @@ export class NotResultsScreenError extends HttpError {
   constructor() { super(422, 'This is not a match results screenshot. Upload the BGMI results screen (Player, Finishes, Damage...).'); }
 }
 
-export const scorecardReaderReady = () => Boolean(config.geminiApiKey || config.anthropicApiKey);
+export const scorecardReaderReady = () =>
+  Boolean(config.geminiApiKey || config.groqApiKey || config.openRouterApiKey || config.anthropicApiKey);
+
+/** Extra line for readers without a JSON-schema mode (Groq, OpenRouter). */
+const JSON_HINT = `
+Reply with JSON only, no other text, in exactly this shape:
+{"isResultsScreen": true, "players": [{"name": "RARE | NAME", "finishes": 0, "assists": 0, "damage": 0, "survivedMin": 0}]}`;
 
 const MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
 type Media = (typeof MEDIA)[number];
 
 /**
- * Reads the screenshot with a vision model. GEMINI_API_KEY (free tier from Google AI Studio) is used when set,
- * otherwise ANTHROPIC_API_KEY. With neither, the admin types the numbers in by hand.
+ * Reads the screenshot with a vision model. Every reader whose key is set is tried in turn until one answers:
+ *   1. Google Gemini   GEMINI_API_KEY      (free)
+ *   2. Groq            GROQ_API_KEY        (free)
+ *   3. OpenRouter      OPENROUTER_API_KEY  (free ":free" models)
+ *   4. Claude          ANTHROPIC_API_KEY   (paid)
+ * So one free tier being busy or used up for the day doesn't stop the upload.
  */
 export async function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
-  if (!config.geminiApiKey && !config.anthropicApiKey) {
-    throw badRequest('Screenshot reading is not set up yet (add GEMINI_API_KEY on the server). Type the numbers in instead.');
+  if (!scorecardReaderReady()) {
+    throw badRequest('Screenshot reading is not set up yet (add GEMINI_API_KEY or GROQ_API_KEY on the server). Type the numbers in instead.');
   }
   const m = /^data:(image\/[a-z]+);base64,(.+)$/s.exec(dataUrl);
   if (!m || !MEDIA.includes(m[1] as Media)) throw badRequest('Upload a JPG, PNG or WebP screenshot');
-  const text = config.geminiApiKey ? await askGemini(m[1], m[2]) : await askClaude(m[1] as Media, m[2]);
-  return toRows(text);
+  const deadline = Date.now() + READ_BUDGET_MS;
+  const readers: { name: string; run: (until: number) => Promise<string> }[] = [];
+  if (config.geminiApiKey) readers.push({ name: 'Gemini', run: (until) => askGemini(m[1], m[2], until) });
+  for (const p of [
+    config.groqApiKey ? groqProvider(config.groqApiKey, config.groqModel) : null,
+    config.openRouterApiKey ? openRouterProvider(config.openRouterApiKey, config.openRouterModel) : null,
+  ]) {
+    if (!p) continue;
+    readers.push({
+      name: p.name,
+      run: async (until) => {
+        const r = await askCompat(p, PROMPT + JSON_HINT, dataUrl, until);
+        if ('text' in r) return r.text;
+        throw badRequest(r.busy ? `${p.name} is busy (${r.err})` : `${p.name}: ${r.err}`);
+      },
+    });
+  }
+  if (config.anthropicApiKey) readers.push({ name: 'Claude', run: () => askClaude(m[1] as Media, m[2]) });
+
+  const problems: string[] = [];
+  for (let i = 0; i < readers.length; i++) {
+    const left = deadline - Date.now();
+    if (left < 8_000) break;
+    // Leave time for the readers after this one: each gets an equal share of what's left (Gemini at least 40s).
+    const share = Math.max(40_000, Math.floor(left / (readers.length - i)));
+    try {
+      const text = await readers[i].run(Math.min(deadline, Date.now() + share));
+      return toRows(text); // a "not a results screen" answer is final: no need to ask another reader
+    } catch (e) {
+      if (e instanceof NotResultsScreenError) throw e;
+      const msg = (e as Error).message;
+      console.warn(`[scorecard] ${readers[i].name} could not read it: ${msg}`);
+      problems.push(`${readers[i].name}: ${msg}`);
+      if (i === readers.length - 1 && readers.length === 1) throw e;
+    }
+  }
+  throw badRequest(`All screenshot readers are busy or out of free uses right now (${problems.join('; ') || 'out of time'}). Try again in a few minutes, or type the numbers in.`);
 }
 
 async function askClaude(media: Media, data: string): Promise<string> {
@@ -204,20 +250,19 @@ async function callGemini(model: string, mime: string, data: string, timeoutMs: 
 }
 
 /** Whole budget for one screenshot. The app polls for the result, so this can outlast the proxy timeout. */
-const READ_BUDGET_MS = 150_000;
+const READ_BUDGET_MS = 170_000;
 
 /**
  * Google Gemini over plain REST (free tier key from aistudio.google.com).
  * Order: GEMINI_MODEL if set, the model that last worked, current defaults, then whatever ListModels offers.
  * Busy models get up to three tries with a growing pause before moving on.
  */
-async function askGemini(mime: string, data: string): Promise<string> {
+async function askGemini(mime: string, data: string, until = Date.now() + READ_BUDGET_MS): Promise<string> {
   const first = [config.geminiModel, lastGoodModel, ...GEMINI_DEFAULTS].filter(Boolean) as string[];
   const tried = new Set<string>();
   let lastErr = '';
   let busy = false;
-  const deadline = Date.now() + READ_BUDGET_MS;
-  const left = () => deadline - Date.now();
+  const left = () => until - Date.now();
   const attempt = async (model: string) => {
     if (tried.has(model)) return null;
     tried.add(model);
@@ -240,7 +285,10 @@ async function askGemini(mime: string, data: string): Promise<string> {
 
 function toRows(text: string): ScorecardRow[] {
   let parsed: { isResultsScreen?: boolean; players?: ScorecardRow[] };
-  const json = text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
+  const stripped = text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
+  const a = stripped.indexOf('{');
+  const b = stripped.lastIndexOf('}');
+  const json = a >= 0 && b > a ? stripped.slice(a, b + 1) : stripped;
   try { parsed = JSON.parse(json); } catch { throw badRequest('Could not read that screenshot. Type the numbers in instead.'); }
   const rows = (parsed.players ?? []).map((p) => ({
     name: String(p.name ?? '').trim(),

@@ -108,7 +108,7 @@ export interface TestNotificationResult {
 async function readScorecard(id: string, image: string, onWait?: (seconds: number) => void): Promise<{ rows: ScorecardRow[] }> {
   const { jobId } = await request<{ jobId: string }>('POST', `/matches/${id}/scorecard`, { image }, 60_000);
   const started = Date.now();
-  while (Date.now() - started < 200_000) {
+  while (Date.now() - started < 230_000) {
     await new Promise((r) => setTimeout(r, 2500));
     const job = await request<{ status: 'reading' | 'done' | 'failed'; rows?: ScorecardRow[]; error?: string; notResults?: boolean; seconds?: number }>(
       'GET', `/matches/${id}/scorecard/${jobId}`, undefined, 20_000,
