@@ -165,6 +165,7 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
           <Button variant="ghost" loading={busy === 'resend'} disabled={!m.notifications?.failed && !m.notifications?.pending} icon={<RefreshCw className="h-4 w-4" aria-hidden />}
             onClick={() => run('resend', () => api.resendFailed(m.id), 'Retrying failed deliveries')}>Resend to failed</Button>
         )}
+        {/* Matches go live by themselves at the IDP time; this is only for starting early. */}
         {m.status === 'notified' || m.status === 'scheduled' ? (
           <Button variant="ghost" loading={busy === 'live'} icon={<Radio className="h-4 w-4" aria-hidden />}
             onClick={() => run('live', () => api.setStatus(m.id, 'live'), 'Marked live')}>Mark live</Button>

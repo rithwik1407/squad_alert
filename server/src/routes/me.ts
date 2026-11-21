@@ -7,6 +7,7 @@ import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhone } from '../lib/phone.js';
+import { AVATAR_DATA_MAX, AVATAR_DATA_URL, normalizeAvatarUrl } from '../lib/avatar.js';
 import { badRequest, conflict, forbidden } from '../lib/errors.js';
 import { defaultProviders } from '../notifications/providers.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
@@ -18,7 +19,12 @@ const profileSchema = z.object({
   name: z.string().trim().min(2).max(40).optional(),
   ign: z.string().trim().min(2).max(30).optional(),
   bgmiId: z.string().trim().regex(/^\d{6,15}$/, 'BGMI ID should be 6 to 15 digits').optional(),
-  avatar: z.string().url().or(z.literal('')).optional(),
+  avatar: z.union([
+    z.literal(''),
+    z.string().trim().url('Paste a full image link starting with https://').max(1000)
+      .refine((v) => /^https?:\/\//i.test(v), 'Paste a full image link starting with https://').transform(normalizeAvatarUrl),
+    z.string().max(AVATAR_DATA_MAX, 'That photo is too big. Pick a smaller one.').regex(AVATAR_DATA_URL, 'Upload a PNG, JPG or WebP photo'),
+  ]).optional(),
   whatsappNumber: z.string().trim().max(20).optional(),
   notifyPrefs: z.object({ push: z.boolean(), telegram: z.boolean(), whatsapp: z.boolean() }).partial().optional(),
 });
@@ -175,9 +181,10 @@ meRouter.get('/stats', ah(async (req, res) => {
   const [stats, attendance, squads] = await Promise.all([
     Stats.find({ userId: uid }).lean(),
     Attendance.find({ userId: uid }).lean(),
-    Squad.find({ confirmed: true, $or: [{ selectedIds: uid }, { benchedId: uid }] }).lean(),
+    Squad.find({ confirmed: true, selectedIds: uid }).lean(),
   ]);
-  const matchIds = [...new Set([...stats, ...attendance, ...squads].map((x) => String(x.matchId)))];
+  // History only lists matches the player actually played: picked for the squad, or has stats saved.
+  const matchIds = [...new Set([...stats, ...squads].map((x) => String(x.matchId)))];
   const matches = await Match.find({ _id: { $in: matchIds }, startAt: { $lt: new Date() } }).sort({ startAt: 1 }).lean();
   const statBy = new Map(stats.map((s) => [String(s.matchId), s]));
   const attBy = new Map(attendance.map((a) => [String(a.matchId), a]));
@@ -191,7 +198,7 @@ meRouter.get('/stats', ah(async (req, res) => {
       map: m.map,
       type: m.type,
       startAt: m.startAt.toISOString(),
-      selected: Boolean(sq?.selectedIds.some((id) => String(id) === String(uid))),
+      selected: Boolean(sq?.selectedIds.some((id) => String(id) === String(uid))) || Boolean(s),
       joined: attBy.get(String(m._id))?.joined ?? null,
       kills: s?.kills ?? 0,
       damage: s?.damage ?? 0,

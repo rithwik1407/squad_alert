@@ -2,11 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { BellRing, CheckCircle2, KeyRound, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
+import { BellRing, CheckCircle2, ImagePlus, KeyRound, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
 import { api, type TestNotificationResult } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { disablePush, enablePush, permission, pushConfigured, pushSupport } from '@/lib/push';
 import { list } from '@/lib/motion';
+import { normalizeAvatarUrl, photoToAvatar } from '@/lib/avatar';
 import { Avatar, Button, Card, Field, PageHeader, cx } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 
@@ -36,6 +37,10 @@ export default function Settings() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [refresh]);
+
+  const [avatar, setAvatar] = useState(user?.avatar ?? '');
+  const [avatarBroken, setAvatarBroken] = useState(false);
+  useEffect(() => { setAvatar(user?.avatar ?? ''); }, [user?.avatar]);
 
   if (!user) return null;
 
@@ -76,12 +81,17 @@ export default function Settings() {
     } catch (e) { toast.error(e); } finally { setBusy(null); }
   }
 
+  async function pickPhoto(file?: File) {
+    if (!file) return;
+    try { setAvatar(await photoToAvatar(file)); setAvatarBroken(false); } catch (err) { toast.error(err); }
+  }
+
   async function saveProfile(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     setBusy('profile');
     try {
-      await api.updateMe({ name: f.name, ign: f.ign, bgmiId: f.bgmiId || undefined, avatar: f.avatar });
+      await api.updateMe({ name: f.name, ign: f.ign, bgmiId: f.bgmiId || undefined, avatar });
       await refresh();
       toast.success('Profile saved');
     } catch (err) { toast.error(err); } finally { setBusy(null); }
@@ -178,12 +188,29 @@ export default function Settings() {
         <Card className="lg:col-span-2">
           <h2 className="mb-4 text-xl font-bold text-white">Profile</h2>
           <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-[auto_1fr]">
-            <Avatar name={user.ign} src={user.avatar} size={72} />
+            <div className="flex flex-col items-center gap-2">
+              <Avatar key={avatar} name={user.ign} src={avatar} size={72} />
+              {/* Hidden probe so we can say when a pasted link doesn't load. */}
+              {avatar && !avatar.startsWith('data:') && (
+                <img src={normalizeAvatarUrl(avatar)} alt="" hidden referrerPolicy="no-referrer"
+                  onLoad={() => setAvatarBroken(false)} onError={() => setAvatarBroken(true)} />
+              )}
+              <label className="btn-ghost cursor-pointer !px-3 !py-1.5 text-xs">
+                <ImagePlus className="h-3.5 w-3.5" aria-hidden />Upload photo
+                <input type="file" accept="image/*" className="sr-only" onChange={(e) => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+              </label>
+              {avatar && <button type="button" className="text-xs text-zinc-500 hover:text-white" onClick={() => { setAvatar(''); setAvatarBroken(false); }}>Remove</button>}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Name"><input name="name" className="input" defaultValue={user.name} required /></Field>
               <Field label="IGN"><input name="ign" className="input" defaultValue={user.ign} required /></Field>
               <Field label="BGMI UID"><input name="bgmiId" className="input font-mono" defaultValue={user.bgmiId} inputMode="numeric" /></Field>
-              <Field label="Avatar URL"><input name="avatar" className="input" defaultValue={user.avatar} placeholder="https://…" /></Field>
+              <Field label="Avatar link"
+                error={avatarBroken ? "That link doesn't open as an image. For Google Drive, set sharing to “Anyone with the link”, or use Upload photo." : undefined}
+                hint="Upload a photo, or paste an image link. Google Drive share links work if sharing is set to “Anyone with the link”.">
+                <input className="input" value={avatar.startsWith('data:') ? '' : avatar} placeholder={avatar.startsWith('data:') ? 'Uploaded photo' : 'https://…'}
+                  onChange={(e) => { setAvatar(e.target.value.trim()); setAvatarBroken(false); }} />
+              </Field>
               <div className="flex flex-wrap gap-2 sm:col-span-2">
                 <Button type="submit" loading={busy === 'profile'}>Save profile</Button>
                 <Button type="button" variant="ghost" icon={<LogOut className="h-4 w-4" aria-hidden />} onClick={async () => { await logout(); nav('/welcome'); }}>Sign out</Button>
