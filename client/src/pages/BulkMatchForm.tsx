@@ -1,14 +1,15 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, CalendarRange, Plus, Repeat, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, CalendarRange, ImageIcon, Plus, Repeat, Trash2, X, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { MAPS, MAP_TBD, mapLabel, type MatchMap } from '@/lib/types';
+import { MAPS, MAP_TBD, mapLabel, type MatchMap, type ParsedSchedule } from '@/lib/types';
 import { dayIST, fromISTInput, timeIST, toISTInput } from '@/lib/time';
 import { Button, Card, Field, PageHeader, cx } from '@/components/ui';
 import { useToast } from '@/components/Toast';
+import { ScheduleImageUpload } from '@/components/ScheduleImageUpload';
 
 interface Row { key: number; time: string; title: string; map: MatchMap }
 
@@ -19,6 +20,15 @@ const addHour = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
+
+/** "21:54" → "9:54 PM" */
+const ampm = (t: string) => {
+  const [h, m] = t.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+};
+
+/** Title for one match read from a schedule image, e.g. "EG Daily Scrims M1". */
+const scheduleTitle = (s: ParsedSchedule, n: number) => `${s.name.slice(0, 52)} M${n}`;
 
 const PRESETS: { label: string; times: string[] }[] = [
   { label: 'Evening block · 6–10 PM', times: ['18:00', '19:00', '20:00', '21:00', '22:00'] },
@@ -36,7 +46,27 @@ export default function BulkMatchForm() {
   const [offset, setOffset] = useState(2);
   const [days, setDays] = useState(1);
   const [rows, setRows] = useState<Row[]>([row('20:00', 'Scrim 1'), row('21:00', 'Scrim 2'), row('22:00', 'Scrim 3')]);
+  const [tournamentName, setTournamentName] = useState('');
   const [busy, setBusy] = useState(false);
+  /** What the last schedule image said, shown above the rows so the admin can check it. */
+  const [fromImage, setFromImage] = useState<ParsedSchedule | null>(null);
+  const location = useLocation();
+
+  function applySchedule(s: ParsedSchedule) {
+    setFromImage(s);
+    setDate(s.date);
+    setType(s.type);
+    setTournamentName(s.type === 'tournament' ? s.name : '');
+    setDays(1);
+    setRows(s.matches.map((m) => row(m.time, scheduleTitle(s, m.number), m.map)));
+    toast.success(`Read ${s.matches.length} match${s.matches.length === 1 ? '' : 'es'} from the image. Check them, then Schedule.`);
+  }
+
+  // Sent here from the single-match form when the image had several matches.
+  useEffect(() => {
+    const s = (location.state as { schedule?: ParsedSchedule } | null)?.schedule;
+    if (s) { applySchedule(s); nav('.', { replace: true, state: null }); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () => setRows((rs) => {
@@ -66,7 +96,7 @@ export default function BulkMatchForm() {
     e.preventDefault();
     setBusy(true);
     try {
-      const { matches } = await api.createMatches(planned.map((p) => ({ ...p, type, notifyOffsetMin: offset })));
+      const { matches } = await api.createMatches(planned.map((p) => ({ ...p, type, notifyOffsetMin: offset, tournamentName: type === 'tournament' ? tournamentName.trim() : '' })));
       qc.invalidateQueries({ queryKey: ['matches'] });
       toast.success(`${matches.length} matches scheduled. Pick each squad before its alert.`);
       nav('/matches');
@@ -87,6 +117,19 @@ export default function BulkMatchForm() {
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-6">
           <Card>
+            <div className="mb-4"><ScheduleImageUpload onParsed={applySchedule} /></div>
+            {fromImage && (
+              <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3 text-sm">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 font-semibold text-emerald-200"><ImageIcon className="h-4 w-4" aria-hidden />Filled from image: {fromImage.name}</p>
+                  <p className="mt-0.5 text-xs text-zinc-300">
+                    Each match is set at its IDP time{fromImage.matches.some((m) => m.startTime) ? ` (start: ${fromImage.matches.map((m) => m.startTime && ampm(m.startTime)).filter(Boolean).join(', ')})` : ''}.
+                    {fromImage.dateNote && <> The image said "{fromImage.dateNote}", so the date was set to {fromImage.date}. Change it if that's wrong.</>}
+                  </p>
+                </div>
+                <button type="button" aria-label="Dismiss" className="rounded p-1 text-zinc-400 hover:text-white" onClick={() => setFromImage(null)}><X className="h-4 w-4" /></button>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Date (IST)"><input type="date" className="input [color-scheme:dark]" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
               <Field label="Type">
@@ -95,6 +138,11 @@ export default function BulkMatchForm() {
                 </select>
               </Field>
               <Field label="Notify before (min)"><input type="number" min={0} max={120} className="input" value={offset} onChange={(e) => setOffset(Number(e.target.value))} /></Field>
+              {type === 'tournament' && (
+                <div className="sm:col-span-3">
+                  <Field label="Tournament"><input className="input" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="BGIS 2026" maxLength={60} /></Field>
+                </div>
+              )}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
               <Repeat className="h-4 w-4 text-ember-400" aria-hidden />

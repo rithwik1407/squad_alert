@@ -225,3 +225,15 @@ export interface ChatState {
 }
 
 export interface ChatMute { userId: string; until: string }
+
+/** What the server read from a scrim / tournament schedule screenshot. Fills the create-match forms. */
+export interface ParsedSchedule {
+  name: string;
+  type: 'scrim' | 'tournament';
+  /** IST date, YYYY-MM-DD. */
+  date: string;
+  /** The date as written in the image when it had to be changed (e.g. an old year), else ''. */
+  dateNote: string;
+  /** time is the IDP time (24h HH:MM): the match is scheduled at it. startTime is the start shown, for reference. */
+  matches: { number: number; time: string; startTime: string; map: MatchMap }[];
+}

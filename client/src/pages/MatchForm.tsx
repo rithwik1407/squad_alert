@@ -5,12 +5,13 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, BellRing, Check, HelpCircle, Layers, MapPin } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { MAPS, MAP_TBD, mapLabel, type MapName, type MatchMap } from '@/lib/types';
+import { MAPS, MAP_TBD, mapLabel, type MapName, type MatchMap, type ParsedSchedule } from '@/lib/types';
 import { fromISTInput, timeIST, toISTInput, fullIST } from '@/lib/time';
 import { list, item, spring } from '@/lib/motion';
 import { Button, Card, Field, PageHeader, Skeleton, cx } from '@/components/ui';
 import { MapArt, mapTag } from '@/components/MapArt';
 import { useToast } from '@/components/Toast';
+import { ScheduleImageUpload } from '@/components/ScheduleImageUpload';
 
 function defaultStart() {
   // Next round half hour, at least 30 min out.
@@ -68,6 +69,23 @@ export default function MatchForm() {
     setDrop(mp === MAP_TBD ? '' : team?.drops[mp] ?? '');
   };
 
+  /** A schedule image was read: one match fills this form, several go to the bulk form. */
+  function applySchedule(s: ParsedSchedule) {
+    if (s.matches.length > 1) {
+      nav('/matches/bulk', { state: { schedule: s } });
+      return;
+    }
+    const m = s.matches[0];
+    // Times before 6 AM belong to the night after the schedule's date, like the bulk form.
+    const base = new Date(`${s.date}T00:00:00+05:30`).getTime() + (Number(m.time.slice(0, 2)) < 6 ? 864e5 : 0);
+    setTitle(`${s.name.slice(0, 52)} M${m.number}`);
+    setType(s.type);
+    setTournamentName(s.type === 'tournament' ? s.name : '');
+    pickMap(m.map);
+    setStart(`${toISTInput(new Date(base)).slice(0, 10)}T${m.time}`);
+    toast.success(`Filled from the image: ${s.name}, IDP ${m.time}${s.dateNote ? ` (the image said "${s.dateNote}", check the date)` : ''}. Check it, then Schedule.`);
+  }
+
   const startIso = start ? fromISTInput(start) : null;
   const notifyIso = startIso ? new Date(new Date(startIso).getTime() - offset * 60_000).toISOString() : null;
   const timeLocked = editing && Boolean(existing.data?.locked);
@@ -106,6 +124,7 @@ export default function MatchForm() {
 
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
+          {!editing && <ScheduleImageUpload onParsed={applySchedule} />}
           <Card>
             <h2 className="mb-3 text-lg font-bold text-white">Map</h2>
             <div role="radiogroup" aria-label="Map" className="grid grid-cols-2 gap-3 sm:grid-cols-3">

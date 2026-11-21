@@ -62,6 +62,34 @@ Reply with JSON only, no other text, in exactly this shape:
 const MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
 type Media = (typeof MEDIA)[number];
 
+/** One kind of screenshot to read: what to ask, the answer's shape, and how to turn the answer into data. */
+export interface VisionTask<T> {
+  prompt: string;
+  /** Extra line for readers without a JSON-schema mode (Groq, OpenRouter). */
+  jsonHint: string;
+  /** JSON schema for Claude. */
+  schema: Record<string, unknown>;
+  /** The same shape in Gemini's schema format. */
+  geminiSchema: Record<string, unknown>;
+  parse: (text: string) => T;
+  /** An error from parse that is a final answer (e.g. "this is not that kind of image"): don't ask another reader. */
+  isFinal: (e: unknown) => boolean;
+  /** What the admin can do instead, ending the error messages, e.g. "type the numbers in". */
+  manual: string;
+}
+
+const SCORECARD_TASK: VisionTask<ScorecardRow[]> = {
+  prompt: PROMPT,
+  jsonHint: JSON_HINT,
+  schema: SCHEMA as unknown as Record<string, unknown>,
+  get geminiSchema() { return GEMINI_SCHEMA; },
+  parse: (text) => toRows(text),
+  isFinal: (e) => e instanceof NotResultsScreenError,
+  manual: 'type the numbers in',
+};
+
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
 /**
  * Reads the screenshot with a vision model. Every reader whose key is set is tried in turn until one answers:
  *   1. Google Gemini   GEMINI_API_KEY      (free)
@@ -70,15 +98,20 @@ type Media = (typeof MEDIA)[number];
  *   4. Claude          ANTHROPIC_API_KEY   (paid)
  * So one free tier being busy or used up for the day doesn't stop the upload.
  */
-export async function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
+export function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
+  return readImage(dataUrl, SCORECARD_TASK);
+}
+
+/** Read any kind of screenshot with the reader chain above. */
+export async function readImage<T>(dataUrl: string, task: VisionTask<T>): Promise<T> {
   if (!scorecardReaderReady()) {
-    throw badRequest('Screenshot reading is not set up yet (add GEMINI_API_KEY or GROQ_API_KEY on the server). Type the numbers in instead.');
+    throw badRequest(`Screenshot reading is not set up yet (add GEMINI_API_KEY or GROQ_API_KEY on the server). ${cap(task.manual)} instead.`);
   }
   const m = /^data:(image\/[a-z]+);base64,(.+)$/s.exec(dataUrl);
   if (!m || !MEDIA.includes(m[1] as Media)) throw badRequest('Upload a JPG, PNG or WebP screenshot');
   const deadline = Date.now() + READ_BUDGET_MS;
   const readers: { name: string; run: (until: number) => Promise<string> }[] = [];
-  if (config.geminiApiKey) readers.push({ name: 'Gemini', run: (until) => askGemini(m[1], m[2], until) });
+  if (config.geminiApiKey) readers.push({ name: 'Gemini', run: (until) => askGemini(task, m[1], m[2], until) });
   for (const p of [
     config.groqApiKey ? groqProvider(config.groqApiKey, config.groqModel) : null,
     config.openRouterApiKey ? openRouterProvider(config.openRouterApiKey, config.openRouterModel) : null,
@@ -87,13 +120,13 @@ export async function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
     readers.push({
       name: p.name,
       run: async (until) => {
-        const r = await askCompat(p, PROMPT + JSON_HINT, dataUrl, until);
+        const r = await askCompat(p, task.prompt + task.jsonHint, dataUrl, until);
         if ('text' in r) return r.text;
         throw badRequest(r.busy ? `${p.name} is busy (${r.err})` : `${p.name}: ${r.err}`);
       },
     });
   }
-  if (config.anthropicApiKey) readers.push({ name: 'Claude', run: () => askClaude(m[1] as Media, m[2]) });
+  if (config.anthropicApiKey) readers.push({ name: 'Claude', run: () => askClaude(task, m[1] as Media, m[2]) });
 
   const problems: string[] = [];
   for (let i = 0; i < readers.length; i++) {
@@ -103,41 +136,41 @@ export async function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
     const share = Math.max(40_000, Math.floor(left / (readers.length - i)));
     try {
       const text = await readers[i].run(Math.min(deadline, Date.now() + share));
-      return toRows(text); // a "not a results screen" answer is final: no need to ask another reader
+      return task.parse(text); // a "not that kind of image" answer is final: no need to ask another reader
     } catch (e) {
-      if (e instanceof NotResultsScreenError) throw e;
+      if (task.isFinal(e)) throw e;
       const msg = (e as Error).message;
       console.warn(`[scorecard] ${readers[i].name} could not read it: ${msg}`);
       problems.push(`${readers[i].name}: ${msg}`);
       if (i === readers.length - 1 && readers.length === 1) throw e;
     }
   }
-  throw badRequest(`All screenshot readers are busy or out of free uses right now (${problems.join('; ') || 'out of time'}). Try again in a few minutes, or type the numbers in.`);
+  throw badRequest(`All screenshot readers are busy or out of free uses right now (${problems.join('; ') || 'out of time'}). Try again in a few minutes, or ${task.manual}.`);
 }
 
-async function askClaude(media: Media, data: string): Promise<string> {
+async function askClaude<T>(task: VisionTask<T>, media: Media, data: string): Promise<string> {
   const client = new Anthropic({ apiKey: config.anthropicApiKey, timeout: 90_000, maxRetries: 1 });
   let res;
   try {
     res = await client.messages.create({
       model: config.scorecardModel,
       max_tokens: 4000,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA as unknown as Record<string, unknown> } },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: task.schema } },
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: media, data } },
-          { type: 'text', text: PROMPT },
+          { type: 'text', text: task.prompt },
         ],
       }],
     });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) throw badRequest('The ANTHROPIC_API_KEY on the server is not valid');
     if (e instanceof Anthropic.RateLimitError) throw badRequest('The screenshot reader is busy. Try again in a minute.');
-    if (e instanceof Anthropic.APIError) throw badRequest(`Could not read the screenshot (${e.status ?? 'network error'}). Try again or type the numbers in.`);
+    if (e instanceof Anthropic.APIError) throw badRequest(`Could not read the screenshot (${e.status ?? 'network error'}). Try again or ${task.manual}.`);
     throw e;
   }
-  if (res.stop_reason === 'refusal') throw badRequest('Could not read that screenshot. Type the numbers in instead.');
+  if (res.stop_reason === 'refusal') throw badRequest(`Could not read that screenshot. ${cap(task.manual)} instead.`);
   return res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
 }
 
@@ -210,7 +243,7 @@ function thinkingFor(model: string): Record<string, unknown> | undefined {
   return undefined;
 }
 
-async function callGemini(model: string, mime: string, data: string, timeoutMs: number, withThinking = true): Promise<GeminiTry> {
+async function callGemini<T>(task: VisionTask<T>, model: string, mime: string, data: string, timeoutMs: number, withThinking = true): Promise<GeminiTry> {
   let res: Response;
   try {
     res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:generateContent`, {
@@ -218,9 +251,9 @@ async function callGemini(model: string, mime: string, data: string, timeoutMs: 
       headers: { 'content-type': 'application/json', 'x-goog-api-key': config.geminiApiKey },
       signal: AbortSignal.timeout(Math.max(5_000, timeoutMs)),
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mime, data } }, { text: PROMPT }] }],
+        contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mime, data } }, { text: task.prompt }] }],
         generationConfig: {
-          temperature: 0, responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA,
+          temperature: 0, responseMimeType: 'application/json', responseSchema: task.geminiSchema,
           ...(withThinking && thinkingFor(model) ? { thinkingConfig: thinkingFor(model) } : {}),
         },
       }),
@@ -240,7 +273,7 @@ async function callGemini(model: string, mime: string, data: string, timeoutMs: 
   console.warn(`[scorecard] Gemini ${model} failed (${res.status}): ${err}`);
   if (/api key not valid|api_key_invalid/i.test(err)) throw badRequest('The GEMINI_API_KEY on the server is not valid');
   // Older/newer models reject the other generation's thinking field: ask again without it.
-  if (res.status === 400 && withThinking && /thinking/i.test(err)) return callGemini(model, mime, data, timeoutMs, false);
+  if (res.status === 400 && withThinking && /thinking/i.test(err)) return callGemini(task, model, mime, data, timeoutMs, false);
   // Free daily allowance used up: waiting a few seconds won't help.
   if (res.status === 429 && /per ?day|daily|PerDay/i.test(err)) return { skip: true, err: 'daily free limit reached' };
   // Busy ("high demand", overloaded) or a per-minute limit: worth waiting and trying again.
@@ -257,7 +290,7 @@ const READ_BUDGET_MS = 170_000;
  * Order: GEMINI_MODEL if set, the model that last worked, current defaults, then whatever ListModels offers.
  * Busy models get up to three tries with a growing pause before moving on.
  */
-async function askGemini(mime: string, data: string, until = Date.now() + READ_BUDGET_MS): Promise<string> {
+async function askGemini<T>(task: VisionTask<T>, mime: string, data: string, until = Date.now() + READ_BUDGET_MS): Promise<string> {
   const first = [config.geminiModel, lastGoodModel, ...GEMINI_DEFAULTS].filter(Boolean) as string[];
   const tried = new Set<string>();
   let lastErr = '';
@@ -267,7 +300,7 @@ async function askGemini(mime: string, data: string, until = Date.now() + READ_B
     if (tried.has(model)) return null;
     tried.add(model);
     for (let i = 0; i < 3 && left() > 5_000; i++) {
-      const r = await callGemini(model, mime, data, Math.min(60_000, left()));
+      const r = await callGemini(task, model, mime, data, Math.min(60_000, left()));
       if ('text' in r) { lastGoodModel = model; return r.text; }
       lastErr = r.err;
       if ('skip' in r) return null;
@@ -278,18 +311,22 @@ async function askGemini(mime: string, data: string, until = Date.now() + READ_B
   };
   for (const m of first) { const t = await attempt(m); if (t) return t; }
   for (const m of (await discoverGeminiModels()).slice(0, 4)) { const t = await attempt(m); if (t) return t; }
-  if (/daily free limit/.test(lastErr)) throw badRequest('Google\'s free daily limit for screenshot reading is used up. It resets tomorrow; type the numbers in for now.');
-  if (busy) throw badRequest('Google\'s free screenshot reader is busy right now. Try again in a few minutes, or type the numbers in.');
-  throw badRequest(`Could not read the screenshot (${lastErr || 'no Gemini model available'}). Type the numbers in instead.`);
+  if (/daily free limit/.test(lastErr)) throw badRequest(`Google's free daily limit for screenshot reading is used up. It resets tomorrow; ${task.manual} for now.`);
+  if (busy) throw badRequest(`Google's free screenshot reader is busy right now. Try again in a few minutes, or ${task.manual}.`);
+  throw badRequest(`Could not read the screenshot (${lastErr || 'no Gemini model available'}). ${cap(task.manual)} instead.`);
 }
 
-function toRows(text: string): ScorecardRow[] {
-  let parsed: { isResultsScreen?: boolean; players?: ScorecardRow[] };
+/** The JSON object in a reader's answer (some wrap it in ``` fences or a sentence). */
+export function extractJson<T>(text: string, failMessage: string): T {
   const stripped = text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
   const a = stripped.indexOf('{');
   const b = stripped.lastIndexOf('}');
   const json = a >= 0 && b > a ? stripped.slice(a, b + 1) : stripped;
-  try { parsed = JSON.parse(json); } catch { throw badRequest('Could not read that screenshot. Type the numbers in instead.'); }
+  try { return JSON.parse(json) as T; } catch { throw badRequest(failMessage); }
+}
+
+function toRows(text: string): ScorecardRow[] {
+  const parsed = extractJson<{ isResultsScreen?: boolean; players?: ScorecardRow[] }>(text, 'Could not read that screenshot. Type the numbers in instead.');
   const rows = (parsed.players ?? []).map((p) => ({
     name: String(p.name ?? '').trim(),
     finishes: clampInt(p.finishes, 99),

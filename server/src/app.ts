@@ -22,6 +22,7 @@ export function createApp(getQueue: () => QueueLike) {
   app.use(cors({ origin: (o, cb) => cb(null, !o || origins.has(o)), credentials: true }));
   // Results screenshots are sent as base64 JSON, so that one route gets a bigger body limit.
   app.use('/api/matches/:id/scorecard', express.json({ limit: '8mb' }));
+  app.use('/api/matches/schedule-image', express.json({ limit: '8mb' }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
   // API responses are per-user (auth cookie), so never let a browser or proxy cache them.
