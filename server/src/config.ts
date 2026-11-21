@@ -36,6 +36,11 @@ export const config = {
   geminiApiKey: (process.env.GEMINI_API_KEY ?? '').trim(),
   /** Optional: force one Gemini model (e.g. gemini-3.8-flash). Empty = pick automatically. */
   geminiModel: (process.env.GEMINI_MODEL ?? '').trim(),
+  /** More free readers, tried after Gemini: Groq (console.groq.com) and OpenRouter (openrouter.ai, ":free" models). */
+  groqApiKey: (process.env.GROQ_API_KEY ?? '').trim(),
+  groqModel: (process.env.GROQ_MODEL ?? '').trim(),
+  openRouterApiKey: (process.env.OPENROUTER_API_KEY ?? '').trim(),
+  openRouterModel: (process.env.OPENROUTER_MODEL ?? '').trim(),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
   scorecardModel: process.env.SCORECARD_MODEL || 'claude-opus-5-5',
   firebase: {

@@ -81,7 +81,7 @@ export default function Notifications() {
           {(['all', 'sent', 'failed'] as const).map((f) => (
             <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)}
               className={cx('relative rounded-full px-3.5 py-1.5 text-xs font-semibold capitalize', filter === f ? 'text-ink-950' : 'text-zinc-400 hover:text-white')}>
-              {filter === f && <motion.span layoutId="nf" className="absolute inset-0 -z-0 rounded-full bg-ember-400" />}
+              {filter === f && <motion.span layoutId="nf" className="absolute inset-0 -z-0 rounded-full bg-ember-400" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
               <span className="relative">{f}{f !== 'all' ? ` · ${counts[f]}` : ''}</span>
             </button>
           ))}
@@ -90,12 +90,12 @@ export default function Notifications() {
 
       {q.isLoading ? <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div> :
         !logs.length ? <Card><EmptyState title="All quiet" text="Alerts show up here once a match notification goes out." /></Card> :
-        isCaptain ? <Card><LogTable logs={logs} /></Card> : (
+        isCaptain ? <Card key={filter}><LogTable logs={logs} /></Card> : (
           <motion.ul variants={list} initial="initial" animate="animate" className="space-y-3">
             {logs.map((l) => (
               <motion.li key={l.id} variants={item}>
-                <Link to={`/matches/${l.matchId}`} className="glass flex gap-3 p-4 hover:bg-white/[0.05]">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ember-500/15 text-ember-300"><Bell className="h-5 w-5" aria-hidden /></span>
+                <Link to={`/matches/${l.matchId}`} className="glass group flex gap-3 p-4 hover:border-ember-400/25 hover:bg-white/[0.05]">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ember-500/15 text-ember-300 transition-transform duration-200 group-hover:scale-105"><Bell className="h-5 w-5" aria-hidden /></span>
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-white">{l.title}</p>
                     <p className="text-sm text-zinc-400">{l.body}</p>

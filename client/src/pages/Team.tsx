@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Check, MapPin, UserPlus, X } from 'lucide-react';
 import { MemberRow } from '@/components/MemberRow';
 import { api } from '@/lib/api';
@@ -98,8 +98,11 @@ function RequestsCard({ onChanged }: { onChanged: () => Promise<unknown> }) {
         <p className="mt-4 rounded-xl border border-dashed border-white/10 p-3 text-sm text-zinc-500">No requests right now.</p>
       ) : (
         <ul className="mt-4 space-y-3">
+          <AnimatePresence initial={false}>
           {requests.map((r) => (
-            <li key={r.id} className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
+            <motion.li key={r.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }} transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
               <div className="flex items-start gap-3">
                 <Avatar name={r.ign} size={40} />
                 <div className="min-w-0 flex-1">
@@ -121,8 +124,9 @@ function RequestsCard({ onChanged }: { onChanged: () => Promise<unknown> }) {
                 <Button variant="ghost" className="flex-1" disabled={busy !== null}
                   icon={<X className="h-4 w-4" aria-hidden />} onClick={() => act(r.id, r.ign, false)}>Reject</Button>
               </div>
-            </li>
+            </motion.li>
           ))}
+          </AnimatePresence>
         </ul>
       )}
     </Card>

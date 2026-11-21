@@ -94,6 +94,7 @@ FCM → Telegram fallback, unreachable players + Resend to failed, captain-only 
 | `TELEGRAM_WEBHOOK_SECRET` | API | Any random string |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` | later | Meta WhatsApp Cloud API (provider is a stub) |
 | `GEMINI_API_KEY` | optional, free | Google Gemini key from aistudio.google.com/apikey. Reads uploaded BGMI results screenshots; used first when set |
+| `GROQ_API_KEY`, `OPENROUTER_API_KEY` | optional, free | More free screenshot readers (console.groq.com/keys, openrouter.ai/keys), tried in turn after Gemini when it's busy or out of free uses |
 | `ANTHROPIC_API_KEY` | optional | Reads uploaded BGMI results screenshots (kills, damage, survival, assists) so the MVP is worked out automatically |
 
 ## Deploy

@@ -5,6 +5,14 @@
 @layer base {
   :root { color-scheme: dark; }
   html, body, #root { min-height: 100%; }
+  html { -webkit-tap-highlight-color: transparent; }
+  /* Every link and button eases its colours instead of snapping. Transform and opacity are left to framer-motion. */
+  a, button, [role='tab'], [role='radio'], [role='checkbox'], summary {
+    transition-property: color, background-color, border-color, box-shadow, text-decoration-color, fill, stroke;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(.22, 1, .36, 1);
+  }
+  button, a, [role='button'] { touch-action: manipulation; }
   body {
     @apply bg-ink-950 text-zinc-100 font-sans antialiased;
     /* Static layers only: a tiny pre-rendered grain tile + two glows. No fixed overlays, no live SVG filters. */
@@ -35,11 +43,24 @@
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
-      transition-colors disabled:opacity-50 disabled:cursor-not-allowed select-none;
+      disabled:opacity-50 disabled:cursor-not-allowed select-none;
+    /* CSS press feedback so <Link className="btn-*"> and <Button> feel the same, on the compositor. */
+    transition: color 160ms, background-color 160ms, border-color 160ms, box-shadow 220ms, filter 160ms,
+      transform 220ms cubic-bezier(.22, 1, .36, 1), opacity 160ms;
+  }
+  .btn:active:not(:disabled) { transform: scale(.96); transition-duration: 80ms; }
+  @media (hover: hover) {
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:active:not(:disabled) { transform: scale(.96); }
   }
   .btn-primary {
-    @apply btn text-ink-950 bg-gradient-to-b from-ember-400 to-ember-500 hover:from-ember-300 hover:to-ember-400;
+    @apply btn text-ink-950 bg-gradient-to-b from-ember-400 to-ember-500;
     box-shadow: 0 8px 30px -8px rgba(255,138,31,.6), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  /* Gradients can't transition, so brighten with a filter instead of swapping the gradient stops. */
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: 0 12px 34px -8px rgba(255,138,31,.75), inset 0 1px 0 rgba(255,255,255,.4);
   }
   .btn-ghost { @apply btn text-zinc-200 bg-white/5 hover:bg-white/10 border border-white/10; }
   .btn-danger { @apply btn text-red-200 bg-red-500/10 hover:bg-red-500/20 border border-red-400/20; }
@@ -52,6 +73,11 @@
   .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-ember-400; }
 }
 
+/* Fade-through for content that swaps in place (tab panels, filtered lists). */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeUp .32s cubic-bezier(.22, 1, .36, 1) both; }
+
 @media (prefers-reduced-motion: reduce) {
+  .btn:hover, .btn:active { transform: none !important; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }

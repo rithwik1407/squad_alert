@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { CalendarPlus, Layers, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -22,7 +22,10 @@ export default function Matches() {
   const q = useQuery({
     queryKey: ['matches', tab === 'tournaments' ? 'all' : tab],
     queryFn: () => api.matches(tab === 'tournaments' ? 'all' : tab).then((r) => r.matches),
+    // Keep the old list on screen while the next tab loads instead of flashing skeletons.
+    placeholderData: keepPreviousData,
   });
+  const switching = q.isPlaceholderData;
   const data = (q.data ?? []).filter((m) => tab !== 'tournaments' || m.type === 'tournament');
   const groups = data.reduce<Record<string, Match[]>>((acc, m) => {
     (acc[dayIST(m.startAt)] ??= []).push(m);
@@ -50,7 +53,7 @@ export default function Matches() {
 
       {q.isLoading ? <div className="space-y-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div> :
         !data.length ? <Card><EmptyState title={tab === 'upcoming' ? 'Nothing scheduled' : 'Nothing here yet'} text="Scheduled matches and their alert status show up here." action={tab === 'upcoming' ? <Link to="/matches/new" className="btn-primary">Schedule a match</Link> : undefined} /></Card> : (
-          <div className="space-y-6">
+          <div key={switching ? 'stale' : tab} className={cx('space-y-6 transition-opacity duration-200', switching ? 'opacity-50' : 'fade-up')}>
             {Object.entries(groups).map(([day, ms]) => (
               <section key={day}>
                 <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">{day}</h2>

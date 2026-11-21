@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LayoutGroup, motion, useAnimationControls, AnimatePresence } from 'framer-motion';
@@ -21,9 +21,13 @@ function PlayerCard({ p, on, benched, locked, order, onToggle, avail, note }: {
   p: Member; on: boolean; benched: boolean; locked: boolean; order: number; onToggle: () => boolean; avail?: Availability; note?: string;
 }) {
   const controls = useAnimationControls();
+  const entered = useRef(false);
+  // Entrance (staggered) and bench dimming both go through framer: an opacity class would be overridden by its inline style.
   useEffect(() => {
-    controls.start({ opacity: 1, y: 0, transition: { ...spring, delay: order * 0.06 } });
-  }, [controls, order]);
+    const target = { opacity: benched ? 0.55 : 1, y: 0 };
+    controls.start({ ...target, transition: entered.current ? { duration: 0.25 } : { ...spring, delay: order * 0.06 } });
+    entered.current = true;
+  }, [controls, order, benched]);
   return (
     <motion.button
       type="button"
@@ -38,17 +42,18 @@ function PlayerCard({ p, on, benched, locked, order, onToggle, avail, note }: {
       transition={spring}
       onClick={() => {
         if (locked) return;
-        if (!onToggle()) controls.start({ ...shake, opacity: 1, y: 0 });
+        if (!onToggle()) controls.start(shake);
       }}
       className={cx(
-        'glass relative flex flex-col items-center gap-3 overflow-hidden p-4 text-center transition-[filter,opacity,border-color] duration-300 sm:p-5',
+        'glass relative flex flex-col items-center gap-3 overflow-hidden p-4 text-center transition-[filter,border-color,box-shadow] duration-300 sm:p-5',
         on ? 'border-ember-400/70 shadow-glow' : 'border-white/[0.07]',
-        benched && 'opacity-55 grayscale',
+        benched && 'grayscale',
         locked ? 'cursor-not-allowed' : 'cursor-pointer',
       )}
     >
-      {on && <motion.span layoutId={`glow-${p.id}`} className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ember-500/20 to-transparent" />}
       <AnimatePresence>
+        {on && <motion.span key="glow" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ember-500/20 to-transparent" />}
         {on && (
           <motion.span key="check" initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={spring}
             className="absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full bg-ember-400 text-ink-950">
@@ -149,7 +154,7 @@ export default function SquadSelect() {
             </div>
             <div>
               <p className="text-sm text-zinc-400">
-                <motion.span key={sel.selected.length} initial={{ scale: 1.4, color: '#ffa94d' }} animate={{ scale: 1, color: '#fff' }} className="inline-block font-display text-lg font-bold">
+                <motion.span key={sel.selected.length} initial={{ scale: 1.4, color: '#ffa94d' }} animate={{ scale: 1, color: '#fff' }} transition={{ type: 'spring', stiffness: 500, damping: 22 }} className="inline-block font-display text-lg font-bold">
                   {sel.selected.length}/{SQUAD_SIZE}
                 </motion.span>{' '}selected
               </p>
