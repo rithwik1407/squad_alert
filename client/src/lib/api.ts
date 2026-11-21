@@ -4,12 +4,49 @@ import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CheckinM
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public details?: { path: string; message: string }[]) {
+  constructor(public status: number, message: string, public details?: { path: string; message: string }[], public retryAfterMs?: number) {
     super(message);
   }
 }
 
+/** Errors worth trying again: no connection, server busy (429) or waking up / overloaded (5xx gateway). */
+export function isTransient(e: unknown) {
+  return e instanceof ApiError && (e.status === 0 || e.status === 408 || e.status === 429 || e.status === 502 || e.status === 503 || e.status === 504);
+}
+
+/** How long to wait before retry number `attempt` (0-based): the server's Retry-After if it sent one, else backoff with jitter. */
+export function retryDelay(attempt: number, e?: unknown) {
+  const hinted = e instanceof ApiError ? e.retryAfterMs : undefined;
+  const base = hinted ?? Math.min(1500 * 2 ** attempt, 15_000);
+  return Math.min(base, 20_000) + Math.random() * 500;
+}
+
+function parseRetryAfter(h: string | null): number | undefined {
+  if (!h) return undefined;
+  const secs = Number(h);
+  if (Number.isFinite(secs)) return Math.max(0, secs) * 1000;
+  const at = Date.parse(h);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
+}
+
+const BUSY_MESSAGE = 'The server is busy right now. Wait a few seconds and try again.';
+
 async function request<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+  try {
+    return await send<T>(method, path, body, timeoutMs);
+  } catch (e) {
+    // Reads and sign-in are safe to repeat, so ride out one short "too many requests" blip
+    // instead of showing an error. Polling queries get further retries from React Query.
+    const repeatable = method === 'GET' || path === '/auth/login';
+    if (!(repeatable && e instanceof ApiError && e.status === 429)) throw e;
+    const wait = e.retryAfterMs ?? 0;
+    if (wait > 8000) throw e;
+    await new Promise((r) => setTimeout(r, Math.max(wait, 1200) + Math.random() * 600));
+    return send<T>(method, path, body, timeoutMs);
+  }
+}
+
+async function send<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${BASE}/api${path}`, {
@@ -24,6 +61,7 @@ async function request<T>(method: string, path: string, body?: unknown, timeoutM
     throw new ApiError(0, timedOut ? 'The server took too long to answer. Check your connection and try again.' : 'Could not reach the server. Check your connection and try again.');
   }
   const data = await res.json().catch(() => ({}));
+  if (res.status === 429) throw new ApiError(429, data.error ?? BUSY_MESSAGE, undefined, parseRetryAfter(res.headers.get('retry-after')));
   if (!res.ok) throw new ApiError(res.status, data.error ?? (res.status === 504 ? 'The server took too long to answer. Try again.' : `Request failed (${res.status})`), data.details);
   return data as T;
 }

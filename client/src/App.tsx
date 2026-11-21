@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
-import { Skeleton } from './components/ui';
+import { Button, Skeleton } from './components/ui';
 import Landing from './pages/Landing';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -27,10 +27,22 @@ function Loading() {
   );
 }
 
+function Unreachable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mx-auto max-w-md p-6 pt-24 text-center">
+      <h1 className="text-lg font-semibold text-white">Can't reach the server</h1>
+      <p className="mt-2 text-sm text-zinc-400">It may be busy or waking up. You are still signed in, so just try again in a few seconds.</p>
+      <Button className="mt-5" onClick={onRetry}>Try again</Button>
+    </div>
+  );
+}
+
 function Protected({ children, captain }: { children: ReactNode; captain?: boolean }) {
-  const { user, loading, isCaptain } = useAuth();
+  const { user, loading, unreachable, refresh, isCaptain } = useAuth();
   const loc = useLocation();
   if (loading) return <div className="mx-auto max-w-5xl p-6"><Loading /></div>;
+  // A busy server is not the same as signed out: don't bounce people to the sign-in page for it.
+  if (unreachable) return <Unreachable onRetry={() => void refresh()} />;
   if (!user) return <Navigate to="/welcome" state={{ from: loc.pathname }} replace />;
   if (!user.teamId && !loc.pathname.startsWith('/join') && !loc.pathname.startsWith('/settings')) return <Navigate to="/join" replace />;
   if (captain && !isCaptain) return <Navigate to="/" replace />;

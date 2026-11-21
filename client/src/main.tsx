@@ -7,10 +7,22 @@ import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import { DialogProvider } from './components/Modal';
 import { App } from './App';
+import { ApiError, isTransient, retryDelay } from './lib/api';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
-const qc = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: true, staleTime: 15_000 } } });
+const qc = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      staleTime: 30_000,
+      // Only retry when trying again can help (busy / waking server, dropped connection), with backoff.
+      // Retrying 4xx answers like 401 or 404 just adds load, and piling retries on a 429 makes it worse.
+      retry: (count, e) => (e instanceof ApiError ? isTransient(e) && count < 3 : count < 2),
+      retryDelay,
+    },
+  },
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
