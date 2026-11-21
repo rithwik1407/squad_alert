@@ -17,7 +17,7 @@ export function PickChip({ p, on, benched, onToggle }: { p: Member; on: boolean;
       className={cx('flex items-center gap-2 rounded-xl border px-2.5 py-2 text-sm font-semibold transition-[color,background-color,border-color,opacity,filter] duration-200',
         on ? 'border-ember-400/70 bg-ember-500/15 text-white' : 'border-white/10 bg-white/[0.03] text-zinc-400')}
     >
-      <Avatar name={p.ign} size={26} dim={benched} />
+      <Avatar name={p.ign} src={p.avatar} size={26} dim={benched} />
       {p.ign.replace(/^RARE丨/, '')}
       {benched && <span className="chip bg-zinc-700/60 px-1.5 py-0 text-[9px] text-zinc-300">Bench</span>}
     </motion.button>

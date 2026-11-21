@@ -214,7 +214,8 @@ function QuickPicker({ m, members }: { m: Match; members: Member[] }) {
 }
 
 function PlayerDashboard() {
-  const { user } = useAuth();
+  const { user, team } = useAuth();
+  const mates = [team?.captain, ...(team?.members ?? [])].filter((p): p is Member => Boolean(p));
   const q = useUpcoming();
   const inbox = useQuery({ queryKey: ['notifications'], queryFn: () => api.notifications().then((r) => r.logs) });
   const stats = useQuery({ queryKey: ['mystats'], queryFn: api.myStats });
@@ -245,6 +246,21 @@ function PlayerDashboard() {
         </motion.div>
 
         <CheckinBoard />
+
+        {mates.length > 0 && (
+          <section aria-labelledby="mates-h">
+            <h2 id="mates-h" className="mb-3 text-xl font-bold text-white">Your team</h2>
+            <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
+              {mates.map((p) => (
+                <li key={p.id} className="glass flex flex-col items-center gap-2 p-3 text-center">
+                  <Avatar name={p.ign} src={p.avatar} size={48} />
+                  <p className="w-full truncate text-xs font-semibold text-white">{p.id === user?._id ? `${p.ign} (you)` : p.ign}</p>
+                  {p.id === team?.captain?.id && <span className="text-[10px] uppercase tracking-wider text-ember-300">Admin</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section aria-labelledby="up-h" className="min-w-0">

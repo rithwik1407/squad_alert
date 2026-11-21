@@ -29,7 +29,9 @@ export default function MatchDetail() {
   if (q.isLoading) return <div className="space-y-4"><Skeleton className="h-60" /><Skeleton className="h-40" /></div>;
   if (!m) return <EmptyState title="Match not found" text="It may have been removed, or you are not in this squad." action={<Link to="/" className="btn-ghost">Home</Link>} />;
   const members = [...(team?.members ?? [])];
-  const byId = new Map(members.map((p) => [p.id, p]));
+  // The admin can play too, so look them up as well (for names and profile photos).
+  const everyone = team?.captain && !members.some((p) => p.id === team.captain!.id) ? [...members, team.captain] : members;
+  const byId = new Map(everyone.map((p) => [p.id, p]));
   const upcoming = new Date(m.startAt).getTime() > Date.now() && !['cancelled', 'done'].includes(m.status);
   // Attendance and stats only appear once the match start time has passed.
   const started = new Date(m.startAt).getTime() <= Date.now() && m.status !== 'cancelled';
@@ -76,7 +78,7 @@ export default function MatchDetail() {
                 const avail = m.availability[pid];
                 return (
                   <li key={pid} className={cx('flex items-center gap-2 rounded-xl border p-2.5', bench ? 'border-white/5 opacity-50 grayscale' : 'border-ember-400/25 bg-ember-500/5')}>
-                    <Avatar name={p?.ign ?? '??'} size={32} dim={bench} />
+                    <Avatar name={p?.ign ?? '??'} src={p?.avatar} size={32} dim={bench} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-white">{p?.ign ?? 'Player'}</p>
                       {bench ? <p className="text-[10px] uppercase tracking-wider text-zinc-400">Bench</p>
@@ -95,7 +97,7 @@ export default function MatchDetail() {
         </Card>
 
         {isCaptain && <MatchLogs m={m} />}
-        {started && (isCaptain ? <ReportCard m={m} members={members} /> : <ResultsCard m={m} members={members} />)}
+        {started && (isCaptain ? <ReportCard m={m} members={members} /> : <ResultsCard m={m} members={everyone} />)}
       </motion.div>
     </div>
   );
@@ -458,9 +460,10 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
               {ids.map((id) => {
                 const r = rows[id];
                 const ign = byId.get(id)?.ign ?? 'Player';
+                const photo = byId.get(id)?.avatar;
                 return (
                   <tr key={id} className={cx('border-t border-white/5', mvp === id && 'bg-ember-500/10')}>
-                    <td className="p-2 font-semibold text-white">{ign}{mvp === id && <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-ember-300"><Crown className="h-3.5 w-3.5" aria-hidden />MVP</span>}</td>
+                    <td className="p-2 font-semibold text-white"><span className="inline-flex items-center gap-2 align-middle"><Avatar name={ign} src={photo} size={24} />{ign}</span>{mvp === id && <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-ember-300"><Crown className="h-3.5 w-3.5" aria-hidden />MVP</span>}</td>
                     <td className="p-2"><input type="checkbox" aria-label={`${ign} joined`} className="h-4 w-4 accent-ember-500" checked={r.joined} onChange={(e) => set(id, { joined: e.target.checked })} /></td>
                     <td className="p-2"><input type="number" min={0} max={99} aria-label={`${ign} kills`} className="input w-16 py-1.5" value={r.kills} onChange={(e) => set(id, { kills: num(e.target.value) })} /></td>
                     <td className="p-2"><input type="number" min={0} max={9999} aria-label={`${ign} damage`} className="input w-20 py-1.5" value={r.damage} onChange={(e) => set(id, { damage: num(e.target.value) })} /></td>
@@ -495,6 +498,7 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
   const data: MatchReport | undefined = q.data;
   const stats = [...(data?.stats ?? [])].sort((a, b) => b.mvpScore - a.mvpScore);
   const ign = (id: string) => members.find((p) => p.id === id)?.ign ?? 'Player';
+  const photo = (id: string) => members.find((p) => p.id === id)?.avatar;
   return (
     <Card>
       <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Match results</h2>
@@ -503,7 +507,8 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
           {stats.map((s) => (
             <li key={s.userId} className={cx('flex items-center justify-between gap-3 py-2.5', s.mvp && 'text-ember-200')}>
               <span className="flex min-w-0 items-center gap-2 font-semibold text-white">
-                {s.mvp && <Crown className="h-4 w-4 text-ember-300" aria-label="MVP" />}{ign(s.userId)}
+                <Avatar name={ign(s.userId)} src={photo(s.userId)} size={28} />
+                {s.mvp && <Crown className="h-4 w-4 text-ember-300" aria-label="MVP" />}<span className="truncate">{ign(s.userId)}</span>
               </span>
               <span className="text-sm text-zinc-300">{s.kills} kills · {s.damage} dmg</span>
             </li>
