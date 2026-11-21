@@ -95,7 +95,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
       const rows = availBy.get(String(m._id)) ?? [];
       const mine = viewerId ? rows.find((a) => String(a.userId) === viewerId) : undefined;
       const inSquad = Boolean(viewerId && out.squad?.confirmed && out.squad.selectedIds.includes(viewerId));
-      if (!viewerIsCaptain && !inSquad) { out.roomId = ''; out.roomPassword = ''; }
+      if (!viewerIsCaptain && !inSquad) { out.roomId = ''; out.roomPassword = ''; out.slot = ''; }
       return {
         ...out,
         inSquad,
@@ -165,7 +165,9 @@ export function matchesRouter(getQueue: () => QueueLike) {
     notifyOffsetMin: z.coerce.number().int().min(0).max(120).default(2),
     roomId: z.string().trim().max(30).default(''),
     roomPassword: z.string().trim().max(30).default(''),
-    tournamentName: z.string().trim().max(60).optional(),
+    slot: z.string().trim().max(10).default(''),
+    /** The scrim or tournament's name (organiser / event), asked for every match. */
+    tournamentName: z.string().trim().min(1, 'Enter the scrim or tournament name').max(60),
   });
 
   r.post('/', requireCaptain, ah(async (req, res) => {
@@ -247,16 +249,18 @@ export function matchesRouter(getQueue: () => QueueLike) {
       throw locked('Notification already sent; time can no longer change');
     }
     if (body.startAt && body.startAt.getTime() < Date.now()) throw badRequest('Pick a time in the future');
+    // Changing the timing needs the scrim / tournament name (older matches may not have one yet).
+    if (body.startAt && !(body.tournamentName ?? match.tournamentName)) throw badRequest('Enter the scrim or tournament name');
     if (body.map && body.drop === undefined && body.map !== match.map) {
       const team = await Team.findById(match.teamId);
       body.drop = body.map === MAP_TBD ? '' : team?.drops.get(body.map) ?? '';
     }
-    const oldRoom = `${match.roomId ?? ''}\u0000${match.roomPassword ?? ''}`;
+    const oldRoom = `${match.roomId ?? ''}\u0000${match.roomPassword ?? ''}\u0000${match.slot ?? ''}`;
     match.set(body);
     await match.save();
     const schedule = await upsertMatchJob(getQueue(), { id: String(match._id), ...match.toObject() });
     // New or changed room ID / password: tell the squad right away, every time.
-    if (match.roomId && `${match.roomId}\u0000${match.roomPassword ?? ''}` !== oldRoom) {
+    if (match.roomId && `${match.roomId}\u0000${match.roomPassword ?? ''}\u0000${match.slot ?? ''}` !== oldRoom) {
       await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'room' })
         .catch((e) => console.error('[room] could not queue room update alert:', (e as Error).message));
     }

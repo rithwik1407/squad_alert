@@ -68,7 +68,7 @@ function NextMatchHero({ m, captain }: { m: Match; captain?: boolean }) {
           {!captain && m.roomId && (
             <div className="mt-4 inline-flex items-center gap-3 rounded-xl bg-black/40 px-3 py-2 ring-1 ring-ember-400/30">
               <KeyRound className="h-4 w-4 text-ember-400" aria-hidden />
-              <span className="font-mono text-sm text-white">Room {m.roomId} / Pass {m.roomPassword || '-'}</span>
+              <span className="font-mono text-sm text-white">Room {m.roomId} / Pass {m.roomPassword || '-'}{m.slot ? ` / Slot ${m.slot}` : ''}</span>
             </div>
           )}
           {captain && (

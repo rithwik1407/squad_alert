@@ -14,6 +14,7 @@ export interface DispatchMatch {
   notifyOffsetMin: number;
   roomId: string;
   roomPassword: string;
+  slot?: string;
   status: MatchStatus;
   notifiedAt: Date | null;
 }

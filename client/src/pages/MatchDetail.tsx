@@ -110,7 +110,7 @@ function RoomBox({ m }: { m: Match }) {
   const copy = (t: string) => navigator.clipboard?.writeText(t).then(() => toast.success('Copied'));
   return (
     <div className="flex flex-wrap gap-2">
-      {[['Room', m.roomId], ['Pass', m.roomPassword || '-']].map(([k, v]) => (
+      {[['Room', m.roomId], ['Pass', m.roomPassword || '-'], ...(m.slot ? [['Slot', m.slot]] : [])].map(([k, v]) => (
         <button key={k} onClick={() => copy(v)} className="flex items-center gap-2 rounded-xl bg-black/50 px-3 py-2 ring-1 ring-ember-400/30 hover:ring-ember-400/60" aria-label={`Copy ${k}`}>
           <KeyRound className="h-4 w-4 text-ember-400" aria-hidden />
           <span className="text-xs uppercase tracking-wider text-zinc-400">{k}</span>

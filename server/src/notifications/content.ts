@@ -7,6 +7,7 @@ export interface MatchForContent {
   startAt: Date;
   roomId?: string | null;
   roomPassword?: string | null;
+  slot?: string | null;
 }
 
 const mapLabel = (map: string) => (map === 'TBD' ? 'Map TBD' : map);
@@ -19,7 +20,7 @@ function minutesLabel(min: number) {
 /** "Match in 2 minutes!" / "Scrim 1 · Erangel · 9:00 PM. Join the lobby now. Room: 1234 / Pass: abc" */
 export function squadNotification(m: MatchForContent, now: Date, tz?: string) {
   const mins = Math.max(0, Math.round((m.startAt.getTime() - now.getTime()) / 60_000));
-  const room = m.roomId ? `Room: ${m.roomId} / Pass: ${m.roomPassword || '-'}` : 'Room: TBA';
+  const room = m.roomId ? `Room: ${m.roomId} / Pass: ${m.roomPassword || '-'}${m.slot ? ` / Slot: ${m.slot}` : ''}` : 'Room: TBA';
   return {
     title: minutesLabel(mins),
     body: `${m.title} · ${mapLabel(m.map)} · ${formatTimeIST(m.startAt, tz)}. Join the lobby now. ${room}`,
@@ -45,7 +46,7 @@ export function selectedNotification(m: MatchForContent & { notifyOffsetMin?: nu
 export function roomNotification(m: MatchForContent, tz?: string) {
   return {
     title: `🎮 IDP updated · ${m.title}`,
-    body: `${mapLabel(m.map)} · ${formatTimeIST(m.startAt, tz)}. Room ID: ${m.roomId || '-'} / Pass: ${m.roomPassword || '-'}. ` +
+    body: `${mapLabel(m.map)} · ${formatTimeIST(m.startAt, tz)}. Room ID: ${m.roomId || '-'} / Pass: ${m.roomPassword || '-'}${m.slot ? ` / Slot: ${m.slot}` : ''}. ` +
       'Join the lobby now. All the best, squad! Play smart, stay together and bring home the chicken dinner 🍗🔥',
     url: `/matches/${m.id}`,
     matchId: m.id,
