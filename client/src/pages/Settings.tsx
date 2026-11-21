@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { BellRing, CheckCircle2, ImagePlus, KeyRound, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
+import { BellRing, CheckCircle2, Download, ImagePlus, Volume2, KeyRound, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
 import { api, type TestNotificationResult } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { disablePush, enablePush, permission, pushConfigured, pushSupport } from '@/lib/push';
@@ -11,6 +11,7 @@ import { normalizeAvatarUrl, photoToAvatar } from '@/lib/avatar';
 import { Avatar, Button, Card, Field, PageHeader, cx } from '@/components/ui';
 import { useToast } from '@/components/Toast';
 import { WHATSAPP_ENABLED } from '@/lib/features';
+import { ALERT_SOUND_URL, playAlertSound } from '@/lib/alertSound';
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -195,6 +196,8 @@ export default function Settings() {
           </div>
         </Card>
 
+        <AlertSoundCard botName={cfg.data?.telegramBot ?? null} />
+
         {user.isAdmin ? <LoginCard email={user.email} onSaved={refresh} /> : (
           <Card className="lg:col-span-2">
             <h2 className="mb-1 flex items-center gap-2 text-xl font-bold text-white"><KeyRound className="h-5 w-5 text-ember-400" aria-hidden />Login</h2>
@@ -320,4 +323,56 @@ function testProblem(t: TestNotificationResult): string {
   if (t.server.push && t.pushDevices === 0 && !t.telegramLinked) return 'No device is registered. Tap Enable push above (on iPhone, from the Home Screen app), or link Telegram.';
   if (!t.server.push && !t.telegramLinked) return 'Push is not set up on the server yet. Link Telegram below to get alerts now.';
   return 'Nothing to send to. Check that the toggles above are on.';
+}
+
+/**
+ * Browsers don't let a web app pick its own push sound, so this explains the per-phone ways to get
+ * the SquadSync sound: Android's per-app sound for the installed app, and Telegram's custom sounds.
+ */
+function AlertSoundCard({ botName }: { botName: string | null }) {
+  const [tab, setTab] = useState<'android' | 'iphone' | 'telegram'>(/iPhone|iPad|iPod/.test(navigator.userAgent) ? 'iphone' : 'android');
+  const steps: Record<typeof tab, string[]> = {
+    android: [
+      'Tap Download sound below and save it.',
+      'Open Android Settings → Apps → SquadSync → Notifications.',
+      'Tap the alert category (or "General"), then Sound, and pick "squadsync-alert".',
+      'Turn on "Pop on screen" and set importance to Urgent so it rings loudly.',
+    ],
+    iphone: [
+      "iPhone doesn't let web apps change the notification sound, so push uses the normal iPhone sound.",
+      'For the SquadSync sound on iPhone, link Telegram and follow the Telegram steps.',
+      'Keep SquadSync open during scrim time and it plays the SquadSync sound itself.',
+    ],
+    telegram: [
+      `After you link Telegram, ${botName ? '@' + botName : 'the bot'} sends you the SquadSync sound. You can also send it /sound.`,
+      'Long-press the sound in the chat and tap "Save for notifications".',
+      'Open the bot chat → tap its name → Notifications → Sound, and pick "squadsync-alert".',
+    ],
+  };
+  return (
+    <Card className="lg:col-span-2">
+      <div className="flex items-start gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ember-500/15 text-ember-300"><Volume2 className="h-5 w-5" aria-hidden /></span>
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-white">Alert sound</h2>
+          <p className="text-sm text-zinc-400">A louder SquadSync sound so you know it's a match, not a normal message.</p>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="ghost" onClick={() => void playAlertSound()} icon={<Volume2 className="h-4 w-4" aria-hidden />}>Play sound</Button>
+        <a className="btn-ghost inline-flex items-center gap-2" href={ALERT_SOUND_URL} download="squadsync-alert.mp3"><Download className="h-4 w-4" aria-hidden />Download sound</a>
+      </div>
+      <div role="tablist" aria-label="Phone" className="mt-5 flex gap-1 rounded-xl bg-white/[0.04] p-1 text-sm">
+        {(['android', 'iphone', 'telegram'] as const).map((t) => (
+          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
+            className={cx('flex-1 rounded-lg px-3 py-1.5 font-semibold transition-colors', tab === t ? 'bg-ember-500 text-ink-950' : 'text-zinc-400 hover:text-white')}>
+            {t === 'android' ? 'Android' : t === 'iphone' ? 'iPhone' : 'Telegram'}
+          </button>
+        ))}
+      </div>
+      <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-zinc-300">
+        {steps[tab].map((s) => <li key={s}>{s}</li>)}
+      </ol>
+    </Card>
+  );
 }

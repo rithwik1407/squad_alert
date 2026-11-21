@@ -39,7 +39,11 @@ self.addEventListener('push', (e) => {
   try { payload = e.data ? e.data.json() : {}; } catch { payload = { data: { title: 'SquadSync', body: e.data && e.data.text() } }; }
   const d = payload.data || payload.notification || {};
   const title = d.title || 'SquadSync';
-  e.waitUntil(
+  // If SquadSync is open on screen, the page plays the louder SquadSync alert sound too.
+  const ring = self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    .then((wins) => wins.forEach((w) => w.postMessage({ type: 'squadsync-alert', title, body: d.body || '' })))
+    .catch(() => {});
+  e.waitUntil(Promise.all([ring,
     self.registration.showNotification(title, {
       body: d.body || '',
       icon: '/icons/icon-192.png',
@@ -47,13 +51,15 @@ self.addEventListener('push', (e) => {
       tag: d.tag || 'squadsync',
       renotify: true,
       requireInteraction: true,
-      vibrate: [200, 100, 200, 100, 400],
+      silent: false,
+      // Long, distinctive buzz so it doesn't feel like a normal message.
+      vibrate: [400, 120, 400, 120, 400, 250, 900],
       data: { url: d.url || '/', matchId: d.matchId || null },
       actions: (d.tag || '').startsWith('match-')
         ? [{ action: 'join', title: "✅ I'm joining" }, { action: 'open', title: 'Open match' }]
         : [{ action: 'open', title: 'Open match' }],
     }),
-  );
+  ]));
 });
 
 self.addEventListener('notificationclick', (e) => {
