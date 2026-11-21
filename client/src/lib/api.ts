@@ -72,6 +72,7 @@ export const api = {
   updateMe: (b: Record<string, unknown>) => request<{ user: User }>('PATCH', '/me', b),
   addFcmToken: (token: string) => request('POST', '/me/fcm-token', { token }),
   removeFcmToken: (token: string) => request('DELETE', '/me/fcm-token', { token }),
+  testNotification: () => request<TestNotificationResult>('POST', '/me/test-notification'),
   telegramLink: () => request<{ url: string }>('POST', '/me/telegram/link'),
   telegramUnlink: () => request('DELETE', '/me/telegram'),
   myStats: () => request<MyStats>('GET', '/me/stats'),
@@ -85,3 +86,10 @@ export const api = {
   muteChat: (userId: string, minutes: number) => request<{ mutes: ChatMute[] }>('POST', '/chat/mutes', { userId, minutes }),
   unmuteChat: (userId: string) => request<{ mutes: ChatMute[] }>('DELETE', `/chat/mutes/${userId}`),
 };
+
+export interface TestNotificationResult {
+  server: { push: boolean; telegram: boolean };
+  pushDevices: number;
+  telegramLinked: boolean;
+  results: { channel: string; ok: boolean; error?: string }[];
+}

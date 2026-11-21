@@ -42,6 +42,14 @@ services:
       # Any made-up password-like word; you reuse it once when you connect the Telegram webhook.
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      # Web push to phones (Firebase console > Project settings > Service accounts > Generate new private key).
+      # Paste project_id, client_email and the whole private_key value from that JSON file.
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
       # Optional: reads uploaded BGMI results screenshots automatically.
       # Free: a Google Gemini key from https://aistudio.google.com/apikey. Used first when set.
       - key: GEMINI_API_KEY

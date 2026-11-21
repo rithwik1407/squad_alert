@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { BellRing, CheckCircle2, KeyRound, ExternalLink, LogOut, MessageCircle, Smartphone, Unlink } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, type TestNotificationResult } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { disablePush, enablePush, permission, pushConfigured, pushSupport } from '@/lib/push';
 import { list } from '@/lib/motion';
@@ -27,6 +27,7 @@ export default function Settings() {
   const cfg = useQuery({ queryKey: ['config'], queryFn: api.config, staleTime: Infinity });
   const [busy, setBusy] = useState<string | null>(null);
   const [perm, setPerm] = useState(permission());
+  const [test, setTest] = useState<TestNotificationResult | null>(null);
   const support = pushSupport();
 
   useEffect(() => {
@@ -54,6 +55,16 @@ export default function Settings() {
       setPerm(permission());
       toast.error(e);
     } finally { setBusy(null); }
+  }
+
+  async function sendTest() {
+    setBusy('test');
+    try {
+      const r = await api.testNotification();
+      setTest(r);
+      if (r.results.some((x) => x.ok)) toast.success('Test sent. Check your phone.');
+      else toast.error(new Error(testProblem(r)));
+    } catch (e) { toast.error(e); } finally { setBusy(null); }
   }
 
   async function linkTelegram() {
@@ -110,7 +121,24 @@ export default function Settings() {
             </Button>
             {user.pushEnabled && <Button variant="ghost" onClick={async () => { await disablePush(); await refresh(); toast.info('This device will no longer get push'); }}>Turn off here</Button>}
           </div>
-          {!pushConfigured() && <p className="mt-3 text-xs text-amber-300/80">Push isn't configured on this deployment yet (Firebase keys missing).</p>}
+          {!pushConfigured() && <p className="mt-3 text-xs text-amber-300/80">Push isn't configured on this deployment yet: the website is missing its Firebase keys (VITE_FIREBASE_* on Vercel, then redeploy).</p>}
+          {pushConfigured() && cfg.data && !cfg.data.pushServerReady && <p className="mt-3 text-xs text-amber-300/80">The server is missing its Firebase keys (FIREBASE_* on Render), so push can't be sent yet even after you enable it.</p>}
+
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <p className="text-sm text-zinc-300">Not sure alerts work? Send yourself a test on every channel you have set up.</p>
+            <Button className="mt-3" variant="ghost" loading={busy === 'test'} onClick={sendTest} icon={<BellRing className="h-4 w-4" aria-hidden />}>Send me a test alert</Button>
+            {test && (
+              <ul className="mt-3 space-y-1.5 text-sm">
+                {test.results.map((r) => (
+                  <li key={r.channel} className="flex items-start gap-2">
+                    <CheckCircle2 className={cx('mt-0.5 h-4 w-4 shrink-0', r.ok ? 'text-emerald-400' : 'text-rose-400')} aria-hidden />
+                    <span className={r.ok ? 'text-zinc-200' : 'text-rose-200'}>{channelName(r.channel)}: {r.ok ? 'sent' : r.error}</span>
+                  </li>
+                ))}
+                {!test.results.length && <li className="text-amber-300/90">{testProblem(test)}</li>}
+              </ul>
+            )}
+          </div>
         </Card>
 
         <Card>
@@ -236,4 +264,16 @@ function WhatsAppCard({ number, on, ready, onToggle, onSaved }: {
       {ready === false && <p className="mt-3 text-xs text-amber-300/80">WhatsApp isn't configured on the server yet (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID).</p>}
     </Card>
   );
+}
+
+const channelName = (c: string) => (c === 'fcm' ? 'Push' : c === 'telegram' ? 'Telegram' : c === 'whatsapp' ? 'WhatsApp' : c);
+
+/** Plain reason when nothing could be sent, so the player knows which step is missing. */
+function testProblem(t: TestNotificationResult): string {
+  const failed = t.results.find((r) => !r.ok);
+  if (failed) return `${channelName(failed.channel)} failed: ${failed.error}`;
+  if (!t.server.push && !t.server.telegram) return 'The server has no alert channel set up yet (Firebase and Telegram keys are missing on Render).';
+  if (t.server.push && t.pushDevices === 0 && !t.telegramLinked) return 'No device is registered. Tap Enable push above (on iPhone, from the Home Screen app), or link Telegram.';
+  if (!t.server.push && !t.telegramLinked) return 'Push is not set up on the server yet. Link Telegram below to get alerts now.';
+  return 'Nothing to send to. Check that the toggles above are on.';
 }

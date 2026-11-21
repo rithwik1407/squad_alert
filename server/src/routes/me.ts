@@ -8,6 +8,8 @@ import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
 import { normalizePhone } from '../lib/phone.js';
 import { badRequest, conflict, forbidden } from '../lib/errors.js';
+import { defaultProviders } from '../notifications/providers.js';
+import { mongoDispatchRepo } from '../scheduler/repo.js';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -73,6 +75,45 @@ meRouter.delete('/fcm-token', ah(async (req, res) => {
   const { token } = parse(tokenSchema, req.body);
   await User.updateOne({ _id: req.user!._id }, { $pull: { fcmTokens: token } });
   res.json({ ok: true });
+}));
+
+const lastTest = new Map<string, number>();
+
+/**
+ * "Send me a test alert": tries every channel set up for this user (not just the first one) and
+ * reports exactly what happened, so a player can see why match alerts aren't reaching their phone.
+ */
+meRouter.post('/test-notification', ah(async (req, res) => {
+  const userId = String(req.user!._id);
+  const last = lastTest.get(userId) ?? 0;
+  if (Date.now() - last < 10_000) throw badRequest('Wait a few seconds before sending another test');
+  lastTest.set(userId, Date.now());
+
+  const server = {
+    push: Boolean(config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey),
+    telegram: Boolean(config.telegram.botToken),
+  };
+  const [me] = await mongoDispatchRepo.getRecipients([userId]);
+  const payload = {
+    title: 'SquadSync test alert',
+    body: 'If you can read this, match alerts will reach this device.',
+    url: '/settings',
+    matchId: '',
+    tag: 'squadsync-test',
+  };
+  const results: { channel: string; ok: boolean; error?: string }[] = [];
+  for (const provider of defaultProviders()) {
+    if (!me || !provider.canReach(me)) continue;
+    try {
+      const r = await provider.send(me, payload);
+      if (r.invalidTokens?.length) await mongoDispatchRepo.removeFcmTokens(userId, r.invalidTokens);
+      results.push({ channel: provider.channel, ok: r.ok, error: r.ok ? undefined : r.error });
+    } catch (e) {
+      results.push({ channel: provider.channel, ok: false, error: (e as Error).message });
+    }
+  }
+  const pushDevices = me?.fcmTokens.length ?? 0;
+  res.json({ server, pushDevices, telegramLinked: Boolean(me?.telegramChatId), results });
 }));
 
 meRouter.post('/telegram/link', ah(async (req, res) => {
