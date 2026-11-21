@@ -12,7 +12,9 @@ import { serializeMatch, type LogSummary } from '../lib/serialize.js';
 import { randomUUID } from 'node:crypto';
 import { markJoining } from '../lib/availability.js';
 import { enqueueImmediate, removeMatchJob, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
-import { readScorecard } from '../lib/scorecard.js';
+import { readScorecard, scorecardReaderReady } from '../lib/scorecard.js';
+import { getScorecardJob, startScorecardJob } from '../lib/scorecardJobs.js';
+import { saveScorecardStats } from '../lib/matchStats.js';
 import { matchPlayer, scoreMvp } from '../lib/mvp.js';
 import { deleteMatchData } from '../lib/deleteMatches.js';
 
@@ -346,25 +348,47 @@ export function matchesRouter(getQueue: () => QueueLike) {
     });
   }));
 
-  /** Read a BGMI results screenshot and suggest numbers per squad player. Nothing is saved: the admin reviews, then saves. */
+  /**
+   * Read a BGMI results screenshot. Matched players' kills, damage, survival and assists are saved (and the MVP
+   * worked out) as soon as reading finishes; the admin can then correct anything and Save again.
+   * Starts a background job (reading can outlast the proxy timeout); the app polls GET /:id/scorecard/:jobId.
+   */
   r.post('/:id/scorecard', requireCaptain, ah(async (req, res) => {
     const { image } = parse(z.object({ image: z.string().min(50).max(7_000_000, 'Screenshot is too big') }), req.body);
     const match = await loadMatch(req);
     if (!hasStarted(match)) throw badRequest('Stats open once the match has started');
-    const rows = await readScorecard(image);
-    const team = await Team.findById(match.teamId).lean();
-    const squad = await Squad.findOne({ matchId: match._id }).lean();
-    const memberIds = [...new Set([...(squad?.selectedIds ?? []), ...(team?.memberIds ?? [])].map(String))];
-    const users = await User.find({ _id: { $in: memberIds } }).select('name ign').lean();
-    const players = users.map((u) => ({ id: String(u._id), ign: u.ign, name: u.name }));
-    const taken = new Set<string>();
-    res.json({
-      rows: rows.map((r) => {
+    if (!scorecardReaderReady()) throw badRequest('Screenshot reading is not set up (GEMINI_API_KEY is missing on the server). Type the numbers in instead.');
+    const matchId = String(match._id);
+    const teamId = match.teamId;
+    const jobId = startScorecardJob(matchId, async () => {
+      const rows = await readScorecard(image);
+      const team = await Team.findById(teamId).lean();
+      const squad = await Squad.findOne({ matchId }).lean();
+      const memberIds = [...new Set([...(squad?.selectedIds ?? []), ...(team?.memberIds ?? [])].map(String))];
+      const users = await User.find({ _id: { $in: memberIds } }).select('name ign').lean();
+      const players = users.map((u) => ({ id: String(u._id), ign: u.ign, name: u.name }));
+      const taken = new Set<string>();
+      const matched = rows.map((r) => {
         const p = matchPlayer(r.name, players.filter((x) => !taken.has(x.id)));
         if (p) taken.add(p.id);
         return { ...r, userId: p?.id ?? null };
-      }),
+      });
+      // Save right away so the numbers land even if the admin left the page while it was reading.
+      await saveScorecardStats(matchId, matched.filter((r) => r.userId).map((r) => ({
+        userId: r.userId!, kills: r.finishes, damage: r.damage, survivalMin: r.survivedMin, assists: r.assists,
+      })));
+      return matched;
     });
+    res.status(202).json({ jobId });
+  }));
+
+  r.get('/:id/scorecard/:jobId', requireCaptain, ah(async (req, res) => {
+    const match = await loadMatch(req);
+    const job = getScorecardJob(String(req.params.jobId), String(match._id));
+    if (!job) throw notFound('That upload expired. Upload the screenshot again.');
+    if (job.status === 'done') res.json({ status: 'done', rows: job.rows });
+    else if (job.status === 'failed') res.json({ status: 'failed', error: job.error, notResults: job.notResults });
+    else res.json({ status: 'reading', seconds: Math.round((Date.now() - job.startedAt) / 1000) });
   }));
 
   r.put('/:id/attendance', requireCaptain, ah(async (req, res) => {
