@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, BellRing, Check, HelpCircle, Layers, MapPin } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { MAPS, MAP_TBD, mapLabel, type MatchMap } from '@/lib/types';
+import { MAPS, MAP_TBD, mapLabel, type MapName, type MatchMap } from '@/lib/types';
 import { fromISTInput, timeIST, toISTInput, fullIST } from '@/lib/time';
 import { list, item, spring } from '@/lib/motion';
 import { Button, Card, Field, PageHeader, Skeleton, cx } from '@/components/ui';
@@ -45,7 +45,10 @@ export default function MatchForm() {
   useEffect(() => {
     const m = existing.data;
     if (!m) return;
-    setTitle(m.title); setType(m.type); setMap(m.map); setDrop(m.drop);
+    setTitle(m.title); setType(m.type);
+    // A copy of an old match on a retired map starts as "Not decided".
+    const retired = !editing && m.map !== MAP_TBD && !(MAPS as readonly string[]).includes(m.map);
+    setMap(retired ? MAP_TBD : m.map); setDrop(retired ? '' : m.drop);
     setOffset(m.notifyOffsetMin); setTournamentName(m.tournamentName);
     if (editing) {
       setStart(toISTInput(m.startAt)); setRoomId(m.roomId); setRoomPassword(m.roomPassword);
@@ -55,6 +58,10 @@ export default function MatchForm() {
       setStart(toISTInput(next.getTime() > Date.now() ? next : new Date(Date.now() + 3600_000)));
     }
   }, [existing.data, editing]);
+
+  // Editing an old match on a retired map (e.g. Sanhok): keep showing it so it stays selected.
+  const savedMap = editing ? existing.data?.map : undefined;
+  const mapChoices: MapName[] = savedMap && savedMap !== MAP_TBD && !(MAPS as readonly string[]).includes(savedMap) ? [...MAPS, savedMap] : [...MAPS];
 
   const pickMap = (mp: MatchMap) => {
     setMap(mp);
@@ -102,7 +109,7 @@ export default function MatchForm() {
           <Card>
             <h2 className="mb-3 text-lg font-bold text-white">Map</h2>
             <div role="radiogroup" aria-label="Map" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {MAPS.map((mp) => (
+              {mapChoices.map((mp) => (
                 <motion.button key={mp} type="button" role="radio" aria-checked={map === mp} onClick={() => pickMap(mp)}
                   variants={item} whileHover={{ y: -3 }} whileTap={{ scale: 0.96 }} transition={spring}
                   className={cx('relative h-28 overflow-hidden rounded-xl text-left ring-1 transition-shadow', map === mp ? 'ring-2 ring-ember-400 shadow-glow' : 'ring-white/10')}>
