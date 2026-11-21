@@ -74,3 +74,19 @@ export async function enqueueImmediate(queue: QueueLike, data: NotifyJobData, no
   await queue.add(JOB_NAME, data, { jobId, delay: 0, ...jobOpts, attempts: 1 });
   return jobId;
 }
+
+/**
+ * Send each player their stats a little after the screenshot is read, so the admin can fix any misread
+ * numbers first. Re-reading replaces the pending job; Save in the app sends straight away instead.
+ */
+export const resultsJobId = (matchId: string) => `${matchId}-results`;
+export async function scheduleResults(queue: QueueLike, matchId: string, delayMs: number) {
+  const jobId = resultsJobId(matchId);
+  await removeIfPresent(queue, jobId);
+  await queue.add(JOB_NAME, { matchId, trigger: 'results' }, { jobId, delay: delayMs, ...jobOpts, attempts: 1 });
+  return jobId;
+}
+export async function sendResultsNow(queue: QueueLike, matchId: string) {
+  await removeIfPresent(queue, resultsJobId(matchId));
+  return enqueueImmediate(queue, { matchId, trigger: 'results' });
+}

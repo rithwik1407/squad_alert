@@ -11,13 +11,16 @@ import { badRequest, locked, notFound } from '../lib/errors.js';
 import { serializeMatch, type LogSummary } from '../lib/serialize.js';
 import { randomUUID } from 'node:crypto';
 import { markJoining } from '../lib/availability.js';
-import { enqueueImmediate, removeMatchJob, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
+import { enqueueImmediate, removeMatchJob, scheduleResults, sendResultsNow, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
 import { readScorecard, scorecardReaderReady } from '../lib/scorecard.js';
 import { getScorecardJob, startScorecardJob } from '../lib/scorecardJobs.js';
 import { readSchedule } from '../lib/schedule.js';
 import { saveScorecardStats } from '../lib/matchStats.js';
 import { matchPlayer, scoreMvp } from '../lib/mvp.js';
 import { deleteMatchData } from '../lib/deleteMatches.js';
+
+/** Stats from a screenshot go out to players this long after reading, unless the admin hits Save first. */
+const RESULTS_DELAY_MS = 5 * 60_000;
 
 /** How long after its start an unfinished match stays on the Upcoming tab (as live) before moving to History. */
 const LIVE_WINDOW_MS = 12 * 3600_000;
@@ -433,6 +436,9 @@ export function matchesRouter(getQueue: () => QueueLike) {
       })));
       // Uploading the results screenshot means the match is over.
       await finish(matchId);
+      // Each player gets their own stats in a few minutes (time for the admin to correct a misread number).
+      await scheduleResults(getQueue(), matchId, RESULTS_DELAY_MS)
+        .catch((e) => console.error('[results] could not queue stats alerts:', (e as Error).message));
       return matched;
     });
     res.status(202).json({ jobId });
@@ -477,6 +483,9 @@ export function matchesRouter(getQueue: () => QueueLike) {
       { $set: { kills: e.kills, damage: e.damage, survivalMin: e.survivalMin, assists: e.assists, mvp: e.mvp, mvpScore: e.mvpScore } },
       { upsert: true },
     )));
+    // Saving is the admin's final word: send each player only their own numbers now (once per player).
+    await sendResultsNow(getQueue(), String(match._id))
+      .catch((e) => console.error('[results] could not queue stats alerts:', (e as Error).message));
     res.json({ ok: true, mvpUserId, scores: rows.map((r) => ({ userId: r.userId, mvpScore: r.mvpScore, mvp: r.mvp })) });
   }));
 

@@ -41,6 +41,20 @@ export function selectedNotification(m: MatchForContent & { notifyOffsetMin?: nu
   };
 }
 
+export interface PlayerResult { kills: number; damage: number; assists: number; survivalMin: number; mvp: boolean }
+
+/** After the results are saved: this player's own numbers only. */
+export function resultsNotification(m: MatchForContent, r: PlayerResult) {
+  const surv = r.survivalMin ? ` · Survived ${Math.round(r.survivalMin)} min` : '';
+  return {
+    title: r.mvp ? `🏆 You're the MVP of ${m.title}!` : `Your stats · ${m.title}`,
+    body: `Kills ${r.kills} · Damage ${Math.round(r.damage)} · Assists ${r.assists}${surv}${r.mvp ? ' · MVP 🏆' : ''}`,
+    url: `/matches/${m.id}`,
+    matchId: m.id,
+    tag: `results-${m.id}`,
+  };
+}
+
 export function captainAlert(m: MatchForContent, now: Date, tz?: string) {
   const mins = Math.max(0, Math.round((m.startAt.getTime() - now.getTime()) / 60_000));
   return {
