@@ -124,7 +124,7 @@ export default function MatchForm() {
         All times are IST (Asia/Kolkata).
       </PageHeader>
 
-      <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <form onSubmit={submit} className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
           {!editing && <ScheduleImageUpload onParsed={applySchedule} />}
           <Card>

@@ -79,8 +79,8 @@ export default function CalendarPage() {
         <div className="grid gap-6 lg:grid-cols-2"><Skeleton className="h-96" /><Skeleton className="h-96" /></div>
       ) : (
         <div className={cx('space-y-6 transition-opacity duration-200', q.isPlaceholderData && 'opacity-50')}>
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
-            <Card className="lg:sticky lg:top-6">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:items-start">
+            <Card className="md:sticky md:top-20 lg:top-6">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <button className="btn-ghost !p-2" aria-label="Previous month" onClick={() => go({ month: shiftMonth(month, -1) })}><ChevronLeft className="h-4 w-4" /></button>
                 <div className="text-center">

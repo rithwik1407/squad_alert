@@ -43,7 +43,7 @@ It has a table with the columns Player, Rating, Finishes, Assists, Damage, Survi
 Read every player row (usually 4) and return each player's name exactly as written (keep the team tag, e.g. "RARE | NAME"),
 Finishes, Assists, Damage, and Survived converted to minutes (e.g. "20.2m" -> 20.2, "12:30" -> 12.5).
 Ignore the Rating column and any "MVP" label.
-Also read the squad's finishing position (rank) if the screen shows it, e.g. "#3", "3/16" or "Rank 3" -> 3, as placement (null if not shown).
+Also read the squad's finishing position: the number after the "#" sign on the screen (e.g. "#3" or "#3/16" -> 3), as placement. Use null only if no position is shown.
 Set isResultsScreen to true only if the image really is this BGMI results table. For anything else (lobby, map,
 inventory, chat, a photo, another game, another screen) set isResultsScreen to false and return an empty players list.`;
 
@@ -345,7 +345,8 @@ function toRead(text: string): ScorecardRead {
     survivedMin: Math.max(0, Math.min(60, Math.round(Number(p.survivedMin || 0) * 10) / 10)),
   })).filter((p) => p.name);
   if (parsed.isResultsScreen === false || !rows.length) throw new NotResultsScreenError();
-  const place = Math.round(Number(parsed.placement));
+  // Accept 3, "3", "#3" or "#3/16".
+  const place = Math.round(Number(/\d+/.exec(String(parsed.placement ?? ''))?.[0] ?? NaN));
   return { rows, placement: parsed.placement != null && place >= 1 && place <= 25 ? place : null };
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarPlus, ChevronDown, Layers, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { list } from '@/lib/motion';
@@ -95,13 +95,18 @@ function SeriesGroup({ g }: { g: SeriesBlock }) {
         <Layers className="h-4 w-4 shrink-0 text-ember-400" aria-hidden />
         <span className="min-w-0 flex-1 truncate font-semibold text-white">{g.name}</span>
         <span className="text-xs text-zinc-500">{g.matches.length} {g.matches.length === 1 ? 'match' : 'matches'}</span>
-        <ChevronDown className={cx('h-4 w-4 shrink-0 text-zinc-500 transition-transform', !open && '-rotate-90')} aria-hidden />
+        <ChevronDown className={cx('h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-200', !open && '-rotate-90')} aria-hidden />
       </button>
-      {open && (
-        <motion.div variants={list} initial="initial" animate="animate" className="grid gap-3 md:grid-cols-2">
-          {g.matches.map((m) => <MatchCard key={m.id} m={m} />)}
-        </motion.div>
-      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key="body" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
+            <motion.div variants={list} initial="initial" animate="animate" className="grid gap-3 p-0.5 md:grid-cols-2">
+              {g.matches.map((m) => <MatchCard key={m.id} m={m} />)}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
