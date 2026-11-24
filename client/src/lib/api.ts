@@ -110,8 +110,10 @@ export const api = {
   /** image: a data: URL of a schedule screenshot. Returns what it says; nothing is created. */
   readSchedule: (image: string, onWait?: (seconds: number) => void) => readSchedule(image, onWait),
   saveAttendance: (id: string, entries: { userId: string; joined: boolean }[]) => request('PUT', `/matches/${id}/attendance`, { entries }),
-  saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[]) =>
-    request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries }),
+  saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[], placement?: number | null) =>
+    request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries, placement }),
+  /** The saved results screenshot as a data: URL. */
+  screenshot: (id: string) => request<{ image: string; uploadedAt: string }>('GET', `/matches/${id}/screenshot`),
 
   notifications: () => request<{ logs: NotificationLog[] }>('GET', '/notifications'),
 
@@ -151,19 +153,19 @@ export interface TestNotificationResult {
  * Upload the screenshot, then poll until the server has read it. Reading runs in the background on the
  * server because Google's free tier can be slow, longer than one web request may stay open.
  */
-async function readScorecard(id: string, image: string, onWait?: (seconds: number) => void): Promise<{ rows: ScorecardRow[] }> {
+async function readScorecard(id: string, image: string, onWait?: (seconds: number) => void): Promise<{ rows: ScorecardRow[]; placement: number | null }> {
   const { jobId } = await request<{ jobId: string }>('POST', `/matches/${id}/scorecard`, { image }, 60_000);
   const started = Date.now();
   while (Date.now() - started < 230_000) {
     await new Promise((r) => setTimeout(r, 2500));
-    const job = await request<{ status: 'reading' | 'done' | 'failed'; rows?: ScorecardRow[]; error?: string; notResults?: boolean; seconds?: number }>(
+    const job = await request<{ status: 'reading' | 'done' | 'failed'; rows?: ScorecardRow[]; placement?: number | null; error?: string; notResults?: boolean; seconds?: number }>(
       'GET', `/matches/${id}/scorecard/${jobId}`, undefined, 20_000,
     ).catch((e: ApiError) => {
       if (e.status === 0 || e.status >= 500) return null; // a blip while polling: keep waiting
       throw e;
     });
     if (!job) continue;
-    if (job.status === 'done') return { rows: job.rows ?? [] };
+    if (job.status === 'done') return { rows: job.rows ?? [], placement: job.placement ?? null };
     if (job.status === 'failed') {
       throw new ApiError(422, job.error ?? 'Could not read the screenshot', job.notResults ? [{ path: 'image', message: 'not_results' }] : undefined);
     }

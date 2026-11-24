@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Ban, CheckCircle2, Copy, CopyPlus, Crown, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
+  ArrowLeft, Ban, CheckCircle2, Copy, Crown, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { isNotResultsError, pendingRead, startRead } from '@/lib/scorecardUpload';
 import { useAuth } from '@/context/AuthContext';
-import { fullIST, timeIST, ago } from '@/lib/time';
+import { fullIST } from '@/lib/time';
 import { list } from '@/lib/motion';
-import type { Match, MatchReport, Member, NotificationLog, ScorecardRow } from '@/lib/types';
+import type { Match, MatchReport, Member, ScorecardRow } from '@/lib/types';
 import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, StatusChip, cx } from '@/components/ui';
 import { MapArt } from '@/components/MapArt';
@@ -102,8 +103,8 @@ export default function MatchDetail() {
           )}
         </Card>
 
-        {isCaptain && <MatchLogs m={m} />}
         {started && (isCaptain ? <ReportCard m={m} members={members} /> : <ResultsCard m={m} members={everyone} />)}
+        {isCaptain && <DeleteMatch m={m} />}
       </motion.div>
     </div>
   );
@@ -124,6 +125,59 @@ function RoomBox({ m }: { m: Match }) {
         </button>
       ))}
     </div>
+  );
+}
+
+/** Deleting is kept apart from the everyday controls so it isn't tapped by mistake. */
+function DeleteMatch({ m }: { m: Match }) {
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const toast = useToast();
+  const dialog = useDialog();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card className="flex flex-wrap items-center justify-between gap-3 border-red-500/20">
+      <div>
+        <h2 className="text-base font-bold text-white">Delete match</h2>
+        <p className="text-xs text-zinc-400">Removes it for everyone, with its squad, attendance, stats and screenshot.</p>
+      </div>
+      <Button variant="danger" loading={busy} icon={<Trash2 className="h-4 w-4" aria-hidden />}
+        onClick={async () => {
+          if (!(await dialog.confirm('Delete this match for everyone?', { text: 'Its squad, attendance and stats are removed from every player. This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
+          setBusy(true);
+          api.deleteMatch(m.id).then(() => {
+            toast.success('Match deleted');
+            qc.removeQueries({ queryKey: ['match', m.id] });
+            qc.invalidateQueries({ queryKey: ['matches'] });
+            qc.invalidateQueries({ queryKey: ['mystats'] });
+            qc.invalidateQueries({ queryKey: ['calendar'] });
+            nav('/matches');
+          }, (e) => { toast.error(e); setBusy(false); });
+        }}>Delete</Button>
+    </Card>
+  );
+}
+
+/** Small preview of the saved results screenshot; tap to see it full size. */
+function ScreenshotThumb({ matchId, at }: { matchId: string; at: string | null }) {
+  const [open, setOpen] = useState(false);
+  const q = useQuery({ queryKey: ['screenshot', matchId, at], queryFn: () => api.screenshot(matchId), enabled: Boolean(at), staleTime: Infinity });
+  if (!at) return null;
+  return (
+    <>
+      <button onClick={() => q.data && setOpen(true)} disabled={!q.data} aria-label="Open the results screenshot"
+        className="group relative h-16 w-28 shrink-0 overflow-hidden rounded-lg bg-white/[0.04] ring-1 ring-white/10 hover:ring-ember-400/60">
+        {q.data ? <img src={q.data.image} alt="Results screenshot" className="h-full w-full object-cover transition-transform group-hover:scale-105" /> : <Skeleton className="h-full w-full" />}
+        <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[10px] font-semibold text-white">Screenshot</span>
+      </button>
+      {open && q.data && createPortal(
+        <div role="dialog" aria-modal="true" aria-label="Results screenshot" className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-3" onClick={() => setOpen(false)}>
+          <button aria-label="Close" className="absolute right-3 top-3 rounded-full bg-white/10 p-2 text-white hover:bg-white/20" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }} onClick={() => setOpen(false)}><X className="h-5 w-5" /></button>
+          <img src={q.data.image} alt="Results screenshot" className="max-h-full max-w-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -164,7 +218,6 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
       </div>
       <div className="flex flex-wrap gap-2">
         {!done && <Link to={`/matches/${m.id}/edit`} className="btn-ghost"><Pencil className="h-4 w-4" aria-hidden />{m.map === 'TBD' ? 'Set map / edit' : 'Edit'}</Link>}
-        <Link to={`/matches/new?from=${m.id}`} className="btn-ghost"><CopyPlus className="h-4 w-4" aria-hidden />Duplicate</Link>
         {!done && !m.locked && (
           <Button variant="primary" loading={busy === 'send'} disabled={!m.squad?.confirmed} icon={<Send className="h-4 w-4" aria-hidden />}
             title={m.squad?.confirmed ? undefined : 'Confirm the squad first'}
@@ -188,18 +241,6 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
               run('done', () => api.setStatus(m.id, 'done', n && n >= 1 && n <= 25 ? n : undefined), 'Match finished');
             }}>Finish</Button>
         )}
-        <Button variant="danger" loading={busy === 'delete'} icon={<Trash2 className="h-4 w-4" aria-hidden />}
-          onClick={async () => {
-            if (!(await dialog.confirm('Delete this match for everyone?', { text: 'Its squad, attendance and stats are removed from every player. This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
-            setBusy('delete');
-            api.deleteMatch(m.id).then(() => {
-              toast.success('Match deleted');
-              qc.removeQueries({ queryKey: ['match', m.id] });
-              qc.invalidateQueries({ queryKey: ['matches'] });
-              qc.invalidateQueries({ queryKey: ['mystats'] });
-              nav('/matches');
-            }, (e) => { toast.error(e); setBusy(null); });
-          }}>Delete</Button>
         {!done && (
           <Button variant="danger" loading={busy === 'cancel'} icon={<Ban className="h-4 w-4" aria-hidden />}
             onClick={async () => { if (await dialog.confirm('Cancel this match?', { text: 'The scheduled alert will be removed.', confirmLabel: 'Cancel match', danger: true })) run('cancel', () => api.cancelMatch(m.id), 'Match cancelled').then(() => nav('/matches')); }}>Cancel</Button>
@@ -225,44 +266,6 @@ function CaptainActions({ m, members }: { m: Match; members: Member[] }) {
         </div>
       )}
     </Card>
-  );
-}
-
-function MatchLogs({ m }: { m: Match }) {
-  const q = useQuery({ queryKey: ['logs', m.id], queryFn: () => api.matchLogs(m.id).then((r) => r.logs), refetchInterval: m.locked ? 15_000 : false });
-  return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white">Delivery log</h2>
-        {q.data?.[0] && <span className="text-xs text-zinc-500">Last {ago(q.data[0].sentAt)}</span>}
-      </div>
-      {q.isLoading ? <Skeleton className="h-24" /> : q.data?.length ? <DeliveryList logs={q.data} /> :
-        <p className="text-sm text-zinc-400">{m.squad?.confirmed ? `Nothing sent yet. Alert fires at ${timeIST(m.notifyAt)}.` : 'Nothing sent yet.'}</p>}
-    </Card>
-  );
-}
-
-/** One line per player: Sent if any channel reached them, otherwise Failed. */
-function DeliveryList({ logs }: { logs: NotificationLog[] }) {
-  const rows = useMemo(() => {
-    const by = new Map<string, { name: string; captain: boolean; pick: boolean; stats: boolean; room: boolean; sent: boolean }>();
-    for (const l of logs) {
-      const k = `${l.userId}:${l.kind}`;
-      const cur = by.get(k) ?? { name: l.user?.ign ?? 'Player', captain: l.kind === 'captain_alert', pick: l.kind === 'selected', stats: l.kind === 'results', room: l.kind === 'room', sent: false };
-      cur.sent ||= l.status === 'sent';
-      by.set(k, cur);
-    }
-    return [...by.entries()];
-  }, [logs]);
-  return (
-    <ul className="divide-y divide-white/5">
-      {rows.map(([k, r]) => (
-        <li key={k} className="flex items-center justify-between gap-3 py-2.5">
-          <span className="min-w-0 truncate font-semibold text-white">{r.name}{r.captain && <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-300">Captain alert</span>}{r.pick && <span className="ml-2 text-[10px] uppercase tracking-wider text-sky-300">Squad pick</span>}{r.stats && <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-300">Match stats</span>}{r.room && <span className="ml-2 text-[10px] uppercase tracking-wider text-ember-300">Room update</span>}</span>
-          {r.sent ? <StatusChip status="sent">Sent</StatusChip> : <StatusChip status="failed">Failed</StatusChip>}
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -309,6 +312,7 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   const [dirty, setDirty] = useState(false);
   const [readErr, setReadErr] = useState<string | null>(null);
   const [waited, setWaited] = useState(0);
+  const [place, setPlace] = useState('');
   const byId = new Map(members.map((p) => [p.id, p]));
 
   useEffect(() => {
@@ -321,6 +325,7 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
       next[id] = { joined: a?.joined ?? true, kills: s?.kills ?? 0, damage: s?.damage ?? 0, survivalMin: s?.survivalMin ?? 0, assists: s?.assists ?? 0 };
     }
     setRows(next);
+    setPlace(q.data.placement ? String(q.data.placement) : '');
     setDirty(false);
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -386,12 +391,15 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
     try {
       const entries = Object.entries(rows);
       await api.saveAttendance(m.id, entries.map(([userId, r]) => ({ userId, joined: r.joined })));
+      const p = Number(place);
       const res = await api.saveStats(m.id, entries.map(([userId, r]) => ({
         userId, kills: r.kills, damage: r.damage, survivalMin: r.survivalMin, assists: r.assists,
-      })));
+      })), p >= 1 && p <= 25 ? Math.round(p) : null);
       toast.success(res.mvpUserId ? `Saved. MVP: ${byId.get(res.mvpUserId)?.ign ?? 'player'}` : 'Saved');
       qc.invalidateQueries({ queryKey: ['report', m.id] });
+      qc.invalidateQueries({ queryKey: ['match', m.id] });
       qc.invalidateQueries({ queryKey: ['mystats'] });
+      qc.invalidateQueries({ queryKey: ['calendar'] });
     } catch (e) { toast.error(e); } finally { setBusy(null); }
   }
 
@@ -432,7 +440,16 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
           <button aria-label="Dismiss" className="rounded p-1 text-zinc-400 hover:text-white" onClick={() => setReadErr(null)}><X className="h-4 w-4" /></button>
         </div>
       )}
-      <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers fill in automatically. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
+      <div className="mb-3 flex flex-wrap items-end gap-4">
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Position</span>
+          <span className="flex items-center gap-1"><span className="font-display text-lg font-bold text-zinc-500">#</span>
+            <input type="number" min={1} max={25} inputMode="numeric" aria-label="Squad position" placeholder="–" className="input w-20 py-1.5"
+              value={place} onChange={(e) => { setDirty(true); setPlace(e.target.value); }} /></span>
+        </label>
+        <ScreenshotThumb matchId={m.id} at={q.data?.screenshotAt ?? null} />
+      </div>
+      <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers and position fill in automatically. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
 
       {unmatched.length > 0 && (
         <div className="mb-3 space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
@@ -507,7 +524,13 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
   const photo = (id: string) => members.find((p) => p.id === id)?.avatar;
   return (
     <Card>
-      <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Match results</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Match results</h2>
+        <div className="flex items-center gap-3">
+          {data?.placement ? <span className="chip bg-ember-500/15 text-ember-300">Position #{data.placement}</span> : null}
+          <ScreenshotThumb matchId={m.id} at={data?.screenshotAt ?? null} />
+        </div>
+      </div>
       {q.isLoading ? <Skeleton className="h-24" /> : !stats.length ? <p className="text-sm text-zinc-400">Results aren't posted yet.</p> : (
         <ul className="divide-y divide-white/5">
           {stats.map((s) => (

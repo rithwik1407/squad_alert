@@ -76,7 +76,7 @@ export default function Notifications() {
   return (
     <div>
       <PageHeader eyebrow={isCaptain ? 'Delivery history' : 'Inbox'} title={isCaptain ? 'Notifications' : 'Your alerts'}>
-        {isCaptain ? 'Every attempt: who, which channel, when, and whether it landed.' : 'Alerts SquadSync sent you.'}
+        {isCaptain ? "Today's alerts: who, which channel, when, and whether it landed." : 'Alerts SquadSync sent you today. They clear at midnight.'}
       </PageHeader>
 
       {isCaptain && (
@@ -92,7 +92,7 @@ export default function Notifications() {
       )}
 
       {q.isLoading ? <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div> :
-        !logs.length ? <Card><EmptyState title="All quiet" text="Alerts show up here once a match notification goes out." /></Card> :
+        !logs.length ? <Card><EmptyState title="Nothing today" text="Today's match alerts show up here. Older days are cleared." /></Card> :
         isCaptain ? <Card key={filter}><LogTable logs={logs} /></Card> : <PlayerInbox logs={logs} />}
     </div>
   );

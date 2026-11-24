@@ -1,5 +1,5 @@
 import mongoose, { type Types } from 'mongoose';
-import { Attendance, Availability, DeliveryClaim, Match, NotificationLog, Squad, Stats } from '../models/index.js';
+import { Attendance, Availability, DeliveryClaim, Match, MatchScreenshot, NotificationLog, Squad, Stats } from '../models/index.js';
 
 /**
  * Delete matches and everything hanging off them: squads, delivery logs, check-ins, attendance and stats.
@@ -11,6 +11,7 @@ export async function deleteMatchData(ids: Types.ObjectId[]) {
   await Promise.all([
     Squad.deleteMany(byMatch), NotificationLog.deleteMany(byMatch), Attendance.deleteMany(byMatch),
     Stats.deleteMany(byMatch), Availability.deleteMany(byMatch), DeliveryClaim.deleteMany(byMatch),
+    MatchScreenshot.deleteMany(byMatch),
   ]);
   await Match.deleteMany({ _id: { $in: ids } });
   return ids.length;

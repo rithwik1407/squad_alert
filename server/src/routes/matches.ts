@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth, requireCaptain } from '../middleware/auth.js';
 import {
-  Attendance, AVAILABILITY, Availability, MAP_TBD, MATCH_MAPS, PICKABLE_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team, User,
+  Attendance, AVAILABILITY, Availability, MAP_TBD, MatchScreenshot, MATCH_MAPS, PICKABLE_MAPS, Match, MATCH_TYPES, NotificationLog, Squad, SQUAD_SIZE, Stats, Team, User,
   type MatchDoc,
 } from '../models/index.js';
 import { badRequest, locked, notFound } from '../lib/errors.js';
@@ -12,7 +12,7 @@ import { serializeMatch, type LogSummary } from '../lib/serialize.js';
 import { randomUUID } from 'node:crypto';
 import { markJoining } from '../lib/availability.js';
 import { enqueueImmediate, removeMatchJob, scheduleResults, sendResultsNow, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
-import { readScorecard, scorecardReaderReady } from '../lib/scorecard.js';
+import { readScorecardWithPlacement, scorecardReaderReady } from '../lib/scorecard.js';
 import { getScorecardJob, startScorecardJob } from '../lib/scorecardJobs.js';
 import { readSchedule } from '../lib/schedule.js';
 import { saveScorecardStats } from '../lib/matchStats.js';
@@ -435,13 +435,17 @@ export function matchesRouter(getQueue: () => QueueLike) {
   // Attendance and stats only open once the match has started.
   r.get('/:id/report', ah(async (req, res) => {
     const match = await loadMatch(req);
-    if (!hasStarted(match)) { res.json({ open: false, attendance: [], stats: [] }); return; }
-    const [attendance, stats] = await Promise.all([
+    if (!hasStarted(match)) { res.json({ open: false, attendance: [], stats: [], placement: null, screenshotAt: null }); return; }
+    const [attendance, stats, shot] = await Promise.all([
       Attendance.find({ matchId: match._id }).lean(),
       Stats.find({ matchId: match._id }).lean(),
+      MatchScreenshot.findOne({ matchId: match._id }).select('updatedAt').lean(),
     ]);
     res.json({
       open: true,
+      placement: match.placement ?? null,
+      /** Set when a results screenshot is saved; fetch it from GET /:id/screenshot. */
+      screenshotAt: shot?.updatedAt ?? null,
       attendance: attendance.map((a) => ({ userId: String(a.userId), joined: a.joined })),
       stats: stats.map((s) => ({
         userId: String(s.userId), kills: s.kills, damage: s.damage, survivalMin: s.survivalMin ?? 0, assists: s.assists ?? 0,
@@ -462,8 +466,12 @@ export function matchesRouter(getQueue: () => QueueLike) {
     if (!scorecardReaderReady()) throw badRequest('Screenshot reading is not set up (GEMINI_API_KEY is missing on the server). Type the numbers in instead.');
     const matchId = String(match._id);
     const teamId = match.teamId;
+    const uploaderId = req.user!._id;
     const jobId = startScorecardJob(matchId, async () => {
-      const rows = await readScorecard(image);
+      const { rows, placement } = await readScorecardWithPlacement(image);
+      // Keep the screenshot so the team can open it again later, and take the position from it.
+      await MatchScreenshot.updateOne({ matchId }, { $set: { image, uploadedBy: uploaderId } }, { upsert: true });
+      if (placement) await Match.updateOne({ _id: matchId }, { $set: { placement } });
       const team = await Team.findById(teamId).lean();
       const squad = await Squad.findOne({ matchId }).lean();
       const memberIds = [...new Set([...(squad?.selectedIds ?? []), ...(team?.memberIds ?? [])].map(String))];
@@ -484,7 +492,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
       // Each player gets their own stats in a few minutes (time for the admin to correct a misread number).
       await scheduleResults(getQueue(), matchId, RESULTS_DELAY_MS)
         .catch((e) => console.error('[results] could not queue stats alerts:', (e as Error).message));
-      return matched;
+      return { rows: matched, placement };
     });
     res.status(202).json({ jobId });
   }));
@@ -493,9 +501,20 @@ export function matchesRouter(getQueue: () => QueueLike) {
     const match = await loadMatch(req);
     const job = getScorecardJob(String(req.params.jobId), String(match._id));
     if (!job) throw notFound('That upload expired. Upload the screenshot again.');
-    if (job.status === 'done') res.json({ status: 'done', rows: job.rows });
+    if (job.status === 'done') {
+      const out = job.rows as { rows: unknown[]; placement: number | null };
+      res.json({ status: 'done', rows: out.rows, placement: out.placement });
+    }
     else if (job.status === 'failed') res.json({ status: 'failed', error: job.error, notResults: job.notResults });
     else res.json({ status: 'reading', seconds: Math.round((Date.now() - job.startedAt) / 1000) });
+  }));
+
+  /** The saved results screenshot (any team member, once the match has started). */
+  r.get('/:id/screenshot', ah(async (req, res) => {
+    const match = await loadMatch(req);
+    const shot = hasStarted(match) ? await MatchScreenshot.findOne({ matchId: match._id }).lean() : null;
+    if (!shot) throw notFound('No screenshot saved for this match');
+    res.json({ image: shot.image, uploadedAt: shot.updatedAt });
   }));
 
   r.put('/:id/attendance', requireCaptain, ah(async (req, res) => {
@@ -509,7 +528,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
 
   /** Save kills, damage, survival and assists. The MVP is worked out here from those numbers. */
   r.put('/:id/stats', requireCaptain, ah(async (req, res) => {
-    const { entries } = parse(z.object({
+    const { entries, placement } = parse(z.object({
       entries: z.array(z.object({
         userId: z.string().regex(/^[a-f\d]{24}$/i),
         kills: z.number().int().min(0).max(99),
@@ -517,10 +536,13 @@ export function matchesRouter(getQueue: () => QueueLike) {
         survivalMin: z.number().min(0).max(60).default(0),
         assists: z.number().int().min(0).max(99).default(0),
       })).max(8),
+      /** Squad finishing position; null clears it, left out keeps it. */
+      placement: z.number().int().min(1).max(25).nullable().optional(),
     }), req.body);
     if (new Set(entries.map((e) => e.userId)).size !== entries.length) throw badRequest('A player is listed twice');
     const match = await loadMatch(req);
     if (!hasStarted(match)) throw badRequest('Stats open once the match has started');
+    if (placement !== undefined) await Match.updateOne({ _id: match._id }, { $set: { placement } });
     const { rows, mvpUserId } = scoreMvp(entries);
     await Stats.deleteMany({ matchId: match._id, userId: { $nin: entries.map((e) => e.userId) } });
     await Promise.all(rows.map((e) => Stats.updateOne(

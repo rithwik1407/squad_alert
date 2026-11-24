@@ -16,9 +16,10 @@ export interface ScorecardRow {
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['isResultsScreen', 'players'],
+  required: ['isResultsScreen', 'placement', 'players'],
   properties: {
     isResultsScreen: { type: 'boolean', description: 'true only for a BGMI end-of-match team results table' },
+    placement: { type: ['integer', 'null'], description: 'Squad finishing position shown on the screen, e.g. "#3" or "3/16" -> 3; null if not shown' },
     players: {
       type: 'array',
       items: {
@@ -42,6 +43,7 @@ It has a table with the columns Player, Rating, Finishes, Assists, Damage, Survi
 Read every player row (usually 4) and return each player's name exactly as written (keep the team tag, e.g. "RARE | NAME"),
 Finishes, Assists, Damage, and Survived converted to minutes (e.g. "20.2m" -> 20.2, "12:30" -> 12.5).
 Ignore the Rating column and any "MVP" label.
+Also read the squad's finishing position (rank) if the screen shows it, e.g. "#3", "3/16" or "Rank 3" -> 3, as placement (null if not shown).
 Set isResultsScreen to true only if the image really is this BGMI results table. For anything else (lobby, map,
 inventory, chat, a photo, another game, another screen) set isResultsScreen to false and return an empty players list.`;
 
@@ -57,7 +59,7 @@ export const scorecardReaderReady = () =>
 /** Extra line for readers without a JSON-schema mode (Groq, OpenRouter). */
 const JSON_HINT = `
 Reply with JSON only, no other text, in exactly this shape:
-{"isResultsScreen": true, "players": [{"name": "RARE | NAME", "finishes": 0, "assists": 0, "damage": 0, "survivedMin": 0}]}`;
+{"isResultsScreen": true, "placement": 3, "players": [{"name": "RARE | NAME", "finishes": 0, "assists": 0, "damage": 0, "survivedMin": 0}]}`;
 
 const MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
 type Media = (typeof MEDIA)[number];
@@ -78,12 +80,14 @@ export interface VisionTask<T> {
   manual: string;
 }
 
-const SCORECARD_TASK: VisionTask<ScorecardRow[]> = {
+export interface ScorecardRead { rows: ScorecardRow[]; placement: number | null }
+
+const SCORECARD_TASK: VisionTask<ScorecardRead> = {
   prompt: PROMPT,
   jsonHint: JSON_HINT,
   schema: SCHEMA as unknown as Record<string, unknown>,
   get geminiSchema() { return GEMINI_SCHEMA; },
-  parse: (text) => toRows(text),
+  parse: (text) => toRead(text),
   isFinal: (e) => e instanceof NotResultsScreenError,
   manual: 'type the numbers in',
 };
@@ -98,7 +102,12 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
  *   4. Claude          ANTHROPIC_API_KEY   (paid)
  * So one free tier being busy or used up for the day doesn't stop the upload.
  */
-export function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
+export async function readScorecard(dataUrl: string): Promise<ScorecardRow[]> {
+  return (await readImage(dataUrl, SCORECARD_TASK)).rows;
+}
+
+/** Like readScorecard, plus the squad's finishing position when the screen shows it. */
+export function readScorecardWithPlacement(dataUrl: string): Promise<ScorecardRead> {
   return readImage(dataUrl, SCORECARD_TASK);
 }
 
@@ -180,6 +189,7 @@ const GEMINI_SCHEMA = {
   required: ['isResultsScreen', 'players'],
   properties: {
     isResultsScreen: { type: 'BOOLEAN' },
+    placement: { type: 'INTEGER', nullable: true },
     players: {
       type: 'ARRAY',
       items: {
@@ -325,8 +335,8 @@ export function extractJson<T>(text: string, failMessage: string): T {
   try { return JSON.parse(json) as T; } catch { throw badRequest(failMessage); }
 }
 
-function toRows(text: string): ScorecardRow[] {
-  const parsed = extractJson<{ isResultsScreen?: boolean; players?: ScorecardRow[] }>(text, 'Could not read that screenshot. Type the numbers in instead.');
+function toRead(text: string): ScorecardRead {
+  const parsed = extractJson<{ isResultsScreen?: boolean; placement?: unknown; players?: ScorecardRow[] }>(text, 'Could not read that screenshot. Type the numbers in instead.');
   const rows = (parsed.players ?? []).map((p) => ({
     name: String(p.name ?? '').trim(),
     finishes: clampInt(p.finishes, 99),
@@ -335,7 +345,8 @@ function toRows(text: string): ScorecardRow[] {
     survivedMin: Math.max(0, Math.min(60, Math.round(Number(p.survivedMin || 0) * 10) / 10)),
   })).filter((p) => p.name);
   if (parsed.isResultsScreen === false || !rows.length) throw new NotResultsScreenError();
-  return rows;
+  const place = Math.round(Number(parsed.placement));
+  return { rows, placement: parsed.placement != null && place >= 1 && place <= 25 ? place : null };
 }
 
 function clampInt(v: unknown, max: number) {
