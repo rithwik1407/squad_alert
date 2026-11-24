@@ -7,6 +7,7 @@ import { startCatchupLoop } from './scheduler/catchup.js';
 import { startDailySummaryLoop } from './scheduler/dailySummary.js';
 import { seedTeamRare } from './seed-data.js';
 import { runStartupMigrations } from './lib/deleteMatches.js';
+import { ensureTelegramWebhook } from './lib/telegramWebhook.js';
 
 /** Keep retrying instead of crashing, so /api/health stays up and shows db: "down" with the reason in the logs. */
 async function connectWithRetry() {
@@ -35,6 +36,8 @@ async function main() {
   } catch (e) {
     console.error('[migrate] failed:', (e as Error).message);
   }
+
+  void ensureTelegramWebhook();
 
   if (process.env.SEED_TEAM_RARE === 'true') {
     try {

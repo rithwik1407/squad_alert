@@ -22,6 +22,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
 import { CheckinBoard } from '@/components/CheckinBoard';
 import { WHATSAPP_ENABLED } from '@/lib/features';
+import { PlayClassicCard } from '@/components/ClassicInvite';
+import { DailyTip } from '@/components/DailyTip';
 
 export default function Dashboard() {
   const { isCaptain } = useAuth();
@@ -105,6 +107,7 @@ function CaptainDashboard() {
         <Link to="/matches/new" className="btn-primary"><CalendarPlus className="h-4 w-4" aria-hidden />Schedule</Link>
       } />
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
+        <DailyTip />
         {requests.length > 0 && (
           <motion.div variants={item}>
             <Link to="/team" className="group flex items-center justify-between gap-3 rounded-xl bg-ember-500/10 p-3 text-sm ring-1 ring-ember-400/30 hover:bg-ember-500/15">
@@ -122,6 +125,8 @@ function CaptainDashboard() {
         )}
 
         {next && !next.locked && team && <QuickPicker m={next} members={team.members} />}
+
+        <PlayClassicCard />
 
         <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
           <section aria-labelledby="today-h" className="min-w-0">
@@ -228,6 +233,7 @@ function PlayerDashboard() {
     <div>
       <PageHeader eyebrow="Player" title={`Welcome, ${user?.ign.replace(/^RARE\s*[|丨]\s*/i, '') ?? ''}`}>Your team's scheduled matches. Tap one to see the details.</PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
+        <DailyTip />
         {!user?.pushEnabled && !user?.telegramLinked && !(WHATSAPP_ENABLED && user?.whatsappLinked) && (
           <Card className="flex flex-wrap items-center justify-between gap-3 border-ember-400/30">
             <p className="text-sm text-zinc-200"><BellRing className="mr-2 inline h-4 w-4 text-ember-400" aria-hidden />Turn on alerts so you don't miss the lobby.</p>
@@ -237,6 +243,8 @@ function PlayerDashboard() {
         {q.isLoading ? <Skeleton className="h-56" /> : next ? <NextMatchHero m={next} /> : (
           <Card><EmptyState title="No matches scheduled" text="When the admin schedules a scrim it shows up here. If you're picked, you'll get pinged before it starts." /></Card>
         )}
+
+        <PlayClassicCard />
 
         <motion.div variants={item} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile label="Matches" value={stats.data?.totals.matches ?? null} icon={<Swords className="h-3.5 w-3.5" aria-hidden />} />

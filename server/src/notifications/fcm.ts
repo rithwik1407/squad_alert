@@ -47,7 +47,7 @@ export class FcmProvider implements NotificationProvider {
     const res = await messaging.sendEachForMulticast({
       tokens: r.fcmTokens,
       // Data-only payload: the service worker builds the notification so the tap URL is always ours.
-      data: { title: p.title, body: p.body, url: p.url, matchId: p.matchId, tag: p.tag },
+      data: { ...(p.extra ?? {}), title: p.title, body: p.body, url: p.url, matchId: p.matchId, tag: p.tag },
       webpush: {
         headers: { Urgency: 'high', TTL: '300' },
         fcmOptions: { link },

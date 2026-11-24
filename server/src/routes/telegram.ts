@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { telegramApi } from '../notifications/telegram.js';
 import { markJoining } from '../lib/availability.js';
 import { Match } from '../models/index.js';
+import { respondToInvite } from '../lib/invites.js';
 
 /**
  * Telegram webhook. Set it once with:
@@ -37,6 +38,26 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
   const cb = req.body?.callback_query;
   if (cb) {
     res.sendStatus(200);
+    // I'm in / I'm out under a classic-match invite.
+    const ci = String(cb.data ?? '').match(/^ci:([a-f0-9]{24}):(in|out)$/);
+    if (ci) {
+      const who = await User.findOne({ telegramChatId: String(cb.from?.id ?? cb.message?.chat?.id) }).lean();
+      const invite = who ? await respondToInvite(ci[1], String(who._id), ci[2] as 'in' | 'out', 'telegram') : null;
+      const answer = !who ? 'This Telegram is not linked to SquadSync. Link it in Settings.'
+        : !invite ? 'That invite has expired or was not for you.'
+        : ci[2] === 'in' ? "You're in ✅" : "You're out ❌";
+      await telegramApi('answerCallbackQuery', { callback_query_id: cb.id, text: answer }).catch(() => {});
+      // Show the answer under the invite so the chat reads clearly.
+      if (invite && cb.message?.message_id) {
+        const base: string = cb.message.text ?? '';
+        await telegramApi('editMessageText', {
+          chat_id: cb.message.chat.id, message_id: cb.message.message_id,
+          text: `${base.split('\n\nYour answer:')[0]}\n\nYour answer: ${ci[2] === 'in' ? "I'm in ✅" : "I'm out ❌"}`,
+          reply_markup: cb.message.reply_markup,
+        }).catch(() => {});
+      }
+      return;
+    }
     const m = String(cb.data ?? '').match(/^join:([a-f0-9]{24})$/);
     const user = m ? await User.findOne({ telegramChatId: String(cb.from?.id ?? cb.message?.chat?.id) }) : null;
     let text = 'Could not record that. Open SquadSync instead.';

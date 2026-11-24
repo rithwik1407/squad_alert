@@ -3,7 +3,13 @@
 @tailwind utilities;
 
 @layer base {
-  :root { color-scheme: dark; }
+  /* Accent palettes (R G B). The default is SquadSync orange; <html data-accent="..."> switches it. */
+  :root { color-scheme: dark; --ember-300: 255 192 120; --ember-400: 255 169 77; --ember-500: 255 138 31; --ember-600: 240 109 0; --ember-700: 194 84 0; }
+  :root[data-accent='cyan'] { --ember-300: 165 243 252; --ember-400: 103 232 249; --ember-500: 34 211 238; --ember-600: 8 145 178; --ember-700: 14 116 144; }
+  :root[data-accent='lime'] { --ember-300: 217 249 157; --ember-400: 190 242 100; --ember-500: 163 230 53; --ember-600: 101 163 13; --ember-700: 77 124 15; }
+  :root[data-accent='pink'] { --ember-300: 249 168 212; --ember-400: 244 114 182; --ember-500: 236 72 153; --ember-600: 219 39 119; --ember-700: 190 24 93; }
+  :root[data-accent='violet'] { --ember-300: 196 181 253; --ember-400: 167 139 250; --ember-500: 139 92 246; --ember-600: 124 58 237; --ember-700: 109 40 217; }
+  :root[data-accent='red'] { --ember-300: 252 165 165; --ember-400: 248 113 113; --ember-500: 239 68 68; --ember-600: 220 38 38; --ember-700: 185 28 28; }
   html, body, #root { min-height: 100%; }
   /* No rubber-band bounce past the top/bottom (it showed a gap above the header in the installed app). */
   html { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; scroll-behavior: smooth; }
@@ -20,13 +26,13 @@
     /* Static layers only: a tiny pre-rendered grain tile + two glows. No fixed overlays, no live SVG filters. */
     background-image:
       url('/noise.png'),
-      radial-gradient(1200px 600px at 85% -10%, rgba(255, 138, 31, 0.10), transparent 60%),
-      radial-gradient(900px 500px at -10% 110%, rgba(255, 169, 77, 0.06), transparent 60%);
+      radial-gradient(1200px 600px at 85% -10%, rgb(var(--ember-500) / 0.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgb(var(--ember-400) / 0.06), transparent 60%);
     background-repeat: repeat, no-repeat, no-repeat;
   }
   :focus-visible { @apply outline-none ring-2 ring-ember-400 ring-offset-2 ring-offset-ink-950; }
   h1, h2, h3 { @apply font-display tracking-wide; }
-  ::selection { background: rgba(255, 138, 31, .35); }
+  ::selection { background: rgb(var(--ember-500) / .35); }
 }
 
 @layer components {
@@ -39,7 +45,7 @@
   /* Gradient border via mask */
   .gborder::after {
     content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
-    background: linear-gradient(135deg, rgba(255,169,77,.55), rgba(255,138,31,.05) 40%, rgba(255,255,255,.04) 60%, rgba(255,138,31,.35));
+    background: linear-gradient(135deg, rgb(var(--ember-400) / .55), rgb(var(--ember-500) / .05) 40%, rgba(255,255,255,.04) 60%, rgb(var(--ember-500) / .35));
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor; mask-composite: exclude;
   }
@@ -57,12 +63,12 @@
   }
   .btn-primary {
     @apply btn text-ink-950 bg-gradient-to-b from-ember-400 to-ember-500;
-    box-shadow: 0 8px 30px -8px rgba(255,138,31,.6), inset 0 1px 0 rgba(255,255,255,.35);
+    box-shadow: 0 8px 30px -8px rgb(var(--ember-500) / .6), inset 0 1px 0 rgba(255,255,255,.35);
   }
   /* Gradients can't transition, so brighten with a filter instead of swapping the gradient stops. */
   .btn-primary:hover:not(:disabled) {
     filter: brightness(1.08);
-    box-shadow: 0 12px 34px -8px rgba(255,138,31,.75), inset 0 1px 0 rgba(255,255,255,.4);
+    box-shadow: 0 12px 34px -8px rgb(var(--ember-500) / .75), inset 0 1px 0 rgba(255,255,255,.4);
   }
   .btn-ghost { @apply btn text-zinc-200 bg-white/5 hover:bg-white/10 border border-white/10; }
   .btn-danger { @apply btn text-red-200 bg-red-500/10 hover:bg-red-500/20 border border-red-400/20; }

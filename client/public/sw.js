@@ -1,5 +1,5 @@
 /* SquadSync service worker: web push (FCM data messages) + light offline shell. */
-const CACHE = 'squadsync-v4';
+const CACHE = 'squadsync-v5';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/badge-96.png'];
 
 self.addEventListener('install', (e) => {
@@ -54,10 +54,13 @@ self.addEventListener('push', (e) => {
       silent: false,
       // Long, distinctive buzz so it doesn't feel like a normal message.
       vibrate: [400, 120, 400, 120, 400, 250, 900],
-      data: { url: d.url || '/', matchId: d.matchId || null },
-      actions: (d.tag || '').startsWith('match-')
-        ? [{ action: 'join', title: "✅ I'm joining" }, { action: 'open', title: 'Open match' }]
-        : [{ action: 'open', title: 'Open match' }],
+      data: { url: d.url || '/', matchId: d.matchId || null, inviteId: d.inviteId || null },
+      // Classic-match invite: answer straight from the notification.
+      actions: /^classic-[a-f0-9]{24}$/.test(d.tag || '')
+        ? [{ action: 'in', title: "✅ I'm in" }, { action: 'out', title: "❌ I'm out" }]
+        : (d.tag || '').startsWith('match-')
+          ? [{ action: 'join', title: "✅ I'm joining" }, { action: 'open', title: 'Open match' }]
+          : [{ action: 'open', title: 'Open' }],
     }),
   ]));
 });
@@ -65,6 +68,17 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const matchId = e.notification.data && e.notification.data.matchId;
+  const inviteId = e.notification.data && e.notification.data.inviteId;
+  if ((e.action === 'in' || e.action === 'out') && inviteId) {
+    e.waitUntil(
+      fetch(`/api/invites/${inviteId}/respond?via=push`, {
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ response: e.action }),
+      })
+        .then((r) => { if (!r.ok) throw new Error(String(r.status)); })
+        .catch(() => self.clients.openWindow(`/classic/${inviteId}`)),
+    );
+    return;
+  }
   if (e.action === 'join' && matchId) {
     // Tell the captain without opening the app (same-origin, so the auth cookie is sent).
     e.waitUntil(
