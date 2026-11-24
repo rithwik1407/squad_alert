@@ -2,7 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ErrorBoundary } from './ErrorBoundary';
-import { Bell, BookUser, CalendarClock, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
+import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { Avatar, cx, Skeleton } from './ui';
@@ -20,10 +20,12 @@ export function Layout() {
   }, [loc.pathname, navType]);
   const { requests } = useJoinRequests();
   const badges: Record<string, number> = { '/team': requests.length };
-  const items = isCaptain
+  // The captain's phone bar is already full, so Calendar sits in the top bar there instead (phoneBar: false).
+  const items: { to: string; label: string; icon: typeof Home; phoneBar?: boolean }[] = isCaptain
     ? [
         { to: '/', label: 'Home', icon: Home },
         { to: '/matches', label: 'Matches', icon: CalendarClock },
+        { to: '/calendar', label: 'Calendar', icon: CalendarDays, phoneBar: false },
         { to: '/scrims', label: 'Scrims', icon: BookUser },
         { to: '/team', label: 'Team', icon: Users },
         { to: '/notifications', label: 'Alerts', icon: Bell },
@@ -32,6 +34,7 @@ export function Layout() {
     : [
         { to: '/', label: 'Home', icon: Home },
         { to: '/stats', label: 'Stats', icon: BarChart3 },
+        { to: '/calendar', label: 'Calendar', icon: CalendarDays },
         { to: '/scrims', label: 'Scrims', icon: BookUser },
         { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
@@ -84,7 +87,14 @@ export function Layout() {
       {/* Mobile top bar */}
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.05] bg-ink-950/90 px-4 py-3 backdrop-blur-md lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
         <Logo compact />
-        {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
+        <div className="flex items-center gap-2">
+          {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
+          {isCaptain && (
+            <NavLink to="/calendar" aria-label="Calendar" className={({ isActive }) => cx('rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
+              <CalendarDays className="h-5 w-5" aria-hidden />
+            </NavLink>
+          )}
+        </div>
       </div>
 
       <main id="main" className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
@@ -104,7 +114,7 @@ export function Layout() {
       {/* Mobile bottom nav */}
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <ul className="mx-auto flex max-w-lg justify-around px-2">
-          {items.map(({ to, label, icon: I }) => (
+          {items.filter((i) => i.phoneBar !== false).map(({ to, label, icon: I }) => (
             <li key={to} className="flex-1">
               <NavLink to={to} end={to === '/'} className="relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-transform duration-150 active:scale-90">
                 {({ isActive }) => (

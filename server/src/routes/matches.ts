@@ -18,6 +18,9 @@ import { readSchedule } from '../lib/schedule.js';
 import { saveScorecardStats } from '../lib/matchStats.js';
 import { matchPlayer, scoreMvp } from '../lib/mvp.js';
 import { deleteMatchData } from '../lib/deleteMatches.js';
+import { buildCalendarDays, isMonthKey, monthRange, PLACEMENT_POINTS, POINTS_PER_KILL } from '../lib/calendar.js';
+import { dayKey } from '../lib/dailySummary.js';
+import { config } from '../config.js';
 
 /** Stats from a screenshot go out to players this long after reading, unless the admin hits Save first. */
 const RESULTS_DELAY_MS = 5 * 60_000;
@@ -130,6 +133,38 @@ export function matchesRouter(getQueue: () => QueueLike) {
     }
     const matches = await Match.find(filter).sort({ startAt: scope === 'past' ? -1 : 1 }).limit(100);
     res.json({ matches: await view(matches, String(req.user!._id), isCaptain(req)) });
+  }));
+
+  /**
+   * Match calendar for one month (team time zone): every non-cancelled team match grouped by day,
+   * with a points table per day (placement points + 1 per finish). Open to the whole team.
+   */
+  r.get('/calendar', ah(async (req, res) => {
+    const teamId = teamIdOf(req);
+    const tz = config.displayTimeZone;
+    const month = isMonthKey(req.query.month) ? req.query.month : dayKey(new Date(), tz).slice(0, 7);
+    const { start, end } = monthRange(month, tz);
+    const matches = await Match.find({ teamId, status: { $ne: 'cancelled' }, startAt: { $gte: start, $lt: end } })
+      .sort({ startAt: 1 }).select('title tournamentName type map startAt status placement').lean();
+    const stats = await Stats.find({ matchId: { $in: matches.map((m) => m._id) } }).select('matchId userId kills damage assists mvp').lean();
+    const userIds = [...new Set(stats.map((s) => String(s.userId)))];
+    const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select('name ign avatar').lean() : [];
+    const days = buildCalendarDays(
+      matches.map((m) => ({
+        id: String(m._id), title: m.title, tournamentName: m.tournamentName, type: m.type ?? 'scrim', map: m.map ?? MAP_TBD,
+        startAt: m.startAt, status: m.status ?? 'scheduled', placement: m.placement ?? null,
+      })),
+      stats.map((s) => ({ matchId: String(s.matchId), userId: String(s.userId), kills: s.kills ?? 0, damage: s.damage ?? 0, assists: s.assists ?? 0, mvp: Boolean(s.mvp) })),
+      tz,
+    );
+    res.json({
+      month,
+      today: dayKey(new Date(), tz),
+      timeZone: tz,
+      pointsSystem: { placement: PLACEMENT_POINTS, perKill: POINTS_PER_KILL },
+      players: users.map((u) => ({ id: String(u._id), name: u.name, ign: u.ign, avatar: u.avatar ?? '' })),
+      days,
+    });
   }));
 
   /** Player check-in board: every upcoming team match (no room details) and my availability. */
