@@ -1,9 +1,10 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
 import { Button, Skeleton } from './components/ui';
 import Landing from './pages/Landing';
+import { WakingNote } from './components/WakingNote';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Matches = lazy(() => import('./pages/Matches'));
@@ -28,12 +29,24 @@ function Loading() {
   );
 }
 
+const AUTO_RETRY_SECONDS = 10;
+
 function Unreachable({ onRetry }: { onRetry: () => void }) {
+  // Keep trying on our own so nobody has to sit and tap "Try again" while the server wakes up.
+  const [left, setLeft] = useState(AUTO_RETRY_SECONDS);
+  useEffect(() => {
+    const t = setInterval(() => setLeft((n) => {
+      if (n > 1) return n - 1;
+      onRetry();
+      return AUTO_RETRY_SECONDS;
+    }), 1000);
+    return () => clearInterval(t);
+  }, [onRetry]);
   return (
     <div className="mx-auto max-w-md p-6 pt-24 text-center">
-      <h1 className="text-lg font-semibold text-white">Can't reach the server</h1>
-      <p className="mt-2 text-sm text-zinc-400">It may be busy or waking up. You are still signed in, so just try again in a few seconds.</p>
-      <Button className="mt-5" onClick={onRetry}>Try again</Button>
+      <h1 className="text-lg font-semibold text-white">Can't reach the server yet</h1>
+      <p className="mt-2 text-sm text-zinc-400">It may be busy or waking up. You are still signed in. Trying again in {left}s.</p>
+      <Button className="mt-5" onClick={() => { setLeft(AUTO_RETRY_SECONDS); onRetry(); }}>Try now</Button>
     </div>
   );
 }
@@ -41,9 +54,10 @@ function Unreachable({ onRetry }: { onRetry: () => void }) {
 function Protected({ children, captain }: { children: ReactNode; captain?: boolean }) {
   const { user, loading, unreachable, refresh, isCaptain } = useAuth();
   const loc = useLocation();
-  if (loading) return <div className="mx-auto max-w-5xl p-6"><Loading /></div>;
+  const retry = useCallback(() => void refresh(), [refresh]);
+  if (loading) return <div className="mx-auto max-w-5xl p-6"><WakingNote active className="mb-4" /><Loading /></div>;
   // A busy server is not the same as signed out: don't bounce people to the sign-in page for it.
-  if (unreachable) return <Unreachable onRetry={() => void refresh()} />;
+  if (unreachable) return <Unreachable onRetry={retry} />;
   if (!user) return <Navigate to="/welcome" state={{ from: loc.pathname }} replace />;
   if (!user.teamId && !loc.pathname.startsWith('/join') && !loc.pathname.startsWith('/settings')) return <Navigate to="/join" replace />;
   if (captain && !isCaptain) return <Navigate to="/" replace />;

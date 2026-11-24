@@ -1,8 +1,9 @@
 # Render Blueprint: ONE free web service that runs the API and the alert worker together.
 # Dashboard > New > Blueprint > pick this repo. Fill in the env vars Render asks for.
 #
-# Free instances sleep after ~15 minutes without traffic. To keep alerts on time, point a free
-# pinger (e.g. cron-job.org) at https://<your-service>.onrender.com/api/health every 10 minutes.
+# Free instances sleep after ~15 minutes without traffic (the next visit then waits 15-30s).
+# .github/workflows/keep-alive.yml pings /api/ping every 10 minutes to keep it awake; a cron-job.org
+# job on https://<your-service>.onrender.com/api/ping every 10 minutes is a good backup.
 # If it does sleep, the app catches up on startup and sends any alert that came due meanwhile.
 services:
   - type: web

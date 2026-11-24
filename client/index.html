@@ -14,6 +14,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet" />
     <title>SquadSync</title>
+    <script>
+      // Start waking the (free, sleeps-when-idle) API right away, while the app's code is still downloading.
+      try { fetch('/api/ping', { cache: 'no-store' }).catch(function () {}); } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
