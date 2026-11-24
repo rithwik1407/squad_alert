@@ -7,6 +7,8 @@ export interface NotificationPayload {
   url: string;
   matchId: string;
   tag: string;
+  /** Extra string fields for the push payload (e.g. inviteId). */
+  extra?: Record<string, string>;
 }
 
 export interface Recipient {

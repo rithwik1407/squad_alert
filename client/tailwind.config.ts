@@ -6,7 +6,8 @@ export default {
     extend: {
       colors: {
         ink: { 950: '#07070a', 900: '#0c0c11', 850: '#111118', 800: '#16161f', 700: '#1f1f2b', 600: '#2a2a3a' },
-        ember: { 300: '#ffc078', 400: '#ffa94d', 500: '#ff8a1f', 600: '#f06d00', 700: '#c25400' },
+        // Accent colour: CSS variables so each player can pick their own (Settings → Accent colour). See index.css.
+        ember: { 300: 'rgb(var(--ember-300) / <alpha-value>)', 400: 'rgb(var(--ember-400) / <alpha-value>)', 500: 'rgb(var(--ember-500) / <alpha-value>)', 600: 'rgb(var(--ember-600) / <alpha-value>)', 700: 'rgb(var(--ember-700) / <alpha-value>)' },
         amber: { 400: '#fbbf24' },
         mint: { 400: '#4ade80' },
         danger: { 400: '#f87171' },
@@ -17,8 +18,8 @@ export default {
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(255,138,31,.35), 0 10px 40px -10px rgba(255,138,31,.45)',
-        'glow-lg': '0 0 60px -10px rgba(255,138,31,.7)',
+        glow: '0 0 0 1px rgb(var(--ember-500) / .35), 0 10px 40px -10px rgb(var(--ember-500) / .45)',
+        'glow-lg': '0 0 60px -10px rgb(var(--ember-500) / .7)',
       },
       keyframes: {
         // Opacity-only so it runs on the compositor.

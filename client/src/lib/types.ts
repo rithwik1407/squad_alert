@@ -319,3 +319,17 @@ export interface CalendarMonth {
   players: TeamStatsPlayer[];
   days: CalendarDay[];
 }
+
+export interface InvitePerson { id: string; name: string; ign: string; avatar: string }
+
+/** "Can we play a classic match?" sent to picked teammates. */
+export interface ClassicInvite {
+  id: string;
+  from: InvitePerson;
+  message: string;
+  createdAt: string | null;
+  sentByMe: boolean;
+  /** My answer when I was invited (undefined when I'm the sender). */
+  myResponse?: 'in' | 'out' | null;
+  recipients: { user: InvitePerson; response: 'in' | 'out' | null; respondedAt: string | null; delivered: string[] }[];
+}

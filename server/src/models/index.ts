@@ -12,3 +12,4 @@ export * from './Chat.js';
 export * from './ScrimSeries.js';
 export * from './DailyReport.js';
 export * from './MatchScreenshot.js';
+export * from './ClassicInvite.js';

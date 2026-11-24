@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { AccentPicker } from '@/components/AccentPicker';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -107,6 +108,7 @@ export default function Settings() {
     <div>
       <PageHeader eyebrow="Settings" title="Alerts & profile" />
       <motion.div variants={list} initial="initial" animate="animate" className="grid gap-6 lg:grid-cols-2">
+        <AccentPicker />
         {WHATSAPP_ENABLED && (
           <WhatsAppCard number={user.whatsappNumber ?? ''} on={prefs.whatsapp !== false} ready={cfg.data?.whatsappReady}
             onToggle={(v) => setPref('whatsapp', v)} onSaved={refresh} />
