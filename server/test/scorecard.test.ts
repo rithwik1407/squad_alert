@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 process.env.GEMINI_API_KEY = 'test-key';
-const { readScorecard, _resetGeminiForTests } = await import('../src/lib/scorecard.js');
+const { readScorecard, readScorecardWithPlacement, _resetGeminiForTests } = await import('../src/lib/scorecard.js');
 const { startScorecardJob, getScorecardJob } = await import('../src/lib/scorecardJobs.js');
 
 const IMG = 'data:image/jpeg;base64,' + 'A'.repeat(100);
@@ -23,6 +23,14 @@ describe('Gemini screenshot reader', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(modelOf(url)).toBe('gemini-3.8-flash');
     expect((init!.headers as Record<string, string>)['x-goog-api-key']).toBe('test-key');
+  });
+
+  it('reads the squad position when the screen shows it', async () => {
+    const reply = (placement: unknown) => json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ ...answer, placement }) }] } }] });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reply(3)).mockResolvedValueOnce(reply(null)).mockResolvedValueOnce(reply(40)));
+    expect((await readScorecardWithPlacement(IMG)).placement).toBe(3);
+    expect((await readScorecardWithPlacement(IMG)).placement).toBeNull();
+    expect((await readScorecardWithPlacement(IMG)).placement).toBeNull();
   });
 
   it('retries a busy model, then succeeds', async () => {

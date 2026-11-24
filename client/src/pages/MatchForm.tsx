@@ -12,7 +12,7 @@ import { Button, Card, Field, PageHeader, Skeleton, cx } from '@/components/ui';
 import { MapArt, mapTag } from '@/components/MapArt';
 import { useToast } from '@/components/Toast';
 import { ScheduleImageUpload } from '@/components/ScheduleImageUpload';
-import { SeriesNameOptions } from '@/components/OrganizerCard';
+import { SeriesSuggestions } from '@/components/OrganizerCard';
 
 function defaultStart() {
   // Next round half hour, at least 30 min out.
@@ -178,8 +178,8 @@ export default function MatchForm() {
                 </div>
               </Field>
               <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required, e.g. the organiser's scrims or the tournament">
-                <input className="input" list="series-names" autoComplete="off" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
-                <SeriesNameOptions id="series-names" />
+                <input className="input" autoComplete="off" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
+                <SeriesSuggestions value={tournamentName} onPick={setTournamentName} />
               </Field>
               <Field label="Start (IST)" hint={timeLocked ? 'Locked: the alert already went out' : undefined}>
                 <input type="datetime-local" className="input [color-scheme:dark]" value={start} onChange={(e) => setStart(e.target.value)} required disabled={timeLocked} />

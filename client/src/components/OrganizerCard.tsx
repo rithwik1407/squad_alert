@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Copy, ExternalLink, Hash, MessageCircle, StickyNote, User } from 'lucide-react';
 import type { ScrimSeries } from '@/lib/types';
-import { useScrims } from '@/lib/useScrims';
+import { seriesKey, useScrims } from '@/lib/useScrims';
 import { useToast } from './Toast';
 import { cx } from './ui';
 
@@ -77,5 +77,34 @@ export function SeriesNameOptions({ id }: { id: string }) {
     <datalist id={id}>
       {q.data?.series.map((s) => <option key={s.id} value={s.name} />)}
     </datalist>
+  );
+}
+
+/**
+ * Saved scrim / tournament names shown as tappable suggestions under the name field, so the same scrim
+ * always gets the same name (and its matches group together). Typing filters them; a new name is fine too.
+ */
+export function SeriesSuggestions({ value, onPick }: { value: string; onPick: (name: string) => void }) {
+  const q = useScrims();
+  const typed = seriesKey(value);
+  const names = [
+    ...(q.data?.series.map((s) => s.name) ?? []),
+    ...(q.data?.unsaved.map((u) => u.name) ?? []),
+  ].filter((n, i, all) => all.findIndex((x) => seriesKey(x) === seriesKey(n)) === i);
+  if (!names.length) return null;
+  const exact = names.some((n) => seriesKey(n) === typed);
+  const shown = names.filter((n) => !typed || (seriesKey(n).includes(typed) && seriesKey(n) !== typed)).slice(0, 8);
+  if (exact && !shown.length) return <p className="mt-1.5 text-[11px] text-emerald-300">Saved scrim name. Its matches will be grouped together.</p>;
+  if (!shown.length) return <p className="mt-1.5 text-[11px] text-zinc-500">New name. It will be saved for next time.</p>;
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-[11px] text-zinc-500">{typed ? 'Did you mean' : 'Your scrims'}:</p>
+      <div className="flex flex-wrap gap-1.5">
+        {shown.map((n) => (
+          <button key={n} type="button" onClick={() => onPick(n)}
+            className="rounded-full border border-ember-400/30 bg-ember-500/10 px-3 py-1 text-xs font-semibold text-ember-200 hover:bg-ember-500/20">{n}</button>
+        ))}
+      </div>
+    </div>
   );
 }

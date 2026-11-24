@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { CalendarPlus, Layers, Trophy } from 'lucide-react';
+import { CalendarPlus, ChevronDown, Layers, Trophy } from 'lucide-react';
 import { api } from '@/lib/api';
 import { list } from '@/lib/motion';
 import { dayIST } from '@/lib/time';
@@ -10,6 +10,7 @@ import type { Match } from '@/lib/types';
 import { Card, PageHeader, Skeleton, cx } from '@/components/ui';
 import { MatchCard } from '@/components/MatchCard';
 import { EmptyState } from '@/components/EmptyState';
+import { seriesKey } from '@/lib/useScrims';
 
 const TABS = [
   { k: 'upcoming', label: 'Upcoming' },
@@ -27,10 +28,13 @@ export default function Matches() {
   });
   const switching = q.isPlaceholderData;
   const data = (q.data ?? []).filter((m) => tab !== 'tournaments' || m.type === 'tournament');
-  const groups = data.reduce<Record<string, Match[]>>((acc, m) => {
-    (acc[dayIST(m.startAt)] ??= []).push(m);
-    return acc;
-  }, {});
+  // Tournaments tab: one group per tournament. Other tabs: by day, then the same scrim's matches together.
+  const groups = tab === 'tournaments'
+    ? Object.fromEntries(bySeries(data).map((g) => [g.name, [g]]))
+    : Object.fromEntries(Object.entries(data.reduce<Record<string, Match[]>>((acc, m) => {
+      (acc[dayIST(m.startAt)] ??= []).push(m);
+      return acc;
+    }, {})).map(([day, ms]) => [day, bySeries(ms)]));
 
   return (
     <div>
@@ -54,16 +58,50 @@ export default function Matches() {
       {q.isLoading ? <div className="space-y-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)}</div> :
         !data.length ? <Card><EmptyState title={tab === 'upcoming' ? 'Nothing scheduled' : 'Nothing here yet'} text="Scheduled matches and their alert status show up here." action={tab === 'upcoming' ? <Link to="/matches/new" className="btn-primary">Schedule a match</Link> : undefined} /></Card> : (
           <div key={switching ? 'stale' : tab} className={cx('space-y-6 transition-opacity duration-200', switching ? 'opacity-50' : 'fade-up')}>
-            {Object.entries(groups).map(([day, ms]) => (
+            {Object.entries(groups).map(([day, series]) => (
               <section key={day}>
-                <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">{day}</h2>
-                <motion.div variants={list} initial="initial" animate="animate" className="grid gap-3 md:grid-cols-2">
-                  {ms.map((m) => <MatchCard key={m.id} m={m} />)}
-                </motion.div>
+                {tab !== 'tournaments' && <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">{day}</h2>}
+                <div className="space-y-3">
+                  {series.map((g) => <SeriesGroup key={g.key} g={g} />)}
+                </div>
               </section>
             ))}
           </div>
         )}
+    </div>
+  );
+}
+
+interface SeriesBlock { key: string; name: string; matches: Match[] }
+
+/** Cluster matches that share a scrim / tournament name (case and punctuation ignored), in first-seen order. */
+function bySeries(ms: Match[]): SeriesBlock[] {
+  const out = new Map<string, SeriesBlock>();
+  for (const m of ms) {
+    const name = m.tournamentName.trim() || m.title;
+    const key = seriesKey(name) || m.id;
+    const g = out.get(key) ?? { key, name, matches: [] };
+    g.matches.push(m);
+    out.set(key, g);
+  }
+  return [...out.values()];
+}
+
+function SeriesGroup({ g }: { g: SeriesBlock }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.015] p-2 sm:p-3">
+      <button className="flex w-full items-center gap-2 px-1 pb-2 text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Layers className="h-4 w-4 shrink-0 text-ember-400" aria-hidden />
+        <span className="min-w-0 flex-1 truncate font-semibold text-white">{g.name}</span>
+        <span className="text-xs text-zinc-500">{g.matches.length} {g.matches.length === 1 ? 'match' : 'matches'}</span>
+        <ChevronDown className={cx('h-4 w-4 shrink-0 text-zinc-500 transition-transform', !open && '-rotate-90')} aria-hidden />
+      </button>
+      {open && (
+        <motion.div variants={list} initial="initial" animate="animate" className="grid gap-3 md:grid-cols-2">
+          {g.matches.map((m) => <MatchCard key={m.id} m={m} />)}
+        </motion.div>
+      )}
     </div>
   );
 }

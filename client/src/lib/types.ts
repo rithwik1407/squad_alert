@@ -136,6 +136,10 @@ export interface MatchReport {
   open: boolean;
   attendance: { userId: string; joined: boolean }[];
   stats: MatchStat[];
+  /** Squad finishing position (from the screenshot or typed in). */
+  placement: number | null;
+  /** When a results screenshot was saved; null when there is none. */
+  screenshotAt: string | null;
 }
 
 /** A row read from a BGMI results screenshot, matched to a team member when the IGN fits. */

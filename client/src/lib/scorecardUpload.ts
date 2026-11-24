@@ -31,6 +31,8 @@ export function startRead(
     reads.delete(matchId);
     // The server already saved the matched players: refresh what the pages show.
     qc.invalidateQueries({ queryKey: ['report', matchId] });
+    qc.invalidateQueries({ queryKey: ['screenshot', matchId] });
+    qc.invalidateQueries({ queryKey: ['calendar'] });
     qc.invalidateQueries({ queryKey: ['mystats'] });
     qc.invalidateQueries({ queryKey: ['teamstats'] });
     // A results upload finishes the match, so its status changes too.
