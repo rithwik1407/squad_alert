@@ -265,3 +265,53 @@ export interface ScrimSeriesList {
 }
 
 export type ScrimSeriesInput = Pick<ScrimSeries, 'name' | 'organizer' | 'discordInvite' | 'discordChannel' | 'contact' | 'notes'>;
+
+/** One match on the calendar, with its points (placement points + 1 per finish). */
+export interface CalendarMatch {
+  id: string;
+  title: string;
+  /** Scrim / tournament name the match is grouped under (the match title when no name was given). */
+  series: string;
+  seriesKey: string;
+  type: 'scrim' | 'tournament';
+  map: MatchMap;
+  startAt: string;
+  status: MatchStatus;
+  placement: number | null;
+  /** Team finishes from the saved scorecard; null when none was saved. */
+  kills: number | null;
+  placementPts: number;
+  killPts: number;
+  total: number;
+  hasResult: boolean;
+  stats: { userId: string; kills: number; damage: number; assists: number; mvp: boolean }[];
+}
+
+export interface CalendarTotals {
+  matches: number;
+  withResult: number;
+  kills: number;
+  placementPts: number;
+  killPts: number;
+  total: number;
+  wins: number;
+  bestPlacement: number | null;
+}
+
+export interface CalendarDay {
+  /** YYYY-MM-DD in the team time zone. */
+  day: string;
+  matches: CalendarMatch[];
+  totals: CalendarTotals;
+  players: { userId: string; matches: number; kills: number; damage: number; assists: number; mvps: number }[];
+}
+
+export interface CalendarMonth {
+  /** YYYY-MM */
+  month: string;
+  today: string;
+  timeZone: string;
+  pointsSystem: { placement: Record<string, number>; perKill: number };
+  players: TeamStatsPlayer[];
+  days: CalendarDay[];
+}

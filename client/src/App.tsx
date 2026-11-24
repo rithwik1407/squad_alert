@@ -18,6 +18,7 @@ const TeamPage = lazy(() => import('./pages/Team'));
 const Stats = lazy(() => import('./pages/Stats'));
 const Join = lazy(() => import('./pages/Join'));
 const Scrims = lazy(() => import('./pages/Scrims'));
+const CalendarPage = lazy(() => import('./pages/Calendar'));
 
 function Loading() {
   return (
@@ -82,6 +83,7 @@ export function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="stats" element={<Stats />} />
           <Route path="scrims" element={<Scrims />} />
+          <Route path="calendar" element={<CalendarPage />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
