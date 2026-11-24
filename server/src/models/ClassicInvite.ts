@@ -25,10 +25,13 @@ const inviteSchema = new Schema(
       }],
       default: [],
     },
+    /** Set 5 minutes after the last teammate answers; MongoDB removes the invite then. */
+    expireAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
 inviteSchema.index({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 3600 });
+inviteSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
 export type InviteAttrs = InferSchemaType<typeof inviteSchema>;
 export const ClassicInvite = model('ClassicInvite', inviteSchema);

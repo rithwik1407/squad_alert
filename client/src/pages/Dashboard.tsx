@@ -126,8 +126,6 @@ function CaptainDashboard() {
 
         {next && !next.locked && team && <QuickPicker m={next} members={team.members} />}
 
-        <PlayClassicCard />
-
         <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
           <section aria-labelledby="today-h" className="min-w-0">
             <h2 id="today-h" className="mb-3 text-xl font-bold text-white">Today's scrims</h2>

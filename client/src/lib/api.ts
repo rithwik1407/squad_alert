@@ -129,6 +129,7 @@ export const api = {
   invites: () => request<{ invites: ClassicInvite[] }>('GET', '/invites'),
   invite: (id: string) => request<{ invite: ClassicInvite }>('GET', `/invites/${id}`),
   sendInvite: (b: { message: string; userIds: string[] }) => request<{ invite: ClassicInvite }>('POST', '/invites', b),
+  deleteInvite: (id: string) => request<{ ok: true }>('DELETE', `/invites/${id}`),
   respondInvite: (id: string, response: 'in' | 'out') => request<{ invite: ClassicInvite }>('POST', `/invites/${id}/respond`, { response }),
   calendar: (month?: string) => request<CalendarMonth>('GET', `/matches/calendar${month ? `?month=${month}` : ''}`),
 
