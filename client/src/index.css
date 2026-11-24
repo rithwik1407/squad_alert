@@ -5,7 +5,9 @@
 @layer base {
   :root { color-scheme: dark; }
   html, body, #root { min-height: 100%; }
-  html { -webkit-tap-highlight-color: transparent; }
+  /* No rubber-band bounce past the top/bottom (it showed a gap above the header in the installed app). */
+  html { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; scroll-behavior: smooth; }
+  body { overscroll-behavior-y: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   /* Every link and button eases its colours instead of snapping. Transform and opacity are left to framer-motion. */
   a, button, [role='tab'], [role='radio'], [role='checkbox'], summary {
     transition-property: color, background-color, border-color, box-shadow, text-decoration-color, fill, stroke;

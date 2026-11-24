@@ -27,10 +27,11 @@ describe('Gemini screenshot reader', () => {
 
   it('reads the squad position when the screen shows it', async () => {
     const reply = (placement: unknown) => json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ ...answer, placement }) }] } }] });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reply(3)).mockResolvedValueOnce(reply(null)).mockResolvedValueOnce(reply(40)));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(reply(3)).mockResolvedValueOnce(reply(null)).mockResolvedValueOnce(reply(40)).mockResolvedValueOnce(reply('#5/16')));
     expect((await readScorecardWithPlacement(IMG)).placement).toBe(3);
     expect((await readScorecardWithPlacement(IMG)).placement).toBeNull();
     expect((await readScorecardWithPlacement(IMG)).placement).toBeNull();
+    expect((await readScorecardWithPlacement(IMG)).placement).toBe(5);
   });
 
   it('retries a busy model, then succeeds', async () => {

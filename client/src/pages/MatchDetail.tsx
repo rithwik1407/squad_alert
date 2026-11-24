@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Ban, CheckCircle2, Copy, Crown, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
+  ArrowLeft, Ban, CheckCircle2, Copy, Crown, Eye, Loader2, ImageUp, KeyRound, MapPin, Pencil, Radio, RefreshCw, Repeat, Send, Swords, Trash2, Trophy, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { isNotResultsError, pendingRead, startRead } from '@/lib/scorecardUpload';
@@ -158,23 +158,24 @@ function DeleteMatch({ m }: { m: Match }) {
   );
 }
 
-/** Small preview of the saved results screenshot; tap to see it full size. */
+/** Eye button for the saved results screenshot; tap to see it full size. */
 function ScreenshotThumb({ matchId, at }: { matchId: string; at: string | null }) {
   const [open, setOpen] = useState(false);
   const q = useQuery({ queryKey: ['screenshot', matchId, at], queryFn: () => api.screenshot(matchId), enabled: Boolean(at), staleTime: Infinity });
   if (!at) return null;
   return (
     <>
-      <button onClick={() => q.data && setOpen(true)} disabled={!q.data} aria-label="Open the results screenshot"
-        className="group relative h-16 w-28 shrink-0 overflow-hidden rounded-lg bg-white/[0.04] ring-1 ring-white/10 hover:ring-ember-400/60">
-        {q.data ? <img src={q.data.image} alt="Results screenshot" className="h-full w-full object-cover transition-transform group-hover:scale-105" /> : <Skeleton className="h-full w-full" />}
-        <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[10px] font-semibold text-white">Screenshot</span>
+      <button onClick={() => q.data && setOpen(true)} disabled={!q.data} aria-label="View results screenshot" title="View results screenshot"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/[0.06] text-zinc-200 ring-1 ring-white/10 transition-colors hover:bg-ember-500/15 hover:text-ember-300 hover:ring-ember-400/50 disabled:opacity-50">
+        {q.data ? <Eye className="h-5 w-5" aria-hidden /> : <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
       </button>
       {open && q.data && createPortal(
-        <div role="dialog" aria-modal="true" aria-label="Results screenshot" className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-3" onClick={() => setOpen(false)}>
+        <motion.div role="dialog" aria-modal="true" aria-label="Results screenshot" className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-3" onClick={() => setOpen(false)}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}>
           <button aria-label="Close" className="absolute right-3 top-3 rounded-full bg-white/10 p-2 text-white hover:bg-white/20" style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }} onClick={() => setOpen(false)}><X className="h-5 w-5" /></button>
-          <img src={q.data.image} alt="Results screenshot" className="max-h-full max-w-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
-        </div>,
+          <motion.img src={q.data.image} alt="Results screenshot" className="max-h-full max-w-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()}
+            initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 32 }} />
+        </motion.div>,
         document.body,
       )}
     </>

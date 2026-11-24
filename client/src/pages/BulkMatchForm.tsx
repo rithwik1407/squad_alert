@@ -115,7 +115,7 @@ export default function BulkMatchForm() {
         Each one gets its own time and alert. Leave the map as "Not decided" and set it later.
       </PageHeader>
 
-      <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <form onSubmit={submit} className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           <Card>
             <div className="mb-4"><ScheduleImageUpload onParsed={applySchedule} /></div>
