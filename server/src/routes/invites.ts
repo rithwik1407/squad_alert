@@ -3,12 +3,15 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
-import { ClassicInvite, INVITE_RESPONSES, Team, User } from '../models/index.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { ClassicInvite, INVITE_RESPONSES, isAdmin, Team, User } from '../models/index.js';
+import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { deliverInvite, respondToInvite } from '../lib/invites.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
 
-/** "Play classic" invites between teammates. Anyone on the team can send one. */
+/**
+ * "Play classic" invites between teammates. Only players send and get them; the captain / admin is left out.
+ * The sender can delete one (it disappears for everyone), and it clears itself 5 minutes after everyone answered.
+ */
 export const invitesRouter = Router();
 invitesRouter.use(requireAuth);
 
@@ -17,8 +20,11 @@ const teamIdOf = (req: Request) => {
   return req.user!.teamId;
 };
 
+const live = () => ({ $or: [{ expireAt: null }, { expireAt: { $gt: new Date() } }] });
+const isStaff = (u: { role?: string | null; email?: string | null }) => u.role === 'captain' || isAdmin(u);
+
 type Lean = {
-  _id: unknown; fromId: unknown; message?: string | null; createdAt?: Date;
+  _id: unknown; fromId: unknown; message?: string | null; createdAt?: Date; expireAt?: Date | null;
   recipients: { userId: unknown; response?: string | null; respondedAt?: Date | null; via?: string | null; delivered?: string[] }[];
 };
 
@@ -35,6 +41,8 @@ async function serialize(list: Lean[], me: string) {
       message: i.message ?? '',
       createdAt: i.createdAt ?? null,
       sentByMe: String(i.fromId) === me,
+      /** When it clears itself (everyone answered), else null. */
+      expiresAt: i.expireAt ?? null,
       myResponse: mine ? mine.response ?? null : undefined,
       recipients: i.recipients.map((r) => ({
         user: who(r.userId), response: r.response ?? null, respondedAt: r.respondedAt ?? null, delivered: r.delivered ?? [],
@@ -49,14 +57,14 @@ invitesRouter.get('/', ah(async (req, res) => {
   const list = await ClassicInvite.find({
     teamId: teamIdOf(req),
     createdAt: { $gte: new Date(Date.now() - 24 * 3600_000) },
-    $or: [{ fromId: me }, { 'recipients.userId': me }],
+    $and: [{ $or: [{ fromId: me }, { 'recipients.userId': me }] }, live()],
   }).sort({ createdAt: -1 }).limit(20).lean();
   res.json({ invites: await serialize(list as Lean[], String(me)) });
 }));
 
 invitesRouter.get('/:id', ah(async (req, res) => {
   if (!Types.ObjectId.isValid(String(req.params.id))) throw notFound('Invite not found');
-  const i = await ClassicInvite.findOne({ _id: req.params.id, teamId: teamIdOf(req) }).lean();
+  const i = await ClassicInvite.findOne({ _id: req.params.id, teamId: teamIdOf(req), ...live() }).lean();
   if (!i) throw notFound('Invite not found. It may have expired.');
   res.json({ invite: (await serialize([i as Lean], String(req.user!._id)))[0] });
 }));
@@ -67,11 +75,14 @@ invitesRouter.post('/', ah(async (req, res) => {
     userIds: z.array(z.string().regex(/^[a-f\d]{24}$/i)).min(1, 'Pick at least one teammate').max(20),
   }), req.body);
   const teamId = teamIdOf(req);
+  if (isStaff(req.user!)) throw forbidden('Classic invites are for players only');
   const me = String(req.user!._id);
   const team = await Team.findById(teamId).lean();
-  const onTeam = new Set([String(team?.captainId), ...(team?.memberIds ?? []).map(String)]);
+  // Teammates only: never the captain / admin.
+  const players = await User.find({ _id: { $in: team?.memberIds ?? [] } }).select('role email').lean();
+  const onTeam = new Set(players.filter((u) => String(u._id) !== String(team?.captainId) && !isStaff(u)).map((u) => String(u._id)));
   const picked = [...new Set(userIds)].filter((id) => id !== me);
-  if (picked.some((id) => !onTeam.has(id))) throw badRequest('You can only invite your own teammates');
+  if (picked.some((id) => !onTeam.has(id))) throw badRequest('You can only invite your teammates');
   if (!picked.length) throw badRequest('Pick at least one teammate');
   const invite = await ClassicInvite.create({
     teamId, fromId: me, message, recipients: picked.map((userId) => ({ userId })),
@@ -92,4 +103,14 @@ invitesRouter.post('/:id/respond', ah(async (req, res) => {
   const invite = await respondToInvite(String(req.params.id), String(req.user!._id), response, via);
   if (!invite || String(invite.teamId) !== String(teamIdOf(req))) throw notFound('You are not on this invite');
   res.json({ invite: (await serialize([invite.toObject() as Lean], String(req.user!._id)))[0] });
+}));
+
+/** The sender deletes their invite; it disappears for everyone. */
+invitesRouter.delete('/:id', ah(async (req, res) => {
+  if (!Types.ObjectId.isValid(String(req.params.id))) throw notFound('Invite not found');
+  const i = await ClassicInvite.findOne({ _id: req.params.id, teamId: teamIdOf(req) }).select('fromId').lean();
+  if (!i) throw notFound('Invite not found. It may have expired.');
+  if (String(i.fromId) !== String(req.user!._id)) throw forbidden('Only the player who sent it can delete it');
+  await ClassicInvite.deleteOne({ _id: i._id });
+  res.json({ ok: true });
 }));

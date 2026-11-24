@@ -1,21 +1,23 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Clock, Gamepad2, X } from 'lucide-react';
+import { ArrowLeft, Check, Clock, Gamepad2, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { ago } from '@/lib/time';
 import { list, item } from '@/lib/motion';
-import { Avatar, Card, Skeleton, cx } from '@/components/ui';
+import { Avatar, Button, Card, Skeleton, cx } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
-import { AnswerButtons } from '@/components/ClassicInvite';
+import { AnswerButtons, clearsIn, useDeleteInvite } from '@/components/ClassicInvite';
 
 /** One classic-match invite: the message, my answer, and who is in / out / still to answer. */
 export default function Classic() {
   const { id = '' } = useParams();
   const q = useQuery({ queryKey: ['invite', id], queryFn: () => api.invite(id).then((r) => r.invite), refetchInterval: 10_000 });
   const i = q.data;
+  const nav = useNavigate();
+  const del = useDeleteInvite(() => nav('/'));
   if (q.isLoading) return <div className="space-y-4"><Skeleton className="h-40" /><Skeleton className="h-60" /></div>;
-  if (!i) return <EmptyState title="Invite not found" text="It may have expired. Invites last 3 days." action={<Link to="/" className="btn-ghost">Home</Link>} />;
+  if (!i) return <EmptyState title="Invite gone" text="It was deleted, or everyone answered and it cleared." action={<Link to="/" className="btn-ghost">Home</Link>} />;
   const groups = [
     { k: 'in' as const, label: "I'm in", icon: Check, cls: 'text-emerald-300' },
     { k: 'out' as const, label: "I'm out", icon: X, cls: 'text-red-300' },
@@ -36,6 +38,12 @@ export default function Classic() {
             </div>
           </div>
           {i.myResponse !== undefined && <AnswerButtons invite={i} className="mt-5" />}
+          {(i.sentByMe || i.expiresAt) && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-4">
+              <p className="text-xs text-zinc-500">{clearsIn(i.expiresAt) ?? 'Only you can delete this invite.'}</p>
+              {i.sentByMe && <Button variant="danger" loading={del.pending} icon={<Trash2 className="h-4 w-4" aria-hidden />} onClick={() => del.run(i.id)}>Delete invite</Button>}
+            </div>
+          )}
         </Card>
 
         <Card>

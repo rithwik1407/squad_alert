@@ -9,6 +9,8 @@ import { mongoDispatchRepo } from '../scheduler/repo.js';
 /** Classic-match invites: send to the picked teammates on every channel they have, and record I'm in / I'm out. */
 
 export const INVITE_TITLE = 'Can we play a classic match?';
+/** How long an invite stays after every teammate has answered. */
+export const ANSWERED_TTL_MS = 5 * 60_000;
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
 
 export const inviteKeyboard = (id: string, url: string) => ({
@@ -81,11 +83,16 @@ export async function deliverInvite(
 export async function respondToInvite(inviteId: string, userId: string, response: InviteResponse, via: string, ch: ChannelDeps = defaultChannels) {
   if (!Types.ObjectId.isValid(inviteId)) return null;
   const invite = await ClassicInvite.findOneAndUpdate(
-    { _id: inviteId, 'recipients.userId': new Types.ObjectId(userId) },
+    { _id: inviteId, 'recipients.userId': new Types.ObjectId(userId), $or: [{ expireAt: null }, { expireAt: { $gt: new Date() } }] },
     { $set: { 'recipients.$.response': response, 'recipients.$.respondedAt': new Date(), 'recipients.$.via': via } },
     { new: true },
   );
   if (!invite) return null;
+  // Everyone has answered: the invite clears itself 5 minutes later.
+  if (!invite.expireAt && invite.recipients.every((r) => r.response)) {
+    invite.expireAt = new Date(Date.now() + ANSWERED_TTL_MS);
+    await ClassicInvite.updateOne({ _id: invite._id, expireAt: null }, { $set: { expireAt: invite.expireAt } });
+  }
   const [who] = await mongoDispatchRepo.getRecipients([userId]);
   const [sender] = await mongoDispatchRepo.getRecipients([String(invite.fromId)]);
   if (who && sender && sender.id !== who.id) {

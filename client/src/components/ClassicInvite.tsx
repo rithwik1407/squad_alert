@@ -2,23 +2,51 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronRight, Gamepad2, Send, X } from 'lucide-react';
+import { Check, ChevronRight, Gamepad2, Send, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ago } from '@/lib/time';
 import type { ClassicInvite, Member } from '@/lib/types';
 import { Avatar, Button, Card, cx } from './ui';
-import { Modal } from './Modal';
+import { Modal, useDialog } from './Modal';
 import { useToast } from './Toast';
 
 const DEFAULT_MSG = 'Can we play a classic match?';
 
-/** Everyone on the team except me. */
+/** My teammates: players only (never the captain / admin), without me. */
 function useTeammates(): Member[] {
   const { team, user } = useAuth();
-  const all = [...(team?.members ?? [])];
-  if (team?.captain && !all.some((m) => m.id === team.captain!.id)) all.unshift(team.captain);
-  return all.filter((m) => m.id !== user?._id);
+  return (team?.members ?? []).filter((m) => m.id !== user?._id && m.id !== team?.captain?.id && m.role !== 'captain');
+}
+
+/** Delete my invite (it disappears for everyone). */
+export function useDeleteInvite(onDone?: () => void) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const dialog = useDialog();
+  const m = useMutation({
+    mutationFn: (id: string) => api.deleteInvite(id),
+    onSuccess: (_r, id) => {
+      qc.removeQueries({ queryKey: ['invite', id] });
+      qc.invalidateQueries({ queryKey: ['invites'] });
+      toast.success('Invite deleted');
+      onDone?.();
+    },
+    onError: (e) => toast.error(e),
+  });
+  return {
+    pending: m.isPending,
+    run: async (id: string) => {
+      if (await dialog.confirm('Delete this invite?', { text: 'It disappears for everyone you sent it to.', confirmLabel: 'Delete', danger: true })) m.mutate(id);
+    },
+  };
+}
+
+/** "Clears in 4 min" once everyone has answered. */
+export function clearsIn(at: string | null) {
+  if (!at) return null;
+  const min = Math.max(1, Math.ceil((new Date(at).getTime() - Date.now()) / 60_000));
+  return `Everyone answered. Clears in ${min} min`;
 }
 
 export function useInvites() {
@@ -48,7 +76,9 @@ export function PlayClassicCard() {
         {invites.length > 0 && (
           <motion.ul initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
             className="mt-4 space-y-2 overflow-hidden">
-            {invites.slice(0, 3).map((i) => <InviteRow key={i.id} invite={i} />)}
+            <AnimatePresence initial={false}>
+              {invites.slice(0, 3).map((i) => <InviteRow key={i.id} invite={i} />)}
+            </AnimatePresence>
           </motion.ul>
         )}
       </AnimatePresence>
@@ -59,9 +89,12 @@ export function PlayClassicCard() {
 
 function InviteRow({ invite: i }: { invite: ClassicInvite }) {
   const ins = i.recipients.filter((r) => r.response === 'in').length;
+  const del = useDeleteInvite();
   return (
-    <li className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-      <Link to={`/classic/${i.id}`} className="flex items-center gap-3">
+    <motion.li layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+      className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+      <div className="flex items-center gap-2">
+      <Link to={`/classic/${i.id}`} className="flex min-w-0 flex-1 items-center gap-3">
         <Avatar name={i.from.ign} src={i.from.avatar} size={30} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">{i.sentByMe ? 'You asked' : i.from.ign}{i.message ? `: ${i.message}` : ''}</p>
@@ -69,8 +102,16 @@ function InviteRow({ invite: i }: { invite: ClassicInvite }) {
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" aria-hidden />
       </Link>
+      {i.sentByMe && (
+        <button type="button" aria-label="Delete invite" disabled={del.pending} onClick={() => del.run(i.id)}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-zinc-500 hover:bg-red-500/10 hover:text-red-300">
+          <Trash2 className="h-4 w-4" aria-hidden />
+        </button>
+      )}
+      </div>
+      {i.expiresAt && <p className="mt-1.5 pl-[42px] text-[11px] text-zinc-500">{clearsIn(i.expiresAt)}</p>}
       {i.myResponse !== undefined && <AnswerButtons invite={i} className="mt-2.5" />}
-    </li>
+    </motion.li>
   );
 }
 

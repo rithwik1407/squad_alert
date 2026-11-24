@@ -329,6 +329,8 @@ export interface ClassicInvite {
   message: string;
   createdAt: string | null;
   sentByMe: boolean;
+  /** Set once everyone answered: the invite clears itself at this time. */
+  expiresAt: string | null;
   /** My answer when I was invited (undefined when I'm the sender). */
   myResponse?: 'in' | 'out' | null;
   recipients: { user: InvitePerson; response: 'in' | 'out' | null; respondedAt: string | null; delivered: string[] }[];
