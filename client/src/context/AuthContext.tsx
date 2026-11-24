@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react';
 import { syncPush } from '@/lib/push';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, isTransient, retryDelay } from '@/lib/api';
@@ -36,6 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: (count, e) => isTransient(e) && count < 5,
     retryDelay,
   });
+  // Stable, and joins a fetch that is already running instead of cancelling it (the auto-retry screen calls this on a timer).
+  const { refetch } = q;
+  const refresh = useCallback(() => refetch({ cancelRefetch: false }), [refetch]);
   const userId = q.data?.user._id;
   const serverHasDevice = q.data?.user.pushEnabled ?? false;
   useEffect(() => {
@@ -51,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: q.isLoading,
     unreachable: q.isError && q.data === undefined,
     isCaptain: q.data?.user.role === 'captain',
-    refresh: () => q.refetch(),
+    refresh,
     setSession: (s) => qc.setQueryData(['session'], s),
     logout: async () => {
       // Ask the server to drop the auth cookie (one retry in case the API was waking up).

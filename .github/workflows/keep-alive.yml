@@ -1,0 +1,41 @@
+# Keeps the free Render backend awake so SquadSync opens fast and alerts go out on time.
+#
+# Render's free plan puts the server to sleep after ~15 minutes with no visits, and the next
+# visitor waits 15-30 seconds while it starts again. This pings a tiny endpoint every 10 minutes
+# so it never falls asleep. One always-on free service uses ~730 of Render's 750 free hours a
+# month, so keep only this one free service on the Render account.
+#
+# Free for public repos. GitHub can run scheduled jobs a few minutes late, so for extra safety
+# also add a cron-job.org job (see README "Keeping it awake").
+# To ping a different address, set a repository variable KEEPALIVE_URL
+# (Settings > Secrets and variables > Actions > Variables).
+name: Keep server awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the API
+        env:
+          URL: ${{ vars.KEEPALIVE_URL || 'https://squadsync-api-hx9f.onrender.com/api/ping' }}
+        run: |
+          # A sleeping server can take ~30s to answer, so allow up to 90s and retry a few times.
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 "$URL" || true)
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::warning::Server did not answer 200 at $URL"

@@ -109,9 +109,22 @@ FCM → Telegram fallback, unreachable players + Resend to failed, captain-only 
 **Render (API + alerts, free)**: New → Blueprint → this repo (`render.yaml`). It creates one free web service that runs
 the API and the alert worker in the same process (`RUN_WORKER_IN_API=true`). Fill in the env vars Render asks for.
 
-A free Render service sleeps after about 15 minutes without traffic. Two things keep alerts on time:
+A free Render service sleeps after about 15 minutes without traffic, and the first visit after that waits 15-30 seconds
+while it starts again. **Keeping it awake** (both free):
 
-- A free pinger (for example cron-job.org) that opens `https://<service>.onrender.com/api/health` every 10 minutes keeps it awake.
+- `.github/workflows/keep-alive.yml` pings `/api/ping` every 10 minutes from GitHub Actions. It starts working once it is on
+  the default branch. To use another address set the repository variable `KEEPALIVE_URL`. GitHub turns scheduled workflows
+  off after 60 days with no commits; re-enable it under Actions > Keep server awake if that happens.
+- GitHub can run schedules late, so also add a cron-job.org job (free account > Create cronjob) that opens
+  `https://<service>.onrender.com/api/ping` every 10 minutes.
+
+One always-on service uses about 730 of the 750 free instance hours Render gives each month, so keep only this one
+free service on the account. If it still sleeps, the site shows a "Waking up the server" note and keeps retrying, and
+the app pings the API as soon as the page starts loading so the wake-up begins early.
+
+Alerts stay on time either way:
+
+- The pinger above keeps the instance awake.
 - If it sleeps anyway, on startup and every minute after, the server looks in MongoDB for matches whose alert time has passed
   but were never notified and sends them straight away (still sent up to `CATCHUP_GRACE_MIN`, default 10, minutes after the match starts).
   Sending is idempotent, so nobody gets the same alert twice.

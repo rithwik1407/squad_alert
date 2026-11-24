@@ -4,6 +4,7 @@ import { motion, useMotionValue, useScroll, useSpring, useTransform, AnimatePres
 import { BellRing, Crosshair, Lock, ShieldCheck, Timer, Users } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { WakingNote } from '@/components/WakingNote';
 import { Button, Field, cx } from '@/components/ui';
 import { Logo } from '@/components/Logo';
 import { useToast } from '@/components/Toast';
@@ -188,6 +189,7 @@ function AuthCard({ onDone }: { onDone: (s: Session) => void }) {
           <input name="password" type="password" className="input" autoComplete={tab === 'login' ? 'current-password' : 'new-password'} required minLength={tab === 'register' ? 8 : 1} />
         </Field>
         <Button type="submit" loading={busy} className="w-full py-3">{tab === 'login' ? 'Sign in' : `Request to join as ${mode}`}</Button>
+        <WakingNote active={busy} />
         </div>
       </form>
     </motion.div>
