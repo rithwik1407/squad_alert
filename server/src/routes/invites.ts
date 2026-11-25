@@ -5,12 +5,12 @@ import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ClassicInvite, INVITE_RESPONSES, isAdmin, Team, User } from '../models/index.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
-import { deliverInvite, respondToInvite } from '../lib/invites.js';
+import { defaultChannels, deliverInvite, inviteEndsAt, liveInvite, purgeAt, respondToInvite } from '../lib/invites.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
 
 /**
  * "Play classic" invites between teammates. Only players send and get them; the captain / admin is left out.
- * The sender can delete one (it disappears for everyone), and it clears itself 5 minutes after everyone answered.
+ * An invite lasts 7 minutes, then it disappears for everyone (app and Telegram). The sender can delete it sooner.
  */
 export const invitesRouter = Router();
 invitesRouter.use(requireAuth);
@@ -20,7 +20,7 @@ const teamIdOf = (req: Request) => {
   return req.user!.teamId;
 };
 
-const live = () => ({ $or: [{ expireAt: null }, { expireAt: { $gt: new Date() } }] });
+const live = liveInvite;
 const isStaff = (u: { role?: string | null; email?: string | null }) => u.role === 'captain' || isAdmin(u);
 
 type Lean = {
@@ -41,8 +41,8 @@ async function serialize(list: Lean[], me: string) {
       message: i.message ?? '',
       createdAt: i.createdAt ?? null,
       sentByMe: String(i.fromId) === me,
-      /** When it clears itself (everyone answered), else null. */
-      expiresAt: i.expireAt ?? null,
+      /** When it runs out and disappears (7 minutes after it was sent). */
+      expiresAt: i.createdAt ? inviteEndsAt(i.createdAt) : null,
       myResponse: mine ? mine.response ?? null : undefined,
       recipients: i.recipients.map((r) => ({
         user: who(r.userId), response: r.response ?? null, respondedAt: r.respondedAt ?? null, delivered: r.delivered ?? [],
@@ -51,12 +51,11 @@ async function serialize(list: Lean[], me: string) {
   });
 }
 
-/** Invites from the last 24 hours that I sent or got. */
+/** Live invites (sent in the last 7 minutes) that I sent or got. */
 invitesRouter.get('/', ah(async (req, res) => {
   const me = req.user!._id;
   const list = await ClassicInvite.find({
     teamId: teamIdOf(req),
-    createdAt: { $gte: new Date(Date.now() - 24 * 3600_000) },
     $and: [{ $or: [{ fromId: me }, { 'recipients.userId': me }] }, live()],
   }).sort({ createdAt: -1 }).limit(20).lean();
   res.json({ invites: await serialize(list as Lean[], String(me)) });
@@ -85,13 +84,13 @@ invitesRouter.post('/', ah(async (req, res) => {
   if (picked.some((id) => !onTeam.has(id))) throw badRequest('You can only invite your teammates');
   if (!picked.length) throw badRequest('Pick at least one teammate');
   const invite = await ClassicInvite.create({
-    teamId, fromId: me, message, recipients: picked.map((userId) => ({ userId })),
+    teamId, fromId: me, message, recipients: picked.map((userId) => ({ userId })), expireAt: purgeAt(Date.now()),
   });
   const recipients = await mongoDispatchRepo.getRecipients(picked);
   const delivered = await deliverInvite({ id: String(invite._id), message, fromIgn: req.user!.ign || req.user!.name }, recipients);
   await Promise.all(picked.map((uid) => ClassicInvite.updateOne(
     { _id: invite._id, 'recipients.userId': new Types.ObjectId(uid) },
-    { $set: { 'recipients.$.delivered': delivered.get(uid) ?? [] } },
+    { $set: { 'recipients.$.delivered': delivered.get(uid)?.delivered ?? [], 'recipients.$.tgMessageId': delivered.get(uid)?.tgMessageId ?? null } },
   )));
   const fresh = await ClassicInvite.findById(invite._id).lean();
   res.status(201).json({ invite: (await serialize([fresh as Lean], me))[0] });
@@ -108,9 +107,19 @@ invitesRouter.post('/:id/respond', ah(async (req, res) => {
 /** The sender deletes their invite; it disappears for everyone. */
 invitesRouter.delete('/:id', ah(async (req, res) => {
   if (!Types.ObjectId.isValid(String(req.params.id))) throw notFound('Invite not found');
-  const i = await ClassicInvite.findOne({ _id: req.params.id, teamId: teamIdOf(req) }).select('fromId').lean();
+  const i = await ClassicInvite.findOne({ _id: req.params.id, teamId: teamIdOf(req) }).select('fromId recipients').lean();
   if (!i) throw notFound('Invite not found. It may have expired.');
   if (String(i.fromId) !== String(req.user!._id)) throw forbidden('Only the player who sent it can delete it');
   await ClassicInvite.deleteOne({ _id: i._id });
+  // Take it off Telegram too.
+  const withMsg = i.recipients.filter((r) => r.tgMessageId);
+  if (withMsg.length) {
+    const users = await User.find({ _id: { $in: withMsg.map((r) => r.userId) } }).select('telegramChatId').lean();
+    const chat = new Map(users.map((u) => [String(u._id), u.telegramChatId]));
+    await Promise.all(withMsg.map((r) => {
+      const c = chat.get(String(r.userId));
+      return c ? defaultChannels.removeTelegram?.(c, r.tgMessageId!).catch(() => undefined) : undefined;
+    }));
+  }
   res.json({ ok: true });
 }));

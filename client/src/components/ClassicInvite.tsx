@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronRight, Gamepad2, Send, Trash2, X } from 'lucide-react';
+import { Check, ChevronRight, Gamepad2, Send, Timer, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ago } from '@/lib/time';
@@ -42,32 +42,71 @@ export function useDeleteInvite(onDone?: () => void) {
   };
 }
 
-/** "Clears in 4 min" once everyone has answered. */
-export function clearsIn(at: string | null) {
+/** Re-render every second (for the 7-minute countdown). */
+export function useNow(everyMs = 1000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(t);
+  }, [everyMs]);
+  return now;
+}
+
+/** "Disappears in 6:42" until the invite runs out (7 minutes after it was sent). */
+export function clearsIn(at: string | null, now = Date.now()) {
   if (!at) return null;
-  const min = Math.max(1, Math.ceil((new Date(at).getTime() - Date.now()) / 60_000));
-  return `Everyone answered. Clears in ${min} min`;
+  const left = Math.max(0, Math.ceil((new Date(at).getTime() - now) / 1000));
+  return left ? `Disappears in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Expired';
 }
 
+const isLive = (i: ClassicInvite, now: number) => !i.expiresAt || new Date(i.expiresAt).getTime() > now;
+
+/** True while any invite is live; flips back exactly when the last one runs out (no per-second re-render). */
+export function useHasLiveInvite() {
+  const q = useQuery({ queryKey: ['invites'], queryFn: () => api.invites().then((r) => r.invites), refetchInterval: 15_000 });
+  const [, bump] = useState(0);
+  const now = Date.now();
+  const live = (q.data ?? []).filter((i) => isLive(i, now));
+  const nextEnd = Math.min(...live.map((i) => (i.expiresAt ? new Date(i.expiresAt).getTime() : Infinity)));
+  useEffect(() => {
+    if (!Number.isFinite(nextEnd)) return;
+    const t = setTimeout(() => bump((n) => n + 1), Math.max(0, nextEnd - Date.now()) + 50);
+    return () => clearTimeout(t);
+  }, [nextEnd]);
+  return live.length > 0;
+}
+
+/** Invites that are still live. They drop out on their own the moment they run out. */
 export function useInvites() {
-  return useQuery({ queryKey: ['invites'], queryFn: () => api.invites().then((r) => r.invites), refetchInterval: 20_000 });
+  const now = useNow();
+  const q = useQuery({ queryKey: ['invites'], queryFn: () => api.invites().then((r) => r.invites), refetchInterval: 15_000 });
+  return { ...q, data: q.data?.filter((i) => isLive(i, now)), now };
 }
 
-/** Home card: "Play classic" button, plus today's invites and their answers. */
+/** Home card: "Play classic" button, plus live invites and their answers. Glows while an invite is live. */
 export function PlayClassicCard() {
   const [open, setOpen] = useState(false);
   const q = useInvites();
   const invites = q.data ?? [];
+  const waitingOnMe = invites.filter((i) => i.myResponse === null).length;
   return (
-    <Card>
+    <Card glow={invites.length > 0} className={cx(invites.length > 0 && 'border-ember-400/40')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-ember-400 to-ember-600 text-ink-950 shadow-glow">
             <Gamepad2 className="h-5 w-5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-white">Play classic</h2>
-            <p className="text-xs text-zinc-400">Ask teammates for a classic match. They get it in the app and on Telegram.</p>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+              Play classic
+              {waitingOnMe > 0 && (
+                <span className="relative flex h-2.5 w-2.5" aria-label={`${waitingOnMe} waiting for your answer`}>
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ember-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-ember-500" />
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-zinc-400">Ask teammates for a classic match. They get it in the app and on Telegram. Invites disappear after 7 minutes.</p>
           </div>
         </div>
         <Button icon={<Send className="h-4 w-4" aria-hidden />} onClick={() => setOpen(true)}>Invite</Button>
@@ -77,7 +116,7 @@ export function PlayClassicCard() {
           <motion.ul initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
             className="mt-4 space-y-2 overflow-hidden">
             <AnimatePresence initial={false}>
-              {invites.slice(0, 3).map((i) => <InviteRow key={i.id} invite={i} />)}
+              {invites.slice(0, 3).map((i) => <InviteRow key={i.id} invite={i} now={q.now} />)}
             </AnimatePresence>
           </motion.ul>
         )}
@@ -87,7 +126,7 @@ export function PlayClassicCard() {
   );
 }
 
-function InviteRow({ invite: i }: { invite: ClassicInvite }) {
+function InviteRow({ invite: i, now }: { invite: ClassicInvite; now: number }) {
   const ins = i.recipients.filter((r) => r.response === 'in').length;
   const del = useDeleteInvite();
   return (
@@ -109,7 +148,7 @@ function InviteRow({ invite: i }: { invite: ClassicInvite }) {
         </button>
       )}
       </div>
-      {i.expiresAt && <p className="mt-1.5 pl-[42px] text-[11px] text-zinc-500">{clearsIn(i.expiresAt)}</p>}
+      {i.expiresAt && <p className="mt-1.5 flex items-center gap-1 pl-[42px] text-[11px] text-ember-300/80"><Timer className="h-3 w-3" aria-hidden />{clearsIn(i.expiresAt, now)}</p>}
       {i.myResponse !== undefined && <AnswerButtons invite={i} className="mt-2.5" />}
     </motion.li>
   );
@@ -123,7 +162,7 @@ export function AnswerButtons({ invite, className }: { invite: ClassicInvite; cl
     onSuccess: ({ invite: fresh }, r) => {
       qc.setQueryData(['invite', invite.id], fresh);
       qc.invalidateQueries({ queryKey: ['invites'] });
-      toast.success(r === 'in' ? "You're in. They've been told." : "You're out. They've been told.");
+      toast.success(r === 'in' ? "You're in. Everyone's been told." : "You're out. Everyone's been told.");
     },
     onError: (e) => toast.error(e),
   });
