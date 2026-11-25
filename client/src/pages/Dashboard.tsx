@@ -201,10 +201,11 @@ function QuickPicker({ m, members }: { m: Match; members: Member[] }) {
       </div>
       <div className="flex flex-wrap gap-2">
         {members.map((p) => {
-          const on = sel.selected.includes(p.id);
+          const idx = sel.selected.indexOf(p.id);
+          const on = idx >= 0;
           const benched = sel.full && !on;
           return (
-            <PickChip key={p.id} p={p} on={on} benched={benched}
+            <PickChip key={p.id} p={p} on={on} benched={benched} slot={on ? idx + 1 : undefined}
               onToggle={() => { const ok = sel.toggle(p.id); if (!ok) toast.error('Only 4 can play. Unpick someone first.'); return ok; }} />
           );
         })}
