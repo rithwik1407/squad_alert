@@ -118,3 +118,17 @@ Log entry: `{ id, matchId, match, userId, user, kind: "squad"|"captain_alert", c
 | DELETE | `/me/telegram` | unlink |
 | GET | `/me/stats` | `{ rows: [{ matchId, title, map, startAt, selected, joined, kills, damage, mvp }], totals }` |
 | GET | `/me/stats/team` | Whole-team scorecards for the charts: `{ players: [{ id, name, ign, avatar }], matches: [{ matchId, title, map, type, startAt, placement, stats: [{ userId, kills, damage, survivalMin, assists, mvp, mvpScore }] }] }` |
+
+## Squad AI
+
+All need a signed-in team member. Actions marked captain need the captain.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/api/ai/status` | `{ engine: 'gemini' \| 'groq' \| 'offline' }` |
+| GET | `/api/ai/overview` | Dashboard blocks for the last 20 matches plus upcoming matches. No LLM call. |
+| POST | `/api/ai/chat` | Body `{ messages: [{ role: 'user' \| 'assistant', text }] }` (last one is the question). Answers as Server-Sent Events: `meta`, `text` (delta), `tool` (start/done), `block` (a visual for the dashboard), `notice`, `done`. 8 per minute per user. |
+| POST | `/api/ai/squad` | Captain. `{ matchId, selectedIds[4] }`: approve an AI squad recommendation (saves it confirmed and alerts the picked players). |
+| GET | `/api/ai/proposals/:id` | Status of an AI-prepared action. |
+| POST | `/api/ai/proposals/:id/approve` | Captain. Carries out the action (creates the scrim or confirms the squad). |
+| POST | `/api/ai/proposals/:id/reject` | Captain. Dismisses it; nothing changes. |

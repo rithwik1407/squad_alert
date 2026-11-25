@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
-import { Attendance, isAdmin, Match, Squad, Stats, User } from '../models/index.js';
+import { Attendance, GAME_ROLES, isAdmin, Match, Squad, Stats, User } from '../models/index.js';
 import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
@@ -26,6 +26,7 @@ const profileSchema = z.object({
     z.string().max(AVATAR_DATA_MAX, 'That photo is too big. Pick a smaller one.').regex(AVATAR_DATA_URL, 'Upload a PNG, JPG or WebP photo'),
   ]).optional(),
   whatsappNumber: z.string().trim().max(20).optional(),
+  gameRole: z.enum([...GAME_ROLES, '']).optional(),
   notifyPrefs: z.object({ push: z.boolean(), telegram: z.boolean(), whatsapp: z.boolean() }).partial().optional(),
 });
 

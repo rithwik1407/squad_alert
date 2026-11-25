@@ -24,6 +24,8 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   );
 }
 
+const GAME_ROLES = ['IGL', 'Assaulter', 'Sniper', 'Support', 'Scout', 'Flex'];
+
 export default function Settings() {
   const { user, refresh, logout } = useAuth();
   const toast = useToast();
@@ -98,7 +100,7 @@ export default function Settings() {
     const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     setBusy('profile');
     try {
-      await api.updateMe({ name: f.name, ign: f.ign, bgmiId: f.bgmiId || undefined, avatar });
+      await api.updateMe({ name: f.name, ign: f.ign, bgmiId: f.bgmiId || undefined, avatar, gameRole: f.gameRole ?? '' });
       await refresh();
       toast.success('Profile saved');
     } catch (err) { toast.error(err); } finally { setBusy(null); }
@@ -227,6 +229,12 @@ export default function Settings() {
               <Field label="Name"><input name="name" className="input" defaultValue={user.name} required /></Field>
               <Field label="IGN"><input name="ign" className="input" defaultValue={user.ign} required /></Field>
               <Field label="BGMI UID"><input name="bgmiId" className="input font-mono" defaultValue={user.bgmiId} inputMode="numeric" /></Field>
+              <Field label="In-game role" hint="Squad AI uses this to keep the squad balanced.">
+                <select name="gameRole" className="input" defaultValue={user.gameRole ?? ''}>
+                  <option value="">Not set</option>
+                  {GAME_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </Field>
               <Field label="Avatar link"
                 error={avatarBroken ? "That link doesn't open as an image. For Google Drive, set sharing to “Anyone with the link”, or use Upload photo." : undefined}
                 hint="Upload a photo, or paste an image link. Google Drive share links work if sharing is set to “Anyone with the link”.">

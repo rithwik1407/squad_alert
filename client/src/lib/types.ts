@@ -18,6 +18,8 @@ export interface User {
   ign: string;
   bgmiId: string;
   role: Role;
+  /** In-game role (IGL, Assaulter...), used by the Squad AI for role balance. Empty until picked. */
+  gameRole?: string;
   avatar: string;
   teamId: string | null;
   /** True only for the admin account (admin@rare.com), who approves new signups. */

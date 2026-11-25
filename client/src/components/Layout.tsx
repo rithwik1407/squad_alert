@@ -2,7 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ErrorBoundary } from './ErrorBoundary';
-import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Users, BarChart3 } from 'lucide-react';
+import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { Avatar, cx, Skeleton } from './ui';
@@ -19,6 +19,7 @@ export function Layout() {
     if (navType !== 'POP') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, [loc.pathname, navType]);
   const { requests } = useJoinRequests();
+  const wide = loc.pathname === '/ai';
   const badges: Record<string, number> = { '/team': requests.length };
   // The captain's phone bar is already full, so Calendar sits in the top bar there instead (phoneBar: false).
   const items: { to: string; label: string; icon: typeof Home; phoneBar?: boolean }[] = isCaptain
@@ -26,6 +27,7 @@ export function Layout() {
         { to: '/', label: 'Home', icon: Home },
         { to: '/matches', label: 'Matches', icon: CalendarClock },
         { to: '/calendar', label: 'Calendar', icon: CalendarDays, phoneBar: false },
+        { to: '/ai', label: 'Squad AI', icon: Sparkles, phoneBar: false },
         { to: '/scrims', label: 'Scrims', icon: BookUser },
         { to: '/team', label: 'Team', icon: Users },
         { to: '/notifications', label: 'Alerts', icon: Bell },
@@ -35,6 +37,7 @@ export function Layout() {
         { to: '/', label: 'Home', icon: Home },
         { to: '/stats', label: 'Stats', icon: BarChart3 },
         { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+        { to: '/ai', label: 'Squad AI', icon: Sparkles, phoneBar: false },
         { to: '/scrims', label: 'Scrims', icon: BookUser },
         { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
@@ -95,6 +98,10 @@ export function Layout() {
         <Logo compact />
         <div className="flex items-center gap-2">
           {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
+          {/* The phone bar is full, so Squad AI lives in the top bar. */}
+          <NavLink to="/ai" aria-label="Squad AI" className={({ isActive }) => cx('relative rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
+            <Sparkles className="h-5 w-5" aria-hidden />
+          </NavLink>
           {isCaptain && (
             <NavLink to="/calendar" aria-label="Calendar" className={({ isActive }) => cx('rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
               <CalendarDays className="h-5 w-5" aria-hidden />
@@ -103,7 +110,7 @@ export function Layout() {
         </div>
       </div>
 
-      <main id="main" className="mx-auto max-w-6xl px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
+      <main id="main" className={cx('mx-auto px-4', wide ? 'max-w-[1480px]' : 'max-w-6xl', ' pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10')}>
         {/* Enter-only page transition (opacity + transform). No exit/wait phase, so a lazy page can never get stuck invisible. */}
         <ErrorBoundary resetKey={loc.pathname}>
           <Suspense fallback={<PageSkeleton />}>
@@ -115,7 +122,8 @@ export function Layout() {
         </ErrorBoundary>
       </main>
 
-      <TeamChat />
+      {/* The AI page has its own chat box in the same corner. */}
+      {!wide && <TeamChat />}
 
       {/* Mobile bottom nav */}
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>

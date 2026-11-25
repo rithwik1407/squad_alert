@@ -38,6 +38,18 @@ Notification: **"Match in 2 minutes!"** / *"Scrim 1 · Erangel · 9:00 PM. Join 
 - **Nightly team summary on Telegram** at 12:00 AM IST: the day's matches played, MVP of the day, top fragger, a player board and each match's result. Sent once to every player with Telegram linked; skipped on days with no matches.
 - **Delivery history**, player inbox, attendance, kills/damage/MVP stats with charts, tournament placements.
 
+## Squad Intelligence (AI assistant)
+
+The **Squad AI** page (`/ai`, sparkle icon) is an AI team manager. Ask in plain English ("Suggest today's best four players", "Compare Akshay and Bittu over the last 15 matches", "Who misses scrims?", "Which time is best for scrims?", "Schedule a scrim tomorrow at 9 PM") and it:
+
+1. **Analyzes** real MongoDB records through server-side tools (`server/src/ai/tools.ts`): roster, player stats, comparisons, team performance and map trends, match reports, attendance, best time slots, schedule clashes.
+2. **Recommends** squads with a transparent score: recent form 55%, availability for that match 20%, show-up rate 15%, bench-rotation fairness 10%, plus role balance from each player's in-game role (Settings > In-game role).
+3. **Acts only with approval**: "schedule a scrim" or "pick the squad" creates a proposal card. Nothing changes until the captain taps Approve. Players get read-only answers.
+
+Answers stream into the chat while every tool result is drawn on the dashboard next to it (KPI tiles, trend and bar charts, radar comparisons, map tiles, heatmaps, squad cards, match reports). On phones, Chat and Dashboard are tabs.
+
+**Free setup:** set `GEMINI_API_KEY` (free at https://aistudio.google.com/apikey, the same key the screenshot reader uses). `GROQ_API_KEY` is a free fallback. With no key, or when both free tiers are busy, a built-in analyst answers with the same numbers and charts, just less conversational. Optional: `GEMINI_MODEL` to force a model, `GROQ_CHAT_MODEL` for Groq.
+
 ## Local setup
 
 Requirements: Node 20+, a MongoDB (local or Atlas), a Redis (local `redis-server` or Upstash).
