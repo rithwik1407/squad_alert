@@ -1,24 +1,47 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, PolarAngleAxis, PolarGrid, Radar, RadarChart,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Crosshair, Flame, Handshake, Medal, Swords, Trophy, Users, XCircle } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, Crosshair, Flame, Handshake, Medal, RotateCcw, Swords, Trophy, Users, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
-import { dayIST, timeIST } from '@/lib/time';
+import { dayIST, dayKeyIST, daysAgoKeyIST, shortDayFromKey, timeIST } from '@/lib/time';
 import { mapLabel, type TeamStatsMatch, type TeamStatsPlayer } from '@/lib/types';
 import { list } from '@/lib/motion';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, Card, PageHeader, Skeleton, cx } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import {
-  GRID, METRICS, MUTED, ORANGE, PlayerChip, Segmented, StatTile, TooltipCard, fmtNum, metricOf, type MetricKey,
+  GRID, METRICS, MUTED, ORANGE, Paged, PlayerChip, Segmented, StatTile, TooltipCard, fmtNum, metricOf, type MetricKey,
 } from '@/components/StatsCharts';
 
 type View = 'me' | 'team';
 type Range = '5' | '10' | 'all';
+type Period = 'all' | 'today' | '7d' | '30d' | 'custom';
+
+const PERIODS: { value: Period; label: string }[] = [
+  { value: 'all', label: 'All time' }, { value: 'today', label: 'Today' }, { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' }, { value: 'custom', label: 'Custom' },
+];
+/** Rows shown per page in the breakdown, leaderboard and history cards. */
+const PAGE = 4;
+
+/** The [from, to] IST day keys a period covers; an empty end is open. */
+function periodBounds(period: Period, from: string, to: string): [string, string] {
+  switch (period) {
+    case 'today': return [daysAgoKeyIST(0), daysAgoKeyIST(0)];
+    case '7d': return [daysAgoKeyIST(6), daysAgoKeyIST(0)];
+    case '30d': return [daysAgoKeyIST(29), daysAgoKeyIST(0)];
+    case 'custom': return from && to && from > to ? [to, from] : [from, to];
+    default: return ['', ''];
+  }
+}
+const inBounds = (iso: string, [from, to]: [string, string]) => {
+  const k = dayKeyIST(iso);
+  return (!from || k >= from) && (!to || k <= to);
+};
 
 const nameOf = (p: TeamStatsPlayer) => p.ign || p.name;
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
@@ -37,6 +60,11 @@ export default function Stats() {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [hoverPlayer, setHoverPlayer] = useState<string | null>(null);
   const [pickedMatch, setPickedMatch] = useState<string | null>(null);
+  const [period, setPeriod] = useState<Period>('all');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const breakdownRef = useRef<HTMLDivElement>(null);
+  const bounds = periodBounds(period, from, to);
 
   const myId = user?._id ?? '';
   const m = metricOf(metric);
@@ -65,9 +93,20 @@ export default function Stats() {
     let ms = allMatches;
     if (view === 'me') ms = ms.filter((x) => x.stats.some((s) => s.userId === myId));
     if (map !== 'all') ms = ms.filter((x) => x.map === map);
+    if (period !== 'all') ms = ms.filter((x) => inBounds(x.startAt, bounds));
     if (range !== 'all') ms = ms.slice(-Number(range));
     return ms;
-  }, [allMatches, view, map, range, myId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMatches, view, map, range, myId, period, bounds[0], bounds[1]]);
+
+  // Personal history (newest first) under the same date and map filters.
+  const history = useMemo(() => {
+    let rs = [...(me.data?.rows ?? [])].reverse();
+    if (map !== 'all') rs = rs.filter((r) => r.map === map);
+    if (period !== 'all') rs = rs.filter((r) => inBounds(r.startAt, bounds));
+    return rs;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me.data, map, period, bounds[0], bounds[1]]);
 
   const visible = players.filter((p) => !hidden.has(p.id) && matches.some((x) => x.stats.some((s) => s.userId === p.id)));
   const selected = matches.find((x) => x.matchId === pickedMatch) ?? matches[matches.length - 1];
@@ -130,6 +169,35 @@ export default function Stats() {
 
   const lineOpacity = (id: string) => (hoverPlayer && hoverPlayer !== id ? 0.15 : 1);
 
+  const withAtt = history.filter((r) => r.selected && r.joined !== null);
+  const attended = withAtt.filter((r) => r.joined).length;
+
+  const choosePeriod = (v: Period) => {
+    setPeriod(v); setPickedMatch(null);
+    if (v !== 'all') setRange('all');
+    if (v === 'custom' && !from && !to) { setFrom(daysAgoKeyIST(29)); setTo(daysAgoKeyIST(0)); }
+  };
+  const clearFilters = () => { setPeriod('all'); setMap('all'); setRange('10'); setPickedMatch(null); };
+  const filtered = period !== 'all' || map !== 'all';
+  const spanText = matches.length
+    ? (() => {
+      const a = shortDayFromKey(dayKeyIST(matches[0].startAt)); const b = shortDayFromKey(dayKeyIST(matches[matches.length - 1].startAt));
+      return a === b ? a : `${a} – ${b}`;
+    })()
+    : '';
+
+  /** A history row opens if that match has scorecard stats in the current view. */
+  const canOpen = (id: string) => allMatches.some((x) => x.matchId === id && (view !== 'me' || x.stats.some((st) => st.userId === myId)));
+  /** Open a match in the breakdown card and bring the card into view. */
+  const openMatch = (id: string) => {
+    if (!matches.some((x) => x.matchId === id)) {
+      if (!canOpen(id)) return;
+      setRange('all'); // it's in the date filter but older than "Last N"
+    }
+    setPickedMatch(id);
+    requestAnimationFrame(() => breakdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  };
+
   return (
     <div>
       <PageHeader
@@ -146,23 +214,68 @@ export default function Stats() {
         <Card><EmptyState title="No stats yet" text="Your captain uploads the results screenshot after each match, and the charts fill in here." /></Card>
       ) : (
         <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
-          {/* Filters: one row above every chart. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Segmented id="metric" size="sm" value={metric} onChange={setMetric} options={METRICS.map((k) => ({ value: k.key, label: k.label }))} />
-            <Segmented id="range" size="sm" value={range} onChange={(v) => { setRange(v); setPickedMatch(null); }} options={[
-              { value: '5', label: 'Last 5' }, { value: '10', label: 'Last 10' }, { value: 'all', label: 'All' },
-            ]} />
-            {maps.length > 1 && (
-              <select aria-label="Filter by map" value={map} onChange={(e) => { setMap(e.target.value); setPickedMatch(null); }}
-                className="rounded-xl border border-white/10 bg-ink-900/80 px-3 py-1.5 text-xs font-semibold text-zinc-200 focus:border-ember-400/70 focus:outline-none">
-                <option value="all">All maps</option>
-                {maps.map((mp) => <option key={mp} value={mp}>{mp}</option>)}
-              </select>
-            )}
-          </div>
+          {/* Filters: apply to every card on the page. */}
+          <Card className="!p-3 sm:!p-4">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="hidden h-4 w-4 shrink-0 text-zinc-500 sm:block" aria-hidden />
+                <div className="no-scrollbar -mx-3 min-w-0 flex-1 overflow-x-auto px-3 sm:mx-0 sm:px-0">
+                  <div className="w-max">
+                    <Segmented id="period" size="sm" value={period} onChange={choosePeriod} options={PERIODS} />
+                  </div>
+                </div>
+              </div>
+              <AnimatePresence initial={false}>
+                {period === 'custom' && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-end">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        From
+                        <input type="date" value={from} max={to || undefined} onChange={(e) => { setFrom(e.target.value); setPickedMatch(null); }}
+                          className="mt-1 block w-full rounded-xl border border-white/10 bg-ink-900/80 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-100 [color-scheme:dark] focus:border-ember-400/70 focus:outline-none" />
+                      </label>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        To
+                        <input type="date" value={to} min={from || undefined} onChange={(e) => { setTo(e.target.value); setPickedMatch(null); }}
+                          className="mt-1 block w-full rounded-xl border border-white/10 bg-ink-900/80 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-100 [color-scheme:dark] focus:border-ember-400/70 focus:outline-none" />
+                      </label>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Segmented id="metric" size="sm" value={metric} onChange={setMetric} options={METRICS.map((k) => ({ value: k.key, label: k.label }))} />
+                  <Segmented id="range" size="sm" value={range} onChange={(v) => { setRange(v); setPickedMatch(null); }} options={[
+                    { value: '5', label: 'Last 5' }, { value: '10', label: 'Last 10' }, { value: 'all', label: 'All' },
+                  ]} />
+                  {maps.length > 1 && (
+                    <select aria-label="Filter by map" value={map} onChange={(e) => { setMap(e.target.value); setPickedMatch(null); }}
+                      className="rounded-xl border border-white/10 bg-ink-900/80 px-3 py-1.5 text-xs font-semibold text-zinc-200 focus:border-ember-400/70 focus:outline-none">
+                      <option value="all">All maps</option>
+                      {maps.map((mp) => <option key={mp} value={mp}>{mp}</option>)}
+                    </select>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-zinc-500">
+                <span aria-live="polite">
+                  <span className="font-semibold text-zinc-300">{matches.length}</span> {matches.length === 1 ? 'match' : 'matches'}
+                  {spanText && <> · {spanText}</>}
+                  {map !== 'all' && <> · {map}</>}
+                </span>
+                {filtered && (
+                  <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1 font-semibold text-ember-300 hover:text-ember-200">
+                    <RotateCcw className="h-3 w-3" aria-hidden />Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </Card>
 
           {!matches.length ? (
-            <Card><EmptyState title="Nothing in this filter" text="Try another map or a longer range." /></Card>
+            <Card><EmptyState title="Nothing in this filter" text="No matches in these dates. Try another date range, map, or All time." /></Card>
           ) : (
             <>
               {/* Headline tiles */}
@@ -174,7 +287,7 @@ export default function Stats() {
                     <StatTile label="Avg dmg" value={Math.round(avg(mine.map((l) => l.damage)))} icon={<Flame className="h-3.5 w-3.5" aria-hidden />} />
                     <StatTile label="Assists" value={mine.reduce((a, l) => a + l.assists, 0)} icon={<Handshake className="h-3.5 w-3.5" aria-hidden />} />
                     <StatTile label="Avg survival" value={round1(avg(mine.map((l) => l.survivalMin)))} decimals={1} suffix="m" icon={<Clock className="h-3.5 w-3.5" aria-hidden />} />
-                    <StatTile label="MVPs" value={mine.filter((l) => l.mvp).length} hint={me.data?.totals.attendanceOf ? `${me.data.totals.attended ?? 0}/${me.data.totals.attendanceOf} attended` : undefined} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
+                    <StatTile label="MVPs" value={mine.filter((l) => l.mvp).length} hint={withAtt.length ? `${attended}/${withAtt.length} attended` : undefined} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
                   </>
                 ) : (
                   <>
@@ -262,7 +375,7 @@ export default function Stats() {
               <div className="grid gap-6 lg:grid-cols-2">
                 {/* Match breakdown */}
                 {selected && (
-                  <Card>
+                  <Card ref={breakdownRef} className="scroll-mt-24">
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="eyebrow">Match #{(selected as { n: number }).n}</p>
@@ -275,8 +388,10 @@ export default function Stats() {
                       </div>
                     </div>
                     <AnimatePresence mode="wait">
-                      <motion.ul key={`${selected.matchId}-${metric}`} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }} className="space-y-2.5">
-                        {breakdown.map((s, i) => (
+                      <motion.div key={`${selected.matchId}-${metric}`} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.22 }}>
+                      <Paged items={breakdown} size={PAGE} label="Match breakdown">{(rows, offset) => (
+                      <ul className="space-y-2.5">
+                        {rows.map((s, j) => { const i = offset + j; return (
                           <li key={s.userId} className={cx('rounded-xl p-2', s.userId === myId && 'bg-ember-500/[0.06] ring-1 ring-ember-400/20')}>
                             <div className="mb-1.5 flex items-center gap-2 text-sm">
                               <span className="w-4 text-xs font-mono text-zinc-500">{i + 1}</span>
@@ -287,14 +402,16 @@ export default function Stats() {
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-white/[0.05]">
                               <motion.div className="h-full rounded-full" style={{ background: colorOf(s.userId) }}
-                                initial={{ width: 0 }} animate={{ width: `${(s[metric] / bdMax) * 100}%` }} transition={{ duration: 0.7, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] }} />
+                                initial={{ width: 0 }} animate={{ width: `${(s[metric] / bdMax) * 100}%` }} transition={{ duration: 0.7, delay: j * 0.06, ease: [0.22, 1, 0.36, 1] }} />
                             </div>
                             <div className="mt-1 flex gap-3 pl-6 text-[11px] text-zinc-500">
                               <span>{s.kills} kills</span><span>{fmtNum(s.damage)} dmg</span><span>{s.assists} ast</span><span>{fmtNum(s.survivalMin)}m</span>
                             </div>
                           </li>
-                        ))}
-                      </motion.ul>
+                        ); })}
+                      </ul>
+                      )}</Paged>
+                      </motion.div>
                     </AnimatePresence>
                   </Card>
                 )}
@@ -303,8 +420,9 @@ export default function Stats() {
                 <Card>
                   <h2 className="text-lg font-bold text-white">Leaderboard</h2>
                   <p className="mb-3 text-xs text-zinc-500">Average {m.label.toLowerCase()} per match in this filter</p>
+                  <Paged key={`${view}-${metric}`} items={leaderboard} size={PAGE} label="Leaderboard">{(rows, offset) => (
                   <ul className="space-y-2">
-                    {leaderboard.map((p, i) => (
+                    {rows.map((p, j) => { const i = offset + j; return (
                       <motion.li layout key={p.id} transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                         onMouseEnter={() => setHoverPlayer(p.id)} onMouseLeave={() => setHoverPlayer(null)}
                         className={cx('flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-white/[0.04]', p.id === myId && 'bg-ember-500/[0.06]')}>
@@ -323,8 +441,9 @@ export default function Stats() {
                           <div className="mt-0.5 text-[11px] text-zinc-500">{p.games} {p.games === 1 ? 'match' : 'matches'} · {fmtNum(p.total)} total</div>
                         </div>
                       </motion.li>
-                    ))}
+                    ); })}
                   </ul>
+                  )}</Paged>
                 </Card>
 
                 {/* Radar */}
@@ -382,23 +501,40 @@ export default function Stats() {
             </>
           )}
 
-          {/* Attendance history (personal) */}
+          {/* Attendance history (personal), same date and map filters */}
           {view === 'me' && !!me.data?.rows.length && (
             <Card>
-              <h2 className="mb-3 text-lg font-bold text-white">History</h2>
-              <ul className="divide-y divide-white/5 text-sm">
-                {[...me.data.rows].reverse().slice(0, 8).map((r) => (
-                  <li key={r.matchId}>
-                    <button onClick={() => { if (matches.some((x) => x.matchId === r.matchId)) { setPickedMatch(r.matchId); window.scrollTo({ top: 0, behavior: 'smooth' }); } }}
-                      className="flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-left transition-colors hover:bg-white/[0.03]">
-                      {r.selected ? (r.joined === false ? <XCircle className="h-4 w-4 text-red-400" aria-label="missed" /> : <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-label="played" />) : <span className="chip bg-zinc-700/60 text-zinc-300">Bench</span>}
-                      <span className="flex-1 text-zinc-200">{r.title} · {mapLabel(r.map)}</span>
-                      <span className="text-xs text-zinc-500">{dayIST(r.startAt)}</span>
-                      {r.selected && <span className="w-16 text-right font-mono text-zinc-300">{r.kills}K {r.mvp && <Trophy className="inline h-3.5 w-3.5 text-ember-400" aria-label="MVP" />}</span>}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <h2 className="text-lg font-bold text-white">History</h2>
+                <span className="text-xs text-zinc-500">{history.length} {history.length === 1 ? 'match' : 'matches'}</span>
+              </div>
+              {!history.length ? (
+                <p className="py-4 text-sm text-zinc-500">No matches in these dates.</p>
+              ) : (
+                <Paged key={`${period}-${bounds[0]}-${bounds[1]}-${map}`} items={history} size={PAGE} label="History">{(rows) => (
+                  <ul className="divide-y divide-white/5 text-sm">
+                    {rows.map((r) => {
+                      const open = canOpen(r.matchId);
+                      const on = selected?.matchId === r.matchId;
+                      return (
+                        <li key={r.matchId}>
+                          <button type="button" disabled={!open} onClick={() => openMatch(r.matchId)}
+                            className={cx('flex w-full items-center gap-3 rounded-lg px-1.5 py-2.5 text-left transition-colors enabled:hover:bg-white/[0.04] enabled:active:scale-[0.99]',
+                              on && 'bg-ember-500/[0.06]')}>
+                            {r.selected ? (r.joined === false ? <XCircle className="h-4 w-4 shrink-0 text-red-400" aria-label="missed" /> : <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" aria-label="played" />) : <span className="chip bg-zinc-700/60 text-zinc-300">Bench</span>}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-zinc-200">{r.title} · {mapLabel(r.map)}</span>
+                              <span className="block text-[11px] text-zinc-500 sm:hidden">{dayIST(r.startAt)} · {timeIST(r.startAt)}</span>
+                            </span>
+                            <span className="hidden shrink-0 text-xs text-zinc-500 sm:inline">{dayIST(r.startAt)}</span>
+                            {r.selected && <span className="w-14 shrink-0 text-right font-mono text-zinc-300">{r.kills}K {r.mvp && <Trophy className="inline h-3.5 w-3.5 text-ember-400" aria-label="MVP" />}</span>}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}</Paged>
+              )}
             </Card>
           )}
         </motion.div>

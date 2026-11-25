@@ -47,3 +47,12 @@ export function ago(iso: string) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return dayIST(iso);
 }
+
+const isoDayF = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+/** "YYYY-MM-DD" for the IST calendar day of a moment; sorts and compares as a string. */
+export const dayKeyIST = (iso: string | Date | number) => isoDayF.format(new Date(iso));
+/** IST day key `n` days before today (0 = today). */
+export const daysAgoKeyIST = (n: number) => dayKeyIST(Date.now() - n * 864e5);
+/** "21 Nov" from a "YYYY-MM-DD" day key. */
+export const shortDayFromKey = (key: string) =>
+  new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(new Date(`${key}T00:00:00Z`));
