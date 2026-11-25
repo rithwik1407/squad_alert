@@ -49,6 +49,15 @@ describe('daily summary', () => {
     expect(s.mvp?.name).toBe('BITTU'); // both have 1 MVP; BITTU's day score is higher
   });
 
+  it('adds placement points and kill points together', () => {
+    // m1: #3 = 5 + 9 kills; m2: #1 = 10 + 13 kills; m3: no result
+    expect(s.points).toEqual({ placement: 15, kills: 22, total: 37 });
+    expect(s.matches.map((m) => m.points)).toEqual([14, 23, 0]);
+    const html = renderDailySummary(s, TZ);
+    expect(html).toContain('Points:</b> 37 (15 placement + 22 kills)');
+    expect(html).toContain('#3 · 9 K · 14 pts');
+  });
+
   it('renders a neat Telegram message', () => {
     const html = renderDailySummary(s, TZ);
     expect(html).toContain('<b>TEAM RARE · Daily Report</b>');

@@ -19,7 +19,7 @@ const SCHEMA = {
   required: ['isResultsScreen', 'placement', 'players'],
   properties: {
     isResultsScreen: { type: 'boolean', description: 'true only for a BGMI end-of-match team results table' },
-    placement: { type: ['integer', 'null'], description: 'Squad finishing position shown on the screen, e.g. "#3" or "3/16" -> 3; null if not shown' },
+    placement: { type: ['integer', 'null'], description: 'Squad finishing position shown on the screen, e.g. "#3" or "3/16" -> 3, "Winner Winner Chicken Dinner" -> 1; null if not shown' },
     players: {
       type: 'array',
       items: {
@@ -43,7 +43,9 @@ It has a table with the columns Player, Rating, Finishes, Assists, Damage, Survi
 Read every player row (usually 4) and return each player's name exactly as written (keep the team tag, e.g. "RARE | NAME"),
 Finishes, Assists, Damage, and Survived converted to minutes (e.g. "20.2m" -> 20.2, "12:30" -> 12.5).
 Ignore the Rating column and any "MVP" label.
-Also read the squad's finishing position: the number after the "#" sign on the screen (e.g. "#3" or "#3/16" -> 3), as placement. Use null only if no position is shown.
+Also read the squad's finishing position (placement) out of all teams in the lobby. BGMI shows it as a number after a "#" sign
+(e.g. "#3", "#3/16" or "# 3 /18" -> 3), sometimes labelled Rank or Place. "WINNER WINNER CHICKEN DINNER" means placement 1.
+Do not confuse it with a player's Rating, Finishes or the total number of teams. Use null only if no position is shown at all.
 Set isResultsScreen to true only if the image really is this BGMI results table. For anything else (lobby, map,
 inventory, chat, a photo, another game, another screen) set isResultsScreen to false and return an empty players list.`;
 

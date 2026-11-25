@@ -7,7 +7,8 @@ import type { ScorecardRow } from './types';
  * results still land) when the admin opens Settings or another page meanwhile. The server also saves the
  * numbers itself as soon as it has read them.
  */
-type Read = { seconds: number; listeners: Set<(s: number) => void>; promise: Promise<ScorecardRow[]> };
+export type ReadResult = { rows: ScorecardRow[]; placement: number | null };
+type Read = { seconds: number; listeners: Set<(s: number) => void>; promise: Promise<ReadResult> };
 const reads = new Map<string, Read>();
 
 export const isNotResultsError = (e: unknown) =>
@@ -23,11 +24,11 @@ export function startRead(
 ): Read {
   const existing = reads.get(matchId);
   if (existing) return existing;
-  const read: Read = { seconds: 0, listeners: new Set(), promise: Promise.resolve([]) };
+  const read: Read = { seconds: 0, listeners: new Set(), promise: Promise.resolve({ rows: [], placement: null }) };
   read.promise = readScorecardWithProgress(matchId, image, (s) => {
     read.seconds = s;
     read.listeners.forEach((l) => l(s));
-  }).then(({ rows }) => rows).finally(() => {
+  }).then(({ rows, placement }) => ({ rows, placement: placement ?? null })).finally(() => {
     reads.delete(matchId);
     // The server already saved the matched players: refresh what the pages show.
     qc.invalidateQueries({ queryKey: ['report', matchId] });
@@ -41,7 +42,10 @@ export function startRead(
   });
   // If nobody is on the match page any more, still tell the admin how it went.
   read.promise.then(
-    (rows) => { if (!read.listeners.size) notify.success(`Match results read: ${rows.filter((r) => r.userId).length} players' stats saved.`); },
+    ({ rows, placement }) => {
+      if (read.listeners.size) return;
+      notify.success(`Match results read: ${rows.filter((r) => r.userId).length} players' stats saved${placement ? `, position #${placement}` : '. No position found on the screenshot: add it on the match page'}.`);
+    },
     (e) => { if (!read.listeners.size) notify.error(e); },
   );
   reads.set(matchId, read);
