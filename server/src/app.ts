@@ -15,6 +15,7 @@ import { chatRouter } from './routes/chat.js';
 import { scrimsRouter } from './routes/scrims.js';
 import { cronRouter } from './routes/cron.js';
 import { invitesRouter } from './routes/invites.js';
+import { aiRouter } from './routes/ai.js';
 import type { QueueLike } from './scheduler/queue.js';
 
 export function createApp(getQueue: () => QueueLike) {
@@ -58,6 +59,7 @@ export function createApp(getQueue: () => QueueLike) {
   app.use('/api/scrims', scrimsRouter);
   app.use('/api/cron', cronRouter);
   app.use('/api/invites', invitesRouter);
+  app.use('/api/ai', aiRouter(getQueue));
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);

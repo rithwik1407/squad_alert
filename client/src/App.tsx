@@ -20,6 +20,7 @@ const Join = lazy(() => import('./pages/Join'));
 const Scrims = lazy(() => import('./pages/Scrims'));
 const CalendarPage = lazy(() => import('./pages/Calendar'));
 const Classic = lazy(() => import('./pages/Classic'));
+const Assistant = lazy(() => import('./pages/Assistant'));
 
 function Loading() {
   return (
@@ -86,6 +87,7 @@ export function App() {
           <Route path="scrims" element={<Scrims />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="classic/:id" element={<Classic />} />
+          <Route path="ai" element={<Assistant />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

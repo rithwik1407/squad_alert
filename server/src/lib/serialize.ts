@@ -6,7 +6,7 @@ const s = (id: Id | null | undefined) => (id ? String(id) : null);
 export interface LogSummary { sent: number; failed: number; pending: number }
 
 export function publicUser(u: {
-  _id: Id; name: string; ign: string; bgmiId?: string | null; role: string; avatar?: string | null;
+  _id: Id; name: string; ign: string; bgmiId?: string | null; role: string; avatar?: string | null; gameRole?: string | null;
   fcmTokens?: string[]; telegramChatId?: string | null; whatsappNumber?: string | null;
   notifyPrefs?: { whatsapp?: boolean | null } | null;
 }) {
@@ -16,6 +16,7 @@ export function publicUser(u: {
     ign: u.ign,
     bgmiId: u.bgmiId ?? '',
     role: u.role,
+    gameRole: u.gameRole ?? '',
     avatar: u.avatar ?? '',
     pushEnabled: (u.fcmTokens?.length ?? 0) > 0,
     telegramLinked: Boolean(u.telegramChatId),

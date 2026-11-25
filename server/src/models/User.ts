@@ -1,5 +1,5 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
-import { ROLES, USER_STATUS } from './constants.js';
+import { GAME_ROLES, ROLES, USER_STATUS } from './constants.js';
 import { config } from '../config.js';
 
 const notifyPrefsSchema = new Schema(
@@ -19,6 +19,8 @@ const userSchema = new Schema(
     ign: { type: String, required: true, trim: true },
     bgmiId: { type: String, trim: true, default: '' },
     role: { type: String, enum: ROLES, default: 'player' },
+    /** In-game role (IGL, Assaulter...). Empty until the player picks one in Settings. */
+    gameRole: { type: String, enum: [...GAME_ROLES, ''], default: '' },
     /** 'pending' = registered, waiting for the admin to approve. Pending users can't sign in. */
     status: { type: String, enum: USER_STATUS, default: 'active', index: true },
     avatar: { type: String, default: '' },

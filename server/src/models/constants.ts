@@ -38,3 +38,7 @@ export const TEAM_SIZE = 15;
 
 export const USER_STATUS = ['active', 'pending'] as const;
 export type UserStatus = (typeof USER_STATUS)[number];
+
+/** In-game role a player usually takes. Set by each player in Settings; used by the Squad AI for role balance. */
+export const GAME_ROLES = ['IGL', 'Assaulter', 'Sniper', 'Support', 'Scout', 'Flex'] as const;
+export type GameRole = (typeof GAME_ROLES)[number];

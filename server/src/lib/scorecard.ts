@@ -209,9 +209,9 @@ const GEMINI_SCHEMA = {
   },
 };
 
-const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
+export const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
 /** Known-good defaults, newest first. Google retires models often, so the live list (ListModels) is checked too. */
-const GEMINI_DEFAULTS = ['gemini-3.8-flash', 'gemini-flash-latest'];
+export const GEMINI_DEFAULTS = ['gemini-3.8-flash', 'gemini-flash-latest'];
 /** The model that last worked, tried first next time. */
 let lastGoodModel: string | null = null;
 let discovered: { at: number; models: string[] } | null = null;
@@ -248,7 +248,7 @@ export async function discoverGeminiModels(): Promise<string[]> {
 type GeminiTry = { text: string } | { retry: true; err: string } | { skip: true; err: string };
 
 /** Less "thinking" = faster answers; reading a table needs none. Field names differ by model generation. */
-function thinkingFor(model: string): Record<string, unknown> | undefined {
+export function thinkingFor(model: string): Record<string, unknown> | undefined {
   const v = Number(/gemini-(\d+(?:\.\d+)?)/.exec(model)?.[1] ?? 0);
   if (v >= 3) return { thinkingLevel: 'low' };
   if (v >= 2.5) return { thinkingBudget: 0 };
