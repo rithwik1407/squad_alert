@@ -87,3 +87,19 @@ export async function matchesBetween(teamId: Id, from: Date, to: Date) {
     .sort({ startAt: 1 }).select('title tournamentName type map startAt status placement').lean();
   return ms.map(toMatch);
 }
+
+/** Who can be reached on which channel (Telegram linked, push turned on), for message cards. */
+export async function loadReach(ids: string[]) {
+  const users = await User.find({ _id: { $in: ids } }).select('telegramChatId fcmTokens notifyPrefs').lean();
+  return new Map(users.map((u) => [String(u._id), {
+    telegram: Boolean(u.telegramChatId) && u.notifyPrefs?.telegram !== false && Boolean(config.telegram.botToken),
+    push: (u.fcmTokens?.length ?? 0) > 0 && u.notifyPrefs?.push !== false && Boolean(config.firebase.projectId),
+  }]));
+}
+
+/** Players who have not checked in (no availability answer) for a match. */
+export async function unansweredFor(teamId: Id, matchId: Id) {
+  const [members, answered] = await Promise.all([loadRoster(teamId), Availability.find({ matchId, status: { $ne: null } }).distinct('userId')]);
+  const done = new Set(answered.map(String));
+  return members.filter((m) => m.inPool && !done.has(m.id));
+}

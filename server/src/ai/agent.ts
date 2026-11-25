@@ -1,21 +1,22 @@
 /**
  * Squad Intelligence agent: a function-calling loop over the tools in tools.ts.
  *
- * Engines, tried in order (all free):
- *   1. Google Gemini  GEMINI_API_KEY  (streams token by token)
- *   2. Groq           GROQ_API_KEY    (Llama with tool calls)
- *   3. Offline analyst (no key, or both free tiers busy): picks the tools from keywords and answers with
- *      their plain-English summaries. Same numbers and charts, just less conversational.
+ * Each question is routed to a tier (providers.ts): "light" for chat and general BGMI questions (fast small
+ * model, no tools), "strong" for anything about the team (best tool caller). Every provider with a key is
+ * tried in order until one answers. If none can, the offline analyst picks tools from keywords and answers
+ * with their plain-English summaries: same numbers and charts, just less conversational.
  */
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { discoverGeminiModels, GEMINI_API, GEMINI_DEFAULTS, thinkingFor } from '../lib/scorecard.js';
 import type { ToolOutput } from './analytics.js';
 import type { BlockWithId } from './blocks.js';
+import { configuredProviders, providersFor, routeQuestion, type Provider, type Tier } from './providers.js';
 import { runTool, TOOLS, toolByName, type ToolContext } from './tools.js';
 
 export type AgentEvent =
-  | { type: 'meta'; engine: 'gemini' | 'groq' | 'offline'; model?: string }
+  /** engine: provider id ('groq', 'gemini', …) or 'offline'. label: shown in the chat header. */
+  | { type: 'meta'; engine: string; label: string; model?: string; tier?: Tier }
   | { type: 'text'; delta: string }
   | { type: 'tool'; id: string; name: string; label: string; status: 'start' | 'done' | 'error'; ms?: number }
   | { type: 'block'; block: BlockWithId }
@@ -33,7 +34,11 @@ export interface AgentInput {
   signal?: AbortSignal;
 }
 
-export const aiEngine = () => (config.geminiApiKey ? 'gemini' : config.groqApiKey ? 'groq' : 'offline');
+/** What the chat header shows before the first answer: the first strong provider, or the offline analyst. */
+export function aiEngine() {
+  const p = providersFor('strong')[0];
+  return p ? { engine: p.id, label: p.label, providers: configuredProviders().map((x) => x.label) } : { engine: 'offline', label: 'Built-in analyst', providers: [] as string[] };
+}
 
 const MAX_ROUNDS = 6;
 
@@ -50,7 +55,9 @@ Players: ${ctx.roster.join(', ') || 'unknown'}. A squad is 4 players. The RARE a
 Ground rules
 1. Never invent numbers. Every stat must come from a tool result in this conversation. If data is missing, say so and say what to log (results screenshot, check-ins, placement).
 2. Chat first, visuals on demand. Greetings, thanks, small talk and general BGMI questions ("what is a third zone?", "tips for IGLs") get a short, friendly chat reply with NO tool calls. Call tools only when the answer depends on this team's data: squad picks, player stats, comparisons, performance, maps, attendance, best times, match reports, schedule checks, or actions. Then pick the right one: get_roster, list_matches, get_player_stats, compare_players, analyze_performance, get_match_report, analyze_attendance, best_time_slots, recommend_squad, check_schedule (several if needed). Every tool result is drawn on the dashboard, so never call a tool "just in case". Resolve relative dates ("tomorrow", "Friday") yourself from today's date.
-3. Write actions (propose_scrim, propose_squad) only create a proposal card. Nothing changes until the captain taps Approve. Never say something was created or saved. ${ctx.isCaptain ? 'Before propose_scrim, call check_schedule for clashes. If the event name is missing, use "Scrim".' : 'This user is not the captain: do not call propose_* tools; offer the analysis and suggest they ask the captain.'}
+3. Actions only create an approval card. Nothing changes until someone taps Approve, so never say something was done, sent or saved: say the card is ready. ${ctx.isCaptain
+    ? 'Captain actions: propose_scrim (call check_schedule first; if the event name is missing use "Scrim"), propose_squad, propose_message (message chosen teammates or "all" by Telegram and/or push), propose_ping_unanswered (remind everyone who has not checked in for a match), propose_reschedule, propose_cancel, propose_set_map. Use get_roster or list_matches first when you need a match id.'
+    : 'This user is NOT the captain: never call captain actions (propose_scrim, propose_squad, propose_message, propose_ping_unanswered, propose_reschedule, propose_cancel, propose_set_map). They can use propose_my_availability (their own check-in, e.g. "I\'ll join late at 9:15") and propose_captain_request (send the captain a request). For anything else, give the analysis and suggest they ask the captain.'}
 4. Answer with a short bold headline, 2 to 4 sharp bullet insights, and one concrete next step. Plain English, BGMI terms (IGL, rotations, zone, drop, third zone), no filler, no tables in text.
 5. The tools already draw charts, tables, squad cards and reports on the dashboard next to the chat. Refer to them ("see the trend chart") instead of repeating every number.
 Squad recommendation score = recent form (kills, damage, MVPs, weighted to newer matches) + availability for that match + attendance reliability + a fairness bonus for players benched most often. Always name the substitute and the reason. The captain has the final say.
@@ -68,7 +75,8 @@ function makeRunner({ ctx, emit }: AgentInput) {
     const t0 = Date.now();
     try {
       const out = await runTool(name, args ?? {}, ctx);
-      for (const b of out.blocks) emit({ type: 'block', block: { ...b, id: randomUUID() } as BlockWithId });
+      // Approval cards keep their proposal id (Approve / Dismiss use it); every other visual gets a fresh one.
+      for (const b of out.blocks) emit({ type: 'block', block: { ...b, id: b.type === 'proposal' ? b.id : randomUUID() } as BlockWithId });
       emit({ type: 'tool', id, name, label: def?.label ?? name, status: 'done', ms: Date.now() - t0 });
       done.push(out);
       return out.facts;
@@ -100,8 +108,13 @@ function geminiSchema(s: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-const geminiTools = [{
-  functionDeclarations: TOOLS.map((t) => {
+/** Tools this user may call: captains get the captain actions, players get their self-service ones. */
+export function toolsFor(isCaptain: boolean) {
+  return TOOLS.filter((t) => !t.write || (isCaptain ? t.write === 'captain' : t.write === 'self'));
+}
+
+const geminiToolsFor = (isCaptain: boolean) => [{
+  functionDeclarations: toolsFor(isCaptain).map((t) => {
     const hasProps = Object.keys(t.parameters.properties ?? {}).length > 0;
     return { name: t.name, description: t.description, ...(hasProps ? { parameters: geminiSchema(t.parameters as unknown as Record<string, unknown>) } : {}) };
   }),
@@ -131,15 +144,20 @@ async function* sse(res: Response): AsyncGenerator<unknown> {
   }
 }
 
-async function geminiTurn(model: string, system: string, contents: Content[], emit: AgentInput['emit'], signal?: AbortSignal, withThinking = true, useTools = true): Promise<{ parts: Part[]; streamed: boolean }> {
+const withTimeout = (signal?: AbortSignal, ms = 45_000) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
+
+interface TurnOpts { key: string; tools: unknown[] | null; withThinking?: boolean }
+
+async function geminiTurn(model: string, system: string, contents: Content[], emit: AgentInput['emit'], signal: AbortSignal | undefined, o: TurnOpts): Promise<{ parts: Part[]; streamed: boolean }> {
+  const withThinking = o.withThinking ?? true;
   const res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': config.geminiApiKey },
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': o.key },
+    signal: withTimeout(signal),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents,
-      ...(useTools ? { tools: geminiTools, toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
+      ...(o.tools ? { tools: o.tools, toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
       generationConfig: { temperature: 0.4, maxOutputTokens: 2048, ...(withThinking && thinkingFor(model) ? { thinkingConfig: thinkingFor(model) } : {}) },
     }),
   }).catch((e) => { throw new EngineError((e as Error).message, 'busy'); });
@@ -147,7 +165,7 @@ async function geminiTurn(model: string, system: string, contents: Content[], em
     const body = await res.json().catch(() => ({})) as { error?: { message?: string } };
     const err = body.error?.message ?? `HTTP ${res.status}`;
     console.warn(`[ai] Gemini ${model} failed (${res.status}): ${err}`);
-    if (res.status === 400 && withThinking && /thinking/i.test(err)) return geminiTurn(model, system, contents, emit, signal, false, useTools);
+    if (res.status === 400 && withThinking && /thinking/i.test(err)) return geminiTurn(model, system, contents, emit, signal, { ...o, withThinking: false });
     if (/api key not valid|api_key_invalid/i.test(err)) throw new EngineError('GEMINI_API_KEY is not valid', 'fatal');
     if (res.status === 429 || res.status >= 500 || /overloaded|high demand/i.test(err)) throw new EngineError(err, 'busy');
     throw new EngineError(err, 'skip');
@@ -164,10 +182,13 @@ async function geminiTurn(model: string, system: string, contents: Content[], em
   return { parts, streamed };
 }
 
-async function runGemini(input: AgentInput, run: ReturnType<typeof makeRunner>['run']) {
-  const system = systemPrompt(input.ctx);
+type Run = ReturnType<typeof makeRunner>['run'];
+interface Engine { provider: Provider; tier: Tier; system: string; useTools: boolean }
+
+async function runGemini(input: AgentInput, run: Run, e: Engine) {
   const contents: Content[] = input.history.map((t) => ({ role: t.role === 'assistant' ? 'model' : 'user', parts: [{ text: t.text }] }));
-  const candidates = [...new Set([config.geminiModel, lastGoodGemini, ...GEMINI_DEFAULTS].filter(Boolean) as string[])];
+  const candidates = [...new Set([...e.provider.models[e.tier], ...(e.tier === 'strong' ? [lastGoodGemini] : []), ...GEMINI_DEFAULTS].filter(Boolean) as string[])];
+  const tools = e.useTools ? geminiToolsFor(input.ctx.isCaptain) : null;
   let model = '';
   let anyOutput = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -176,10 +197,14 @@ async function runGemini(input: AgentInput, run: ReturnType<typeof makeRunner>['
     const pool = model ? [model] : candidates;
     for (let i = 0; i < pool.length && !turn; i++) {
       try {
-        turn = await geminiTurn(pool[i], system, contents, input.emit, input.signal, true, !input.chatOnly);
-        if (!model) { model = pool[i]; lastGoodGemini = model; input.emit({ type: 'meta', engine: 'gemini', model }); }
-      } catch (e) {
-        lastErr = e instanceof EngineError ? e : new EngineError((e as Error).message, 'busy');
+        turn = await geminiTurn(pool[i], e.system, contents, input.emit, input.signal, { key: e.provider.apiKey, tools });
+        if (!model) {
+          model = pool[i];
+          if (e.tier === 'strong') lastGoodGemini = model;
+          input.emit({ type: 'meta', engine: e.provider.id, label: e.provider.label, model, tier: e.tier });
+        }
+      } catch (err) {
+        lastErr = err instanceof EngineError ? err : new EngineError((err as Error).message, 'busy');
         if (lastErr.kind === 'fatal' || input.signal?.aborted) throw lastErr;
         if (!model && i === pool.length - 1 && lastErr.kind === 'skip') {
           // Every known model was retired or rejected: look up the live list once.
@@ -204,35 +229,41 @@ async function runGemini(input: AgentInput, run: ReturnType<typeof makeRunner>['
   input.emit({ type: 'text', delta: '\n\n_(Stopped after several tool rounds. Ask a narrower question for more detail.)_' });
 }
 
-/* ───────────────────────── Groq (OpenAI-compatible tool calls) ───────────────────────── */
+/* ───────────────────────── OpenAI-compatible (Groq, Cerebras, OpenRouter, extras) ───────────────────────── */
 
-const GROQ_CHAT_MODELS = [process.env.GROQ_CHAT_MODEL, 'llama-3.3-70b-versatile', 'openai/gpt-oss-120b'].filter(Boolean) as string[];
-
-async function runGroq(input: AgentInput, run: ReturnType<typeof makeRunner>['run']) {
+async function runOpenAI(input: AgentInput, run: Run, e: Engine) {
   type Msg = { role: string; content: string | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]; tool_call_id?: string };
-  const messages: Msg[] = [{ role: 'system', content: systemPrompt(input.ctx) }, ...input.history.map((t) => ({ role: t.role, content: t.text }))];
-  const tools = TOOLS.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
+  const messages: Msg[] = [{ role: 'system', content: e.system }, ...input.history.map((t) => ({ role: t.role, content: t.text }))];
+  const tools = e.useTools ? toolsFor(input.ctx.isCaptain).map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) : null;
+  const { provider } = e;
   let model = '';
+  let anyOutput = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    type GroqBody = { choices?: { message?: Msg }[]; error?: { message?: string } };
-    let body: GroqBody | null = null;
-    for (const m of model ? [model] : GROQ_CHAT_MODELS) {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    type Body = { choices?: { message?: Msg }[]; error?: { message?: string } | string };
+    let body: Body | null = null;
+    let lastErr = `${provider.label} is busy`;
+    for (const m of model ? [model] : provider.models[e.tier]) {
+      const res = await fetch(`${provider.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${config.groqApiKey}` },
-        signal: input.signal ? AbortSignal.any([input.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
-        body: JSON.stringify({ model: m, messages, ...(input.chatOnly ? {} : { tools, tool_choice: 'auto' }), temperature: 0.4, max_tokens: 1500 }),
-      }).catch((e) => { throw new EngineError((e as Error).message, 'busy'); });
-      const b = await res.json().catch(() => ({})) as GroqBody;
-      if (res.ok) { body = b; if (!model) { model = m; input.emit({ type: 'meta', engine: 'groq', model }); } break; }
-      console.warn(`[ai] Groq ${m} failed (${res.status}): ${b.error?.message}`);
-      if (res.status === 401) throw new EngineError('GROQ_API_KEY is not valid', 'fatal');
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${provider.apiKey}`, ...(provider.headers ?? {}) },
+        signal: withTimeout(input.signal),
+        body: JSON.stringify({ model: m, messages, ...(tools ? { tools, tool_choice: 'auto' } : {}), temperature: 0.4, max_tokens: e.tier === 'light' ? 700 : 1500 }),
+      }).catch((err) => { throw Object.assign(new EngineError((err as Error).message, 'busy'), { anyOutput }); });
+      const b = await res.json().catch(() => ({})) as Body;
+      if (res.ok && b.choices?.[0]?.message) {
+        body = b;
+        if (!model) { model = m; input.emit({ type: 'meta', engine: provider.id, label: provider.label, model, tier: e.tier }); }
+        break;
+      }
+      lastErr = (typeof b.error === 'string' ? b.error : b.error?.message) ?? `HTTP ${res.status}`;
+      console.warn(`[ai] ${provider.label} ${m} failed (${res.status}): ${lastErr}`);
+      if (res.status === 401 || res.status === 403) throw new EngineError(`${provider.label} key is not valid`, 'fatal');
+      // A model can reject tool calls it generated badly ("tool_use_failed"): the next model may do better.
     }
-    if (!body) throw new EngineError('Groq is busy', 'busy');
-    const msg = body.choices?.[0]?.message;
-    if (!msg) throw new EngineError('Groq gave no answer', 'busy');
+    if (!body) throw Object.assign(new EngineError(lastErr, 'busy'), { anyOutput });
+    const msg = body.choices![0].message!;
     if (!msg.tool_calls?.length) {
-      // Not streamed by Groq: send it in small pieces so the chat still types it out smoothly.
+      // Not streamed: send it in small pieces so the chat still types it out smoothly.
       const text = msg.content ?? '';
       for (const piece of text.match(/[\s\S]{1,24}/g) ?? []) input.emit({ type: 'text', delta: piece });
       return;
@@ -242,8 +273,10 @@ async function runGroq(input: AgentInput, run: ReturnType<typeof makeRunner>['ru
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(c.function.arguments || '{}'); } catch { /* keep empty */ }
       messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(clip(await run(c.function.name, args))) });
+      anyOutput = true;
     }
   }
+  input.emit({ type: 'text', delta: '\n\n_(Stopped after several tool rounds. Ask a narrower question for more detail.)_' });
 }
 
 /* ───────────────────────── Offline analyst ───────────────────────── */
@@ -291,10 +324,10 @@ export function pickOfflineTools(q: string, roster: string[]): { name: string; a
 }
 
 async function runOffline(input: AgentInput, run: ReturnType<typeof makeRunner>['run'], done: ToolOutput[], reason: string) {
-  input.emit({ type: 'meta', engine: 'offline' });
+  input.emit({ type: 'meta', engine: 'offline', label: 'Built-in analyst' });
   const q = [...input.history].reverse().find((t) => t.role === 'user')?.text ?? '';
-  if (!input.chatOnly && /schedule|create|book|set up|add/.test(q.toLowerCase()) && /scrim|match|tournament/.test(q.toLowerCase())) {
-    input.emit({ type: 'text', delta: `${reason} Scheduling from a sentence needs the AI engine, so add the scrim on the Matches page for now. Here's what the data says:\n\n` });
+  if (!input.chatOnly && /schedule|create|book|set up|add|tell|message|notify|remind|ping|send|cancel|move|reschedule/.test(q.toLowerCase())) {
+    input.emit({ type: 'text', delta: `${reason} Actions from a sentence need an AI model, so use the Matches page for now. Here's what the data says:\n\n` });
   }
   const before = done.length;
   const tools = input.chatOnly ? [] : pickOfflineTools(q, input.ctx.roster);
@@ -305,36 +338,44 @@ async function runOffline(input: AgentInput, run: ReturnType<typeof makeRunner>[
 
 /* ───────────────────────── Entry ───────────────────────── */
 
+const LIGHT_NOTE = `\n\nThis reply has no tools and no team data. Answer from general BGMI knowledge in a few friendly lines. If the question needs this team's records, say what to ask instead (e.g. "Ask me: analyze our last 10 matches").`;
+
 export async function runAgent(input: AgentInput) {
   const last = [...input.history].reverse().find((t) => t.role === 'user')?.text ?? '';
-  if (input.chatOnly === undefined) input = { ...input, chatOnly: isSmallTalk(last) };
+  const tier: Tier = input.chatOnly ? 'light' : routeQuestion(last, input.ctx.roster, isSmallTalk(last));
+  input = { ...input, chatOnly: tier === 'light' };
   const { run, done } = makeRunner(input);
-  const engines: ('gemini' | 'groq')[] = [];
-  if (config.geminiApiKey) engines.push('gemini');
-  if (config.groqApiKey) engines.push('groq');
-  let reason = 'AI engine is not set up (no GEMINI_API_KEY), so this is the built-in analyst.';
-  for (const engine of engines) {
+  const base = systemPrompt(input.ctx);
+  const system = tier === 'light' ? base + LIGHT_NOTE : base;
+  let reason = 'No AI model is set up on the server, so this is the built-in analyst.';
+  const timedOut = () => input.signal?.aborted && (input.signal.reason as Error | undefined)?.name === 'TimeoutError';
+  const finishWithSummaries = (from: number, message: string) => {
+    input.emit({ type: 'notice', message });
+    const text = done.slice(from).map((d) => d.summary).join('\n\n');
+    if (text) input.emit({ type: 'text', delta: `\n\n${text}` });
+    input.emit({ type: 'done' });
+  };
+  const providers = providersFor(tier);
+  for (const provider of providers) {
     const before = done.length;
+    const engine: Engine = { provider, tier, system, useTools: tier === 'strong' };
     try {
-      await (engine === 'gemini' ? runGemini(input, run) : runGroq(input, run));
+      await (provider.kind === 'gemini' ? runGemini(input, run, engine) : runOpenAI(input, run, engine));
       input.emit({ type: 'done' });
       return;
     } catch (e) {
+      if (timedOut()) return finishWithSummaries(before, 'That took longer than 60 seconds, so I stopped. Here is what I found so far.');
       if (input.signal?.aborted) return;
       const err = e as EngineError & { anyOutput?: boolean };
-      console.warn(`[ai] ${engine} engine failed: ${err.message}`);
-      reason = err.kind === 'fatal' ? `${err.message}.` : `The free ${engine === 'gemini' ? 'Gemini' : 'Groq'} tier is busy right now.`;
+      console.warn(`[ai] ${provider.label} failed: ${err.message}`);
+      reason = err.kind === 'fatal' ? `${err.message}.` : `${provider.label}'s free tier is busy right now.`;
       if (done.length > before || err.anyOutput) {
         // Tools already ran and drew their charts: finish with their summaries instead of starting over.
-        input.emit({ type: 'notice', message: `${reason} Finished with the built-in analyst.` });
-        const text = done.slice(before).map((d) => d.summary).join('\n\n');
-        if (text) input.emit({ type: 'text', delta: `\n\n${text}` });
-        input.emit({ type: 'done' });
-        return;
+        return finishWithSummaries(before, `${reason} Finished with the built-in analyst.`);
       }
     }
   }
-  if (engines.length && !input.chatOnly) input.emit({ type: 'notice', message: `${reason} Answering with the built-in analyst.` });
+  if (providers.length && !input.chatOnly) input.emit({ type: 'notice', message: `${providers.length > 1 ? 'Every AI model is busy right now.' : reason} Answering with the built-in analyst.` });
   await runOffline(input, run, done, reason);
   input.emit({ type: 'done' });
 }

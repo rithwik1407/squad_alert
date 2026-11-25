@@ -18,7 +18,33 @@ export type Block =
   | { type: 'report'; title: string; subtitle: string; matchId: string; placement: number | null; kills: number; damage: number; points: number; players: Row[]; observations: { tone: Tone; text: string }[]; recommendation: string }
   | { type: 'insights'; title: string; items: { tone: Tone; title: string; text: string; tags?: string[] }[] }
   | { type: 'heatmap'; title: string; subtitle?: string; rows: string[]; cols: string[]; values: (number | null)[][]; unit?: string }
-  | { type: 'proposal'; id: string; kind: 'scrim' | 'squad'; title: string; lines: { label: string; value: string }[]; warnings: string[]; status: 'pending' | 'approved' | 'rejected' | 'expired' };
+  | ProposalBlock;
+
+export type ProposalKind = 'scrim' | 'squad' | 'message' | 'reschedule' | 'cancel' | 'map' | 'availability' | 'request';
+export type ProposalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+export type Channel = 'telegram' | 'push';
+export interface PoolPlayer { id: string; ign: string; gameRole?: string; availability?: string; telegram?: boolean; push?: boolean }
+
+/** What the Approve form lets the person edit, by kind. Values are the AI's draft. */
+export type ProposalForm =
+  | { kind: 'scrim'; tournamentName: string; title: string; date: string; time: string; map: string; type: string; maps: string[]; types: string[] }
+  | { kind: 'squad'; matchId: string; matchLabel: string; selectedIds: string[]; pool: PoolPlayer[]; size: number }
+  | { kind: 'message'; recipientIds: string[]; text: string; channels: Channel[]; pool: PoolPlayer[]; matchId?: string }
+  | { kind: 'reschedule'; matchId: string; matchLabel: string; date: string; time: string }
+  | { kind: 'cancel'; matchId: string; matchLabel: string }
+  | { kind: 'map'; matchId: string; matchLabel: string; map: string; maps: string[] }
+  | { kind: 'availability'; matchId: string; matchLabel: string; status: string; joinTime: string }
+  | { kind: 'request'; text: string };
+
+export interface ProposalBlock {
+  type: 'proposal'; id: string; kind: ProposalKind; title: string; lines: { label: string; value: string }[]; warnings: string[]; status: ProposalStatus;
+  /** Who can approve: the captain, or the person who asked (their own check-in or request). */
+  approver: 'captain' | 'self';
+  createdBy: string;
+  form: ProposalForm;
+  /** What approving did, in plain words (e.g. "Sent to 3 of 4 by Telegram"). */
+  result?: string | null;
+}
 
 export interface SquadPick {
   id: string;
