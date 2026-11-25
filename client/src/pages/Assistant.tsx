@@ -1,32 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import {
   ArrowUp, BarChart3, BrainCircuit, CalendarClock, Check, CircleAlert, Clock, FileText, LayoutDashboard, Loader2, MessageSquare,
-  RotateCcw, Sparkles, Square, Swords, Trophy, UserCheck, Users,
+  History, LayoutGrid, RotateCcw, Sparkles, Square, Swords, Trophy, UserCheck, Users, X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, cx, Skeleton } from '@/components/ui';
-import { BlockView, isWide, Panel } from '@/components/ai/Blocks';
+import { BlockGrid, Panel } from '@/components/ai/Blocks';
 import { Markdown } from '@/components/ai/Markdown';
-import { aiApi, askAi } from '@/lib/ai';
-import type { AiEvent, AiUpcoming, BlockWithId } from '@/lib/aiTypes';
+import { aiApi } from '@/lib/ai';
+import { aiStore, useAi, type AiGroup, type ToolStep } from '@/lib/aiStore';
 import { spring } from '@/lib/motion';
-
-interface ToolStep { id: string; label: string; status: 'start' | 'done' | 'error'; ms?: number }
-interface Msg {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  tools?: ToolStep[];
-  blocks?: string[];
-  notice?: string;
-  engine?: string;
-  done?: boolean;
-  error?: boolean;
-}
-interface Group { id: string; question: string; at: number; blocks: BlockWithId[]; pending: boolean }
 
 const PROMPTS: { cat: string; icon: typeof Users; q: string; captain?: boolean }[] = [
   { cat: 'Squad', icon: Users, q: "Suggest today's best four players" },
@@ -38,21 +23,6 @@ const PROMPTS: { cat: string; icon: typeof Users; q: string; captain?: boolean }
   { cat: 'Report', icon: FileText, q: 'Generate a report for our last match' },
   { cat: 'Agent', icon: CalendarClock, q: 'Schedule a scrim tomorrow at 9 PM', captain: true },
 ];
-
-const STORE = 'ss_ai_session_v1';
-const uid = () => Math.random().toString(36).slice(2, 10);
-
-function load(): { msgs: Msg[]; groups: Group[] } {
-  try {
-    const raw = sessionStorage.getItem(STORE);
-    if (raw) {
-      const s = JSON.parse(raw) as { msgs: Msg[]; groups: Group[] };
-      // A reload mid-answer leaves nothing streaming; close those out.
-      return { msgs: s.msgs.map((m) => ({ ...m, done: true })), groups: s.groups.map((g) => ({ ...g, pending: false })) };
-    }
-  } catch { /* private mode */ }
-  return { msgs: [], groups: [] };
-}
 
 /** Reveals streamed text at a steady pace so bursts from the network read like smooth typing. */
 function SmoothText({ text, live }: { text: string; live: boolean }) {
@@ -111,101 +81,36 @@ function EngineChip({ engine }: { engine?: string }) {
 
 export default function Assistant() {
   const { user, team, isCaptain } = useAuth();
-  const initial = useMemo(load, []);
-  const [msgs, setMsgs] = useState<Msg[]>(initial.msgs);
-  const [groups, setGroups] = useState<Group[]>(initial.groups);
+  const ai = useAi();
+  const { msgs, groups, busy, view } = ai;
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<'chat' | 'board'>('chat');
-  const tabRef = useRef(tab);
-  tabRef.current = tab;
-  const [unseen, setUnseen] = useState(0);
-  const [flash, setFlash] = useState<string | null>(null);
-  const abort = useRef<AbortController | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
-  const boardTop = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   const status = useQuery({ queryKey: ['ai-status'], queryFn: aiApi.status, staleTime: 5 * 60_000 });
   const overview = useQuery({ queryKey: ['ai-overview'], queryFn: aiApi.overview, staleTime: 60_000 });
-  const [liveEngine, setLiveEngine] = useState<string | undefined>();
-  const engine = liveEngine ?? status.data?.engine;
+  const engine = ai.engine ?? status.data?.engine;
 
+  // Being on this page clears the "answer ready" dot; answers keep streaming after we leave.
+  useEffect(() => { aiStore.setOnPage(true); return () => aiStore.setOnPage(false); }, []);
+  // On phones the dashboard is a tab: count visuals that land while it's hidden. Desktop always shows it.
   useEffect(() => {
-    try { sessionStorage.setItem(STORE, JSON.stringify({ msgs: msgs.slice(-40), groups: groups.slice(0, 15) })); } catch { /* full or blocked */ }
-  }, [msgs, groups]);
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => aiStore.setBoardVisible(mq.matches || tab === 'board');
+    sync();
+    mq.addEventListener('change', sync);
+    return () => { mq.removeEventListener('change', sync); aiStore.setBoardVisible(true); };
+  }, [tab]);
 
   // Keep the newest message in view while it streams.
   useEffect(() => {
     const el = scroller.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 260) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [msgs]);
-
-  useEffect(() => { if (tab === 'board') setUnseen(0); }, [tab]);
-
-  const patch = useCallback((id: string, f: (m: Msg) => Msg) => setMsgs((ms) => ms.map((m) => (m.id === id ? f(m) : m))), []);
-
-  async function send(text: string) {
-    const q = text.trim();
-    if (!q || busy) return;
-    setInput('');
-    const userMsg: Msg = { id: uid(), role: 'user', text: q, done: true };
-    const aId = uid();
-    const gId = uid();
-    const history = [...msgs, userMsg].filter((m) => m.done && !m.error && m.text.trim()).slice(-12).map((m) => ({ role: m.role, text: m.text }));
-    setMsgs((ms) => [...ms, userMsg, { id: aId, role: 'assistant', text: '', tools: [], blocks: [] }]);
-    setGroups((gs) => [{ id: gId, question: q, at: Date.now(), blocks: [], pending: true }, ...gs]);
-    setBusy(true);
-    const ctrl = new AbortController();
-    abort.current = ctrl;
-    const onEvent = (e: AiEvent) => {
-      switch (e.type) {
-        case 'meta': setLiveEngine(e.engine); patch(aId, (m) => ({ ...m, engine: e.engine })); break;
-        case 'text': patch(aId, (m) => ({ ...m, text: m.text + e.delta })); break;
-        case 'tool': patch(aId, (m) => {
-          const tools = m.tools ?? [];
-          const i = tools.findIndex((t) => t.id === e.id);
-          const step = { id: e.id, label: e.label, status: e.status, ms: e.ms };
-          return { ...m, tools: i < 0 ? [...tools, step] : tools.map((t, j) => (j === i ? step : t)) };
-        }); break;
-        case 'block':
-          setGroups((gs) => gs.map((g) => (g.id === gId ? { ...g, blocks: [...g.blocks, e.block] } : g)));
-          patch(aId, (m) => ({ ...m, blocks: [...(m.blocks ?? []), e.block.id] }));
-          if (tabRef.current === 'chat') setUnseen((n) => n + 1);
-          break;
-        case 'notice': patch(aId, (m) => ({ ...m, notice: e.message })); break;
-        case 'done': break;
-      }
-    };
-    try {
-      await askAi(history, onEvent, ctrl.signal);
-    } catch (err) {
-      patch(aId, (m) => ({ ...m, error: true, text: m.text || (err as Error).message }));
-    } finally {
-      patch(aId, (m) => ({ ...m, done: true, text: m.text || (ctrl.signal.aborted ? '_Stopped._' : m.text) }));
-      setGroups((gs) => gs.filter((g) => g.id !== gId || g.blocks.length).map((g) => (g.id === gId ? { ...g, pending: false } : g)));
-      setBusy(false);
-      abort.current = null;
-    }
-  }
-
-  function onSubmit(e: FormEvent) { e.preventDefault(); void send(input); }
-  function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(input); }
-  }
-  function reset() {
-    abort.current?.abort();
-    setMsgs([]); setGroups([]); setUnseen(0);
-  }
-  function showVisuals(msgId: string) {
-    const g = groups.find((x) => x.blocks.some((b) => msgs.find((m) => m.id === msgId)?.blocks?.includes(b.id)));
-    setTab('board');
-    if (g) {
-      setFlash(g.id);
-      setTimeout(() => document.getElementById(`grp-${g.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-      setTimeout(() => setFlash(null), 1400);
-    }
-  }
+  useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight }); }, []);
 
   // Auto-grow the composer.
   useEffect(() => {
@@ -215,52 +120,98 @@ export default function Assistant() {
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [input]);
 
+  function send(text: string) { if (!text.trim() || busy) return; setInput(''); void aiStore.send(text); }
+  function onSubmit(e: FormEvent) { e.preventDefault(); send(input); }
+  function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(input); }
+  }
+  function open(v: string) {
+    aiStore.show(v);
+    setHistoryOpen(false);
+    setTab('board');
+    boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   const prompts = PROMPTS.filter((p) => !p.captain || isCaptain);
+  const current: AiGroup | undefined = view === 'overview' ? undefined : groups.find((g) => g.id === view);
 
-  /* ─────────── Dashboard ─────────── */
+  /* ─────────── Dashboard: the overview, or only the answer being viewed ─────────── */
   const board = (
-    <div ref={boardTop} className="min-w-0 space-y-6">
-      <AnimatePresence initial={false}>
-        {groups.map((g) => (
-          <motion.div key={g.id} id={`grp-${g.id}`} layout="position" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}
-            className={cx('scroll-mt-24 space-y-3 rounded-lg transition-shadow duration-500', flash === g.id && 'shadow-glow-lg')}>
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center bg-ember-500/15 text-ember-300 cut-sm"><Sparkles className="h-3.5 w-3.5" aria-hidden /></span>
-              <div className="min-w-0 flex-1">
-                <p className="font-display text-lg font-bold uppercase leading-tight tracking-wide text-white">{g.question}</p>
-                <p className="text-xs text-zinc-500">{new Date(g.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {g.pending ? 'Analysing live data…' : `${g.blocks.length} visual${g.blocks.length === 1 ? '' : 's'}`}</p>
-              </div>
-            </div>
-            <div className="grid gap-4 xl:grid-cols-2">
-              {g.blocks.map((b) => (
-                <div key={b.id} className={cx('min-w-0', isWide(b) && 'xl:col-span-2')}><BlockView block={b} isCaptain={isCaptain} /></div>
-              ))}
-              {g.pending && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass flex h-40 items-center justify-center gap-3 text-sm text-zinc-400 xl:col-span-2">
-                  <BrainCircuit className="h-5 w-5 animate-pulse-glow text-ember-400" aria-hidden />Building visuals from your team's records…
-                </motion.div>
+    <div ref={boardRef} className="min-w-0 scroll-mt-24">
+      <div className="relative mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={current?.id ?? 'overview'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
+              {current ? (
+                <>
+                  <p className="hud-label">AI answer</p>
+                  <p className="mt-1 line-clamp-2 font-display text-xl font-bold uppercase leading-tight tracking-wide text-white">{current.question}</p>
+                  <p className="text-xs text-zinc-500">{new Date(current.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {current.pending ? 'Building visuals from live data…' : `${current.blocks.length} visual${current.blocks.length === 1 ? '' : 's'}`}</p>
+                </>
+              ) : (
+                <>
+                  <p className="hud-label">Dashboard</p>
+                  <p className="mt-1 font-display text-xl font-bold uppercase leading-tight tracking-wide text-white">Team overview</p>
+                  <p className="text-xs text-zinc-500">Last 20 matches · ask a question to chart anything else</p>
+                </>
               )}
-            </div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="hud-label">Team overview</h2>
-          <span className="text-xs text-zinc-500">Last 20 matches · updates live</span>
+            </motion.div>
+          </AnimatePresence>
         </div>
-        {overview.data?.upcoming?.length ? <Upcoming items={overview.data.upcoming} /> : null}
-        {overview.isLoading ? (
-          <div className="grid gap-4 xl:grid-cols-2"><Skeleton className="h-28 xl:col-span-2" /><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
-        ) : overview.data?.blocks.length ? (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {overview.data.blocks.map((b) => <div key={b.id} className={cx('min-w-0', isWide(b) && 'xl:col-span-2')}><BlockView block={b} isCaptain={isCaptain} /></div>)}
-          </div>
-        ) : (
-          <Panel title="No results yet"><p className="text-sm text-zinc-400">Log placement and kills on finished matches (or upload the results screenshot). The dashboard fills in from there.</p></Panel>
-        )}
-      </section>
+        <div className="flex shrink-0 items-center gap-2">
+          {current && (
+            <button onClick={() => aiStore.show('overview')} className="btn-ghost !px-3 !py-1.5 text-xs"><LayoutGrid className="h-3.5 w-3.5" aria-hidden />Overview</button>
+          )}
+          <button onClick={() => setHistoryOpen((o) => !o)} disabled={!groups.length} aria-expanded={historyOpen}
+            className="btn-ghost !px-3 !py-1.5 text-xs"><History className="h-3.5 w-3.5" aria-hidden />History{groups.length ? <span className="font-mono text-ember-300">{groups.length}</span> : null}</button>
+        </div>
+        <AnimatePresence>
+          {historyOpen && (
+            <>
+              <motion.button aria-label="Close history" className="fixed inset-0 z-30 cursor-default" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setHistoryOpen(false)} />
+              <motion.div initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.97 }} transition={spring}
+                className="glass no-ticks absolute right-0 top-full z-40 mt-2 w-full max-w-sm origin-top-right bg-ink-900 p-2 shadow-2xl">
+                <div className="flex items-center justify-between px-2 py-1">
+                  <p className="hud-label">History</p>
+                  <button onClick={() => setHistoryOpen(false)} aria-label="Close" className="rounded p-1 text-zinc-500 hover:text-white"><X className="h-4 w-4" /></button>
+                </div>
+                <ul className="max-h-80 overflow-y-auto">
+                  {groups.map((g) => (
+                    <li key={g.id}>
+                      <button onClick={() => open(g.id)} className={cx('flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-white/5', g.id === view && 'bg-ember-500/10')}>
+                        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ember-400" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm text-white">{g.question}</span>
+                          <span className="block text-[11px] text-zinc-500">{new Date(g.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {g.blocks.length} visual{g.blocks.length === 1 ? '' : 's'}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div key={current?.id ?? 'overview'} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+          {current ? (
+            current.blocks.length ? <BlockGrid blocks={current.blocks} isCaptain={isCaptain} />
+              : (
+                <div className="glass flex h-48 items-center justify-center gap-3 text-sm text-zinc-400">
+                  <BrainCircuit className="h-5 w-5 animate-pulse-glow text-ember-400" aria-hidden />Building visuals from your team's records…
+                </div>
+              )
+          ) : overview.isLoading ? (
+            <div className="grid gap-4"><Skeleton className="h-36" /><Skeleton className="h-48" /></div>
+          ) : overview.data?.blocks.length ? (
+            <BlockGrid blocks={overview.data.blocks} isCaptain={isCaptain} />
+          ) : (
+            <Panel title="No results yet"><p className="text-sm text-zinc-400">Log placement and kills on finished matches (or upload the results screenshot). The overview fills in from there.</p></Panel>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 
@@ -275,7 +226,7 @@ export default function Assistant() {
         <div className="flex items-center gap-1.5">
           <EngineChip engine={engine} />
           {msgs.length > 0 && (
-            <button onClick={reset} aria-label="New chat" title="New chat" className="rounded-md p-1.5 text-zinc-500 hover:bg-white/5 hover:text-white"><RotateCcw className="h-4 w-4" /></button>
+            <button onClick={() => aiStore.reset()} aria-label="New chat" title="New chat" className="rounded-md p-1.5 text-zinc-500 hover:bg-white/5 hover:text-white"><RotateCcw className="h-4 w-4" /></button>
           )}
         </div>
       </div>
@@ -284,11 +235,11 @@ export default function Assistant() {
         {msgs.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
             <p className="font-display text-2xl font-bold uppercase leading-tight text-white">Your AI team manager</p>
-            <p className="mt-1 text-sm text-zinc-400">Ask about {team?.name ?? 'your team'}. Every answer is built from your real matches, stats and check-ins, and charted on the dashboard.{isCaptain ? ' Actions wait for your approval.' : ''}</p>
+            <p className="mt-1 text-sm text-zinc-400">Chat normally, or ask about {team?.name ?? 'your team'}: data questions get charted on the dashboard.{isCaptain ? ' Actions wait for your approval.' : ''}</p>
             <div className="mt-4 grid gap-2">
               {prompts.map((p, i) => (
                 <motion.button key={p.q} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ ...spring, delay: 0.04 * i }}
-                  whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }} onClick={() => void send(p.q)}
+                  whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }} onClick={() => send(p.q)}
                   className="group flex items-center gap-3 rounded-md border border-white/[0.07] bg-white/[0.02] px-3 py-2.5 text-left hover:border-ember-400/40 hover:bg-ember-500/[0.06]">
                   <p.icon className="h-4 w-4 shrink-0 text-ember-400" aria-hidden />
                   <span className="min-w-0 flex-1">
@@ -313,10 +264,10 @@ export default function Assistant() {
               {m.error ? <p className="text-sm text-red-300">{m.text}</p>
                 : m.text ? <SmoothText text={m.text} live={!m.done} />
                   : !m.done && !m.tools?.length ? <span className="inline-flex gap-1" aria-label="Thinking">{[0, 1, 2].map((i) => <motion.span key={i} className="h-1.5 w-1.5 rounded-full bg-ember-400" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }} />)}</span> : null}
-              {m.done && (m.blocks?.length ?? 0) > 0 && (
-                <motion.button initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} onClick={() => showVisuals(m.id)}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs font-semibold text-ember-300 hover:border-ember-400/40">
-                  <LayoutDashboard className="h-3.5 w-3.5" aria-hidden />{m.blocks!.length} visual{m.blocks!.length === 1 ? '' : 's'} on the dashboard
+              {m.done && m.groupId && groups.some((g) => g.id === m.groupId) && (
+                <motion.button initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} onClick={() => open(m.groupId!)}
+                  className={cx('mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold', view === m.groupId ? 'border-ember-400/50 bg-ember-500/10 text-ember-200' : 'border-white/10 bg-white/[0.03] text-ember-300 hover:border-ember-400/40')}>
+                  <LayoutDashboard className="h-3.5 w-3.5" aria-hidden />{view === m.groupId ? 'On the dashboard' : 'Show on dashboard'}
                 </motion.button>
               )}
             </div>
@@ -328,7 +279,7 @@ export default function Assistant() {
         {msgs.length > 0 && !busy && (
           <div className="no-scrollbar -mx-3 mb-2 flex gap-1.5 overflow-x-auto px-3">
             {prompts.slice(0, 6).map((p) => (
-              <button key={p.q} type="button" onClick={() => void send(p.q)} className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-zinc-400 hover:border-ember-400/40 hover:text-white">{p.cat}</button>
+              <button key={p.q} type="button" onClick={() => send(p.q)} className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-zinc-400 hover:border-ember-400/40 hover:text-white">{p.cat}</button>
             ))}
           </div>
         )}
@@ -338,13 +289,13 @@ export default function Assistant() {
             placeholder={isCaptain ? 'Ask, or tell me what to prepare…' : 'Ask about your team…'}
             className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none" />
           {busy ? (
-            <button type="button" onClick={() => abort.current?.abort()} aria-label="Stop" className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white/10 text-white hover:bg-white/15"><Square className="h-4 w-4" /></button>
+            <button type="button" onClick={() => aiStore.stop()} aria-label="Stop" className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white/10 text-white hover:bg-white/15"><Square className="h-4 w-4" /></button>
           ) : (
             <motion.button type="submit" disabled={!input.trim()} aria-label="Send" whileTap={{ scale: 0.9 }}
               className="grid h-10 w-10 shrink-0 place-items-center bg-gradient-to-b from-ember-400 to-ember-600 text-ink-950 cut-sm disabled:opacity-40"><ArrowUp className="h-5 w-5" /></motion.button>
           )}
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-zinc-600">Recommends from your data. {isCaptain ? 'Nothing changes until you approve.' : 'Only the captain can approve actions.'}</p>
+        <p className="mt-1.5 text-center text-[10px] text-zinc-600">Keeps working if you switch pages. {isCaptain ? 'Nothing changes until you approve.' : 'Only the captain can approve actions.'}</p>
       </form>
     </div>
   );
@@ -368,17 +319,16 @@ export default function Assistant() {
           className={cx('relative flex items-center justify-center gap-2 rounded py-2 font-display text-sm font-bold uppercase tracking-wider', tab === k ? 'text-ink-950' : 'text-zinc-400')}>
           {tab === k && <motion.span layoutId="ai-tab" className="absolute inset-0 rounded bg-ember-400" transition={spring} />}
           <I className="relative h-4 w-4" aria-hidden /><span className="relative">{label}</span>
-          {k === 'board' && unseen > 0 && (
-            <motion.span key={unseen} initial={{ scale: 0.4 }} animate={{ scale: 1 }} transition={spring}
-              className="relative min-w-[18px] rounded-full bg-white px-1 text-[10px] leading-[18px] text-ink-950">{unseen}</motion.span>
+          {k === 'board' && ai.unseen > 0 && (
+            <motion.span key={ai.unseen} initial={{ scale: 0.4 }} animate={{ scale: 1 }} transition={spring}
+              className="relative min-w-[18px] rounded-full bg-white px-1 text-[10px] leading-[18px] text-ink-950">{ai.unseen}</motion.span>
           )}
         </button>
       ))}
     </div>
   );
 
-  // Desktop: dashboard left, chat docked right at full height. The header sits over the dashboard
-  // column so the chat panel starts at the top and its composer is always on screen.
+  // Desktop: dashboard left, chat docked right at full height.
   return (
     <div className="grid grid-cols-1 gap-x-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
       <div className="min-w-0">
@@ -387,23 +337,6 @@ export default function Assistant() {
         <div className={cx(tab === 'board' ? 'block' : 'hidden', 'lg:block')}>{board}</div>
       </div>
       <div className={cx('min-w-0', tab === 'chat' ? 'block' : 'hidden', 'lg:block')}>{chat}</div>
-    </div>
-  );
-}
-
-const MotionLink = motion.create(Link);
-
-function Upcoming({ items }: { items: AiUpcoming[] }) {
-  return (
-    <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 xl:grid-cols-4">
-      {items.map((m, i) => (
-        <MotionLink key={m.id} to={`/matches/${m.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: i * 0.05 }} whileHover={{ y: -3 }}
-          className="glass min-w-[200px] p-3 no-ticks">
-          <p className="font-display text-[10px] font-bold uppercase tracking-[0.2em] text-ember-400">{m.type} · {m.map}</p>
-          <p className="mt-1 truncate font-display text-lg font-bold uppercase leading-tight text-white">{m.event || m.title}</p>
-          <p className="text-xs text-zinc-400">{m.label.split(' · ').pop()} · {m.time}</p>
-        </MotionLink>
-      ))}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
+import { useAi } from '@/lib/aiStore';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
 import { TeamChat } from './TeamChat';
@@ -20,6 +21,8 @@ export function Layout() {
   }, [loc.pathname, navType]);
   const { requests } = useJoinRequests();
   const wide = loc.pathname === '/ai';
+  // A Squad AI answer finished while you were on another page.
+  const { ready: aiReady, busy: aiBusy } = useAi();
   const badges: Record<string, number> = { '/team': requests.length };
   // The captain's phone bar is already full, so Calendar sits in the top bar there instead (phoneBar: false).
   const items: { to: string; label: string; icon: typeof Home; phoneBar?: boolean }[] = isCaptain
@@ -73,6 +76,7 @@ export function Layout() {
                   <I className={cx('h-[18px] w-[18px] transition-[color,transform] duration-200', isActive ? 'text-ember-400' : 'group-hover:translate-x-0.5')} aria-hidden />
                   {label}
                   {badges[to] ? <span className="ml-auto rounded-full bg-ember-500 px-2 py-0.5 text-[10px] font-bold text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
+                  {to === '/ai' && <AiDot ready={aiReady} busy={aiBusy && !isActive} className="ml-auto" />}
                 </span>
               )}
             </NavLink>
@@ -101,6 +105,7 @@ export function Layout() {
           {/* The phone bar is full, so Squad AI lives in the top bar. */}
           <NavLink to="/ai" aria-label="Squad AI" className={({ isActive }) => cx('relative rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
             <Sparkles className="h-5 w-5" aria-hidden />
+            <AiDot ready={aiReady} busy={aiBusy && !wide} className="absolute right-1 top-1" />
           </NavLink>
           {isCaptain && (
             <NavLink to="/calendar" aria-label="Calendar" className={({ isActive }) => cx('rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
@@ -147,6 +152,18 @@ export function Layout() {
         </ul>
       </nav>
     </div>
+  );
+}
+
+/** Glowing dot on the Squad AI nav: pulsing while an answer is being worked on, solid when it's ready. */
+function AiDot({ ready, busy, className }: { ready: boolean; busy: boolean; className?: string }) {
+  if (!ready && !busy) return null;
+  return (
+    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 24 }}
+      className={cx('relative flex h-2.5 w-2.5', className)} role="status" aria-label={ready ? 'Squad AI answer ready' : 'Squad AI is working'}>
+      <span className={cx('absolute inset-0 rounded-full', ready ? 'animate-ping bg-emerald-400/70' : 'animate-pulse-glow bg-ember-400/60')} />
+      <span className={cx('relative h-2.5 w-2.5 rounded-full', ready ? 'bg-emerald-400 shadow-[0_0_10px_2px_rgba(52,211,153,.7)]' : 'bg-ember-400 shadow-[0_0_8px_2px_rgb(var(--ember-500)/.6)]')} />
+    </motion.span>
   );
 }
 

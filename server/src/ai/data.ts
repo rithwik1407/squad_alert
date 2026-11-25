@@ -1,6 +1,6 @@
 import type { Types } from 'mongoose';
 import { config } from '../config.js';
-import { Attendance, Availability, Match, Squad, Stats, Team, User } from '../models/index.js';
+import { Attendance, Availability, isAdmin, Match, Squad, Stats, Team, User } from '../models/index.js';
 import type { AiMatch, AiMember, TeamData } from './analytics.js';
 
 type Id = Types.ObjectId | string;
@@ -26,8 +26,9 @@ export async function loadRoster(teamId: Id): Promise<AiMember[]> {
   if (!team) return [];
   const pool = new Set(team.memberIds.map(String));
   const ids = [...new Set([String(team.captainId), ...pool])];
-  const users = await User.find({ _id: { $in: ids } }).select('name ign avatar role gameRole').lean();
-  const byId = new Map(users.map((u) => [String(u._id), u]));
+  const users = await User.find({ _id: { $in: ids } }).select('name ign avatar role gameRole email').lean();
+  // The RARE admin account only manages custom rooms: it is never a player in any AI result.
+  const byId = new Map(users.filter((u) => !isAdmin(u)).map((u) => [String(u._id), u]));
   return ids.map((id) => byId.get(id)).filter(Boolean).map((u) => ({
     id: String(u!._id), ign: u!.ign, name: u!.name, avatar: u!.avatar ?? '', gameRole: u!.gameRole ?? '', role: u!.role, inPool: pool.has(String(u!._id)),
   }));

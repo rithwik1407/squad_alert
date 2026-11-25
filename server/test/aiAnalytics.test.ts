@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   attendanceRows, compareTool, matchReportTool, performanceTool, recommendSquad, timeSlotsTool, type TeamData,
 } from '../src/ai/analytics.js';
-import { pickOfflineTools } from '../src/ai/agent.js';
+import { isSmallTalk, pickOfflineTools } from '../src/ai/agent.js';
 import { zonedToUtc } from '../src/ai/tools.js';
 
 const ids = ['a', 'b', 'c', 'd', 'e'].map((c) => c.repeat(24));
@@ -95,7 +95,13 @@ describe('Squad AI helpers', () => {
       .toEqual({ name: 'compare_players', args: { player_a: 'Rex', player_b: 'Shadow', last_matches: 15 } });
     expect(pickOfflineTools('Who misses scrims frequently?', []).map((t) => t.name)).toEqual(['analyze_attendance']);
     expect(pickOfflineTools('Which time is best for our daily scrims?', []).map((t) => t.name)).toEqual(['best_time_slots']);
-    expect(pickOfflineTools('hello', []).map((t) => t.name)).toEqual(['analyze_performance']);
+    expect(pickOfflineTools('hello', [])).toEqual([]);
+    expect(pickOfflineTools('Analyze our last 10 matches', [])[0]).toEqual({ name: 'analyze_performance', args: { last_matches: 10 } });
+  });
+
+  it('spots small talk so it never draws charts', () => {
+    for (const q of ['hi', 'Hii!!', 'hello 👋', 'thanks', 'good morning', 'who are you?', 'ok']) expect(isSmallTalk(q), q).toBe(true);
+    for (const q of ['hi, who should play tonight?', 'Analyze our last 10 matches', 'Who is our MVP?']) expect(isSmallTalk(q), q).toBe(false);
   });
 
   it('converts a team-local date and time to UTC', () => {

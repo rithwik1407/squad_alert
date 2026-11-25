@@ -8,9 +8,8 @@ import { badRequest, conflict, locked, notFound } from '../lib/errors.js';
 import { AiProposal, Match, MAP_TBD, Squad, SQUAD_SIZE, Team } from '../models/index.js';
 import { enqueueImmediate, upsertMatchJob, type QueueLike } from '../scheduler/queue.js';
 import { aiEngine, runAgent, type AgentEvent } from '../ai/agent.js';
-import { performanceTool, timeSlotsTool, attendanceTool, matchLabel, localParts, hourLabel } from '../ai/analytics.js';
-import { loadRoster, loadTeamData, loadUpcoming } from '../ai/data.js';
-import { config } from '../config.js';
+import { performanceTool } from '../ai/analytics.js';
+import { loadRoster, loadTeamData } from '../ai/data.js';
 import { randomUUID } from 'node:crypto';
 
 /** Squad Intelligence: the AI assistant, its dashboard overview, and captain approval of AI-prepared actions. */
@@ -35,23 +34,13 @@ export function aiRouter(getQueue: () => QueueLike) {
   });
 
   /** Dashboard landing view: the numbers that don't need the model. */
+  /** Default dashboard: Team overview (KPI tiles) and Map breakdown. No model call. */
   r.get('/overview', ah(async (req, res) => {
-    const teamId = teamOf(req);
-    const [data, upcoming] = await Promise.all([loadTeamData(teamId, { limit: 20 }), loadUpcoming(teamId, new Date(), 4)]);
-    const perf = performanceTool(data);
-    const slots = timeSlotsTool(data);
-    const att = attendanceTool(data);
-    const tz = config.displayTimeZone;
-    const blocks = [
-      ...perf.blocks.filter((b) => b.type !== 'insights'),
-      ...perf.blocks.filter((b) => b.type === 'insights'),
-      ...slots.blocks.filter((b) => b.type === 'bar'),
-      ...att.blocks.filter((b) => b.type === 'insights'),
-    ].map((b) => ({ ...b, id: randomUUID() }));
-    res.json({
-      blocks,
-      upcoming: upcoming.map((m) => ({ id: m.id, title: m.title, event: m.tournamentName, map: m.map, type: m.type, startAt: m.startAt, label: matchLabel(m, tz), time: hourLabel(localParts(m.startAt, tz).hour) })),
-    });
+    const perf = performanceTool(await loadTeamData(teamOf(req), { limit: 20 }));
+    const blocks = perf.blocks
+      .filter((b) => b.type === 'kpis' || (b.type === 'bar' && b.xKey === 'map'))
+      .map((b) => ({ ...b, id: randomUUID() }));
+    res.json({ blocks });
   }));
 
   const chatBody = z.object({
