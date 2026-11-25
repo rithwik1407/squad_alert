@@ -5,6 +5,7 @@ import { FcmProvider } from '../notifications/fcm.js';
 import { isGoneChat, telegramApi } from '../notifications/telegram.js';
 import type { Recipient } from '../notifications/types.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
+import { saveToInbox, type InboxEntry } from './inbox.js';
 
 /** Classic-match invites: send to the picked teammates on every channel they have, and record I'm in / I'm out. */
 
@@ -32,6 +33,8 @@ export interface ChannelDeps {
   telegram: (chatId: string, html: string, keyboard?: unknown) => Promise<number | boolean>;
   /** Delete a Telegram message (best effort). */
   removeTelegram?: (chatId: string, messageId: number) => Promise<void>;
+  /** Copy the notification into these members' Inbox (best effort). */
+  inbox?: (userIds: string[], entry: InboxEntry) => Promise<void>;
 }
 
 const fcm = new FcmProvider();
@@ -58,6 +61,7 @@ export const defaultChannels: ChannelDeps = {
       return false;
     }
   },
+  inbox: saveToInbox,
   async removeTelegram(chatId, messageId) {
     if (!config.telegram.botToken) return;
     await telegramApi('deleteMessage', { chat_id: chatId, message_id: messageId }).catch(async () => {
@@ -79,6 +83,7 @@ export async function deliverInvite(
   const url = new URL(path, config.clientUrl).toString();
   const body = invite.message ? `${invite.fromIgn}: ${invite.message}` : `${invite.fromIgn} wants to play a classic match.`;
   const out = new Map<string, Delivery>();
+  await ch.inbox?.(recipients.map((r) => r.id), { kind: 'invite', title: INVITE_TITLE, body, url: path }).catch(() => undefined);
   await Promise.all(recipients.map(async (r) => {
     const got: string[] = [];
     const [p, t] = await Promise.all([
@@ -108,6 +113,8 @@ export async function announceReply(
   const name = who.ign || who.name;
   const line = `${name} is ${response === 'in' ? 'in ✅' : 'out ❌'} for the classic match (${invite.recipientsIn} in so far).`;
   const title = response === 'in' ? `${name} is in` : `${name} is out`;
+  const others = people.filter((p) => p.id !== who.id);
+  await ch.inbox?.(others.map((p) => p.id), { kind: 'invite', title, body: line, url: `/classic/${invite.id}` }).catch(() => undefined);
   await Promise.all(people.filter((p) => p.id !== who.id).map((p) => Promise.all([
     ch.push(p, { title, body: line, url: `/classic/${invite.id}`, tag: `classic-reply-${invite.id}`, inviteId: invite.id }),
     p.telegramChatId && p.notifyPrefs.telegram !== false ? ch.telegram(p.telegramChatId, esc(line)) : Promise.resolve(false),

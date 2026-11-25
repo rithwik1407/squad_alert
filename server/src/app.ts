@@ -16,6 +16,7 @@ import { scrimsRouter } from './routes/scrims.js';
 import { cronRouter } from './routes/cron.js';
 import { invitesRouter } from './routes/invites.js';
 import { aiRouter } from './routes/ai.js';
+import { inboxRouter } from './routes/inbox.js';
 import type { QueueLike } from './scheduler/queue.js';
 
 export function createApp(getQueue: () => QueueLike) {
@@ -54,6 +55,7 @@ export function createApp(getQueue: () => QueueLike) {
   app.use('/api/matches', matchesRouter(getQueue));
   app.use('/api/me', meRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/inbox', inboxRouter);
   app.use('/api/telegram', telegramRouter);
   app.use('/api/chat', chatRouter);
   app.use('/api/scrims', scrimsRouter);

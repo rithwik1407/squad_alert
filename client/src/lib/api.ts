@@ -1,4 +1,4 @@
-import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CalendarMonth, CheckinMatch, ClassicInvite, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
+import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CalendarMonth, CheckinMatch, ClassicInvite, InboxItem, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -116,6 +116,10 @@ export const api = {
   screenshot: (id: string) => request<{ image: string; uploadedAt: string }>('GET', `/matches/${id}/screenshot`),
 
   notifications: () => request<{ logs: NotificationLog[] }>('GET', '/notifications'),
+  inbox: () => request<{ items: InboxItem[]; unread: number }>('GET', '/inbox'),
+  readInbox: () => request<{ ok: true }>('POST', '/inbox/read'),
+  deleteInboxItem: (id: string) => request<{ ok: true }>('DELETE', `/inbox/${id}`),
+  clearInbox: () => request<{ ok: true; deleted: number }>('DELETE', '/inbox'),
 
   updateAccount: (b: { currentPassword: string; email?: string; newPassword?: string }) => request<{ user: User }>('PATCH', '/me/account', b),
   updateMe: (b: Record<string, unknown>) => request<{ user: User }>('PATCH', '/me', b),

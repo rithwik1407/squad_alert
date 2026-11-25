@@ -62,6 +62,8 @@ export interface DispatchRepo {
   removeFcmTokens(userId: string, tokens: string[]): Promise<void>;
   /** Optional: forget a Telegram chat that can no longer receive messages. */
   clearTelegramChat?(userId: string): Promise<void>;
+  /** Optional: copy an alert into the member's Inbox (sent or failed, so nobody misses it). */
+  saveInbox?(userId: string, matchId: string, kind: LogKind, payload: NotificationPayload): Promise<void>;
   /** Saved per-player stats for a match (kills, damage, MVP...). */
   getResults?(matchId: string): Promise<(PlayerResult & { userId: string })[]>;
 }
@@ -119,7 +121,7 @@ async function attemptDelivery(
 ): Promise<'sent' | 'failed' | 'duplicate'> {
   const now = deps.now ?? (() => new Date());
   const base = { matchId, userId: user.id, kind, trigger, title: payload.title, body: payload.body };
-  let attempted = false;
+  await deps.repo.saveInbox?.(user.id, matchId, kind, payload).catch(() => undefined);
 
   const reachable = deps.providers.filter((p) => p.canReach(user));
   if (!reachable.length) {
