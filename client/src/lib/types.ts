@@ -329,7 +329,7 @@ export interface ClassicInvite {
   message: string;
   createdAt: string | null;
   sentByMe: boolean;
-  /** Set once everyone answered: the invite clears itself at this time. */
+  /** When the invite runs out and disappears (7 minutes after it was sent). */
   expiresAt: string | null;
   /** My answer when I was invited (undefined when I'm the sender). */
   myResponse?: 'in' | 'out' | null;

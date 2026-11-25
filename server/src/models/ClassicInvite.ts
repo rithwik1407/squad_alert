@@ -5,7 +5,8 @@ export type InviteResponse = (typeof INVITE_RESPONSES)[number];
 
 /**
  * "Can we play a classic match?" A player picks teammates and writes a line; each gets an app push and a
- * Telegram message with I'm in / I'm out buttons. Answers are stored here. Old invites expire after 3 days.
+ * Telegram message with I'm in / I'm out buttons. Answers are stored here. An invite lives for 7 minutes:
+ * after that it is hidden everywhere, its Telegram messages are deleted, and MongoDB removes it soon after.
  */
 const inviteSchema = new Schema(
   {
@@ -22,11 +23,15 @@ const inviteSchema = new Schema(
         via: { type: String, default: null },
         /** Channels the invite reached them on. */
         delivered: { type: [String], default: [] },
+        /** The Telegram message holding the invite, so it can be deleted when the invite runs out. */
+        tgMessageId: { type: Number, default: null },
       }],
       default: [],
     },
-    /** Set 5 minutes after the last teammate answers; MongoDB removes the invite then. */
+    /** When MongoDB removes the invite: a little after it runs out, so its Telegram messages can be cleaned up first. */
     expireAt: { type: Date, default: null },
+    /** True once its Telegram messages were deleted. */
+    tgCleared: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
