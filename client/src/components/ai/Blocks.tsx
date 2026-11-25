@@ -9,7 +9,10 @@ import { Link } from 'react-router-dom';
 import { Avatar, Button, cx } from '@/components/ui';
 import { CountUp, TooltipCard } from '@/components/StatsCharts';
 import { useToast } from '@/components/Toast';
+import { useAuth } from '@/context/AuthContext';
 import { aiApi } from '@/lib/ai';
+import { aiStore } from '@/lib/aiStore';
+import { ApproveSheet } from './ApproveSheet';
 import type { Block, BlockWithId, Kpi, SquadPick, Tone } from '@/lib/aiTypes';
 
 type B<T extends Block['type']> = Extract<BlockWithId, { type: T }>;
@@ -551,54 +554,67 @@ function Heatmap({ block }: { block: B<'heatmap'> }) {
   );
 }
 
-/* ───────────────────────── Proposal (captain approval) ───────────────────────── */
+/* ───────────────────────── Proposal (approval card) ───────────────────────── */
 
 function ProposalCard({ block, isCaptain }: { block: B<'proposal'>; isCaptain: boolean }) {
   const toast = useToast();
+  const { user } = useAuth();
   const [status, setStatus] = useState(block.status);
-  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+  const [result, setResult] = useState<string | null>(block.result ?? null);
   const [resultId, setResultId] = useState<string | null>(null);
-  async function decide(kind: 'approve' | 'reject') {
-    setBusy(kind);
+  const [busy, setBusy] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const self = block.approver === 'self';
+  const canDecide = self ? Boolean(user && block.createdBy === user._id) : isCaptain;
+  const opensMatch = ['scrim', 'reschedule', 'map'].includes(block.kind);
+
+  function done(r: { status: string; resultId: string | null; result?: string }) {
+    setStatus(r.status as typeof status);
+    setResultId(r.resultId);
+    setResult(r.result ?? null);
+    aiStore.patchBlock(block.id, { status: r.status, result: r.result ?? null });
+  }
+  async function dismiss() {
+    setBusy(true);
     try {
-      const r = kind === 'approve' ? await aiApi.approve(block.id) : await aiApi.reject(block.id);
-      setStatus(r.status as typeof status);
-      if ('resultId' in r) setResultId(r.resultId as string | null);
-      toast.success(kind === 'approve' ? (block.kind === 'scrim' ? 'Scrim scheduled' : 'Squad confirmed and players alerted') : 'Dismissed');
-    } catch (e) { toast.error(e); } finally { setBusy(null); }
+      const r = await aiApi.reject(block.id);
+      done({ ...r, resultId: null });
+      toast.success('Dismissed. Nothing changed.');
+    } catch (e) { toast.error(e); } finally { setBusy(false); }
   }
   return (
-    <Panel title="Needs captain approval" subtitle={block.title}
+    <Panel title={self ? 'Needs your OK' : 'Needs captain approval'} subtitle={block.title}
       className={cx(status === 'approved' && 'shadow-glow')}
-      action={<span className={cx('chip ring-1', status === 'pending' ? 'bg-amber-400/10 text-amber-300 ring-amber-400/25' : status === 'approved' ? 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/25' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-400/20')}>{status}</span>}>
-      <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[auto_1fr]">
+      action={<span className={cx('chip ring-1', status === 'pending' ? 'bg-amber-400/10 text-amber-300 ring-amber-400/25' : status === 'approved' ? 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/25' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-400/20')}>{status === 'rejected' ? 'dismissed' : status}</span>}>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
         {block.lines.map((l) => (
           <div key={l.label} className="contents">
-            <dt className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500 sm:pt-0.5">{l.label}</dt>
-            <dd className="text-sm text-white">{l.value}</dd>
+            <dt className="pt-0.5 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-500">{l.label}</dt>
+            <dd className="min-w-0 break-words text-sm text-white">{l.value}</dd>
           </div>
         ))}
       </dl>
-      {block.warnings.length > 0 && (
+      {block.warnings.length > 0 && status === 'pending' && (
         <ul className="mt-3 space-y-1">
           {block.warnings.map((w) => <li key={w} className="flex gap-2 text-sm text-amber-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{w}</li>)}
         </ul>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {status === 'pending' && isCaptain ? (
+        {status === 'pending' && canDecide ? (
           <>
-            <Button loading={busy === 'approve'} disabled={!!busy} onClick={() => decide('approve')} icon={<Check className="h-4 w-4" aria-hidden />}>Approve</Button>
-            <Button variant="ghost" loading={busy === 'reject'} disabled={!!busy} onClick={() => decide('reject')} icon={<X className="h-4 w-4" aria-hidden />}>Dismiss</Button>
+            <Button disabled={busy} onClick={() => setSheet(true)} icon={<Check className="h-4 w-4" aria-hidden />}>Approve</Button>
+            <Button variant="ghost" loading={busy} onClick={dismiss} icon={<X className="h-4 w-4" aria-hidden />}>Dismiss</Button>
           </>
         ) : status === 'pending' ? (
-          <p className="text-sm text-zinc-400">Waiting for the captain to approve.</p>
+          <p className="text-sm text-zinc-400">{self ? 'Waiting for the teammate who asked.' : 'Waiting for the captain to approve.'}</p>
         ) : status === 'approved' ? (
-          <motion.p initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 text-sm text-emerald-300">
-            <CheckCircle2 className="h-4 w-4" aria-hidden />Done.
-            {resultId && <Link className="font-semibold text-ember-300 hover:text-ember-200" to={`/matches/${resultId}`}>Open match</Link>}
+          <motion.p initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />{result || 'Done.'}
+            {resultId && opensMatch && <Link className="font-semibold text-ember-300 hover:text-ember-200" to={`/matches/${resultId}`}>Open match</Link>}
           </motion.p>
-        ) : <p className="text-sm text-zinc-500">No changes made.</p>}
+        ) : <p className="text-sm text-zinc-500">{status === 'expired' ? 'This card expired. Ask the AI again.' : 'Dismissed. Nothing changed.'}</p>}
       </div>
+      {canDecide && <ApproveSheet block={block} open={sheet} onClose={() => setSheet(false)} onDone={done} />}
     </Panel>
   );
 }

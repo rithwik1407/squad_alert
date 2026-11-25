@@ -5,7 +5,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
-import { useAi } from '@/lib/aiStore';
+import { aiStore, useAi } from '@/lib/aiStore';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
 import { TeamChat } from './TeamChat';
@@ -23,6 +23,8 @@ export function Layout() {
   const wide = loc.pathname === '/ai';
   // A Squad AI answer finished while you were on another page.
   const { ready: aiReady, busy: aiBusy } = useAi();
+  // Load the saved Squad AI chat once, so an answer still running on the server re-attaches and lights the dot.
+  useEffect(() => { void aiStore.init(); }, []);
   const badges: Record<string, number> = { '/team': requests.length };
   // The captain's phone bar is already full, so Calendar sits in the top bar there instead (phoneBar: false).
   const items: { to: string; label: string; icon: typeof Home; phoneBar?: boolean }[] = isCaptain
@@ -98,7 +100,7 @@ export function Layout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.05] bg-ink-950/90 px-4 py-3 backdrop-blur-md lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+      <div data-topbar className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.05] bg-ink-950/90 px-4 py-3 backdrop-blur-md lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
         <Logo compact />
         <div className="flex items-center gap-2">
           {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
@@ -131,7 +133,7 @@ export function Layout() {
       {!wide && <TeamChat />}
 
       {/* Mobile bottom nav */}
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav data-bottomnav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <ul className="mx-auto flex max-w-lg justify-around px-2">
           {items.filter((i) => i.phoneBar !== false).map(({ to, label, icon: I }) => (
             <li key={to} className="flex-1">

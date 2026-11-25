@@ -64,6 +64,11 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      # Squad AI: more free providers (cloud.cerebras.ai), and any OpenAI-compatible one as JSON (see .env.example).
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: AI_EXTRA_PROVIDERS
+        sync: false
       # Paid alternative (console.anthropic.com > API keys). Without either key the admin types the numbers in.
       - key: ANTHROPIC_API_KEY
         sync: false
