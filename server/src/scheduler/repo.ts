@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { DeliveryClaim, Match, NotificationLog, Squad, Stats, Team, User } from '../models/index.js';
 import type { DispatchRepo } from './dispatch.js';
 import type { Recipient } from '../notifications/types.js';
+import { saveToInbox } from '../lib/inbox.js';
 
 const oid = (id: string) => new Types.ObjectId(id);
 
@@ -88,6 +89,9 @@ export const mongoDispatchRepo: DispatchRepo = {
   },
   async clearTelegramChat(userId) {
     await User.updateOne({ _id: oid(userId) }, { $set: { telegramChatId: null } });
+  },
+  async saveInbox(userId, matchId, kind, payload) {
+    await saveToInbox([userId], { kind, title: payload.title, body: payload.body, url: payload.url, matchId });
   },
   async removeFcmTokens(userId, tokens) {
     await User.updateOne({ _id: oid(userId) }, { $pull: { fcmTokens: { $in: tokens } } });

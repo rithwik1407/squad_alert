@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BellRing, CalendarPlus, Check, Inbox, KeyRound, MapPin, Send, Swords, Target, Trophy } from 'lucide-react';
+import { useInbox } from '@/lib/useInbox';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { isTodayIST, relativeDay, timeIST, ago } from '@/lib/time';
@@ -221,7 +222,8 @@ function QuickPicker({ m, members }: { m: Match; members: Member[] }) {
 function PlayerDashboard() {
   const { user } = useAuth();
   const q = useUpcoming();
-  const inbox = useQuery({ queryKey: ['notifications'], queryFn: () => api.notifications().then((r) => r.logs) });
+  const inboxQ = useInbox();
+  const inbox = { isLoading: inboxQ.isLoading, data: inboxQ.data?.items };
   const stats = useQuery({ queryKey: ['mystats'], queryFn: api.myStats });
   // A live classic invite jumps to the top of Home until it runs out.
   const invitesLive = useHasLiveInvite();
@@ -276,13 +278,13 @@ function PlayerDashboard() {
                       {inbox.data.slice(0, 5).map((n, i) => (
                         <motion.li key={n.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0, transition: { delay: i * 0.04, duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
                           exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}>
-                          <Link to={`/matches/${n.matchId}`} className="flex gap-3 p-4 hover:bg-white/[0.03]">
+                          <Link to={n.url} className="flex gap-3 p-4 hover:bg-white/[0.03]">
                             <Inbox className="mt-0.5 h-4 w-4 shrink-0 text-ember-400" aria-hidden />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-semibold text-white">{n.title}</p>
                               <p className="truncate text-xs text-zinc-400">{n.body}</p>
                             </div>
-                            <span className="shrink-0 text-[11px] text-zinc-500">{ago(n.sentAt)}</span>
+                            <span className="shrink-0 text-[11px] text-zinc-500">{ago(n.createdAt)}</span>
                           </Link>
                         </motion.li>
                       ))}

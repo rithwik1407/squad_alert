@@ -5,6 +5,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
+import { useInbox } from '@/lib/useInbox';
 import { aiStore, useAi } from '@/lib/aiStore';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
@@ -25,28 +26,50 @@ export function Layout() {
   const { ready: aiReady, busy: aiBusy } = useAi();
   // Load the saved Squad AI chat once, so an answer still running on the server re-attaches and lights the dot.
   useEffect(() => { void aiStore.init(); }, []);
-  const badges: Record<string, number> = { '/team': requests.length };
-  // The captain's phone bar is already full, so Calendar sits in the top bar there instead (phoneBar: false).
-  const items: { to: string; label: string; icon: typeof Home; phoneBar?: boolean }[] = isCaptain
+  const unread = useInbox().data?.unread ?? 0;
+  const badges: Record<string, number> = { '/team': requests.length, '/notifications': unread };
+  type Item = { to: string; label: string; icon: typeof Home };
+  // Desktop sidebar: every page, as before. Scrims opens the Scrims side of the Calendar tab.
+  const items: Item[] = isCaptain
     ? [
         { to: '/', label: 'Home', icon: Home },
         { to: '/matches', label: 'Matches', icon: CalendarClock },
-        { to: '/calendar', label: 'Calendar', icon: CalendarDays, phoneBar: false },
-        { to: '/ai', label: 'Squad AI', icon: Sparkles, phoneBar: false },
-        { to: '/scrims', label: 'Scrims', icon: BookUser },
+        { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+        { to: '/ai', label: 'Squad AI', icon: Sparkles },
+        { to: '/calendar?view=scrims', label: 'Scrims', icon: BookUser },
         { to: '/team', label: 'Team', icon: Users },
-        { to: '/notifications', label: 'Alerts', icon: Bell },
+        { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
       ]
     : [
         { to: '/', label: 'Home', icon: Home },
         { to: '/stats', label: 'Stats', icon: BarChart3 },
         { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-        { to: '/ai', label: 'Squad AI', icon: Sparkles, phoneBar: false },
-        { to: '/scrims', label: 'Scrims', icon: BookUser },
+        { to: '/ai', label: 'Squad AI', icon: Sparkles },
+        { to: '/calendar?view=scrims', label: 'Scrims', icon: BookUser },
         { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
       ];
+  // Phone bar: 4 tabs for players, 5 for the captain. Calendar holds Scrims too; Squad AI and Settings sit in the top bar.
+  const phoneItems: Item[] = isCaptain
+    ? [
+        { to: '/', label: 'Home', icon: Home },
+        { to: '/matches', label: 'Matches', icon: CalendarClock },
+        { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+        { to: '/team', label: 'Team', icon: Users },
+        { to: '/notifications', label: 'Inbox', icon: Bell },
+      ]
+    : [
+        { to: '/', label: 'Home', icon: Home },
+        { to: '/calendar', label: 'Calendar', icon: CalendarDays },
+        { to: '/stats', label: 'Stats', icon: BarChart3 },
+        { to: '/notifications', label: 'Inbox', icon: Bell },
+      ];
+  const scrimsView = loc.pathname === '/calendar' && new URLSearchParams(loc.search).get('view') === 'scrims';
+  /** NavLink only looks at the path, so tell Calendar and Scrims apart by ?view in the sidebar. */
+  const sideActive = (to: string, pathActive: boolean) =>
+    to === '/calendar' ? pathActive && !scrimsView : to.startsWith('/calendar?') ? scrimsView : pathActive;
+  const badgeText = (n: number) => (n > 9 ? '9+' : String(n));
 
   return (
     <div className="min-h-screen lg:pl-64">
@@ -68,7 +91,7 @@ export function Layout() {
         <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label="Main">
           {items.map(({ to, label, icon: I }) => (
             <NavLink key={to} to={to} end={to === '/'} className="group relative rounded-xl">
-              {({ isActive }) => (
+              {({ isActive: pathActive }) => { const isActive = sideActive(to, pathActive); return (
                 <span className={cx('relative z-10 flex items-center gap-3 rounded-md px-3 py-2.5 font-display text-[15px] font-bold uppercase tracking-wider transition-colors', isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-100')}>
                   {isActive && (
                     <motion.span layoutId="side-active" className="absolute inset-0 -z-10 rounded-md bg-gradient-to-r from-ember-500/25 via-ember-500/[0.06] to-transparent" transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
@@ -77,10 +100,10 @@ export function Layout() {
                   )}
                   <I className={cx('h-[18px] w-[18px] transition-[color,transform] duration-200', isActive ? 'text-ember-400' : 'group-hover:translate-x-0.5')} aria-hidden />
                   {label}
-                  {badges[to] ? <span className="ml-auto rounded-full bg-ember-500 px-2 py-0.5 text-[10px] font-bold text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
+                  {badges[to] ? <span className="ml-auto rounded-full bg-ember-500 px-2 py-0.5 text-[10px] font-bold text-ink-950" aria-label={`${badges[to]} new`}>{badgeText(badges[to])}</span> : null}
                   {to === '/ai' && <AiDot ready={aiReady} busy={aiBusy && !isActive} className="ml-auto" />}
                 </span>
-              )}
+              ); }}
             </NavLink>
           ))}
         </nav>
@@ -104,16 +127,16 @@ export function Layout() {
         <Logo compact />
         <div className="flex items-center gap-2">
           {team && <span className="font-display text-sm font-bold tracking-wider text-zinc-300">{team.name}</span>}
-          {/* The phone bar is full, so Squad AI lives in the top bar. */}
-          <NavLink to="/ai" aria-label="Squad AI" className={({ isActive }) => cx('relative rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
+          {/* Squad AI and Settings live up here so the bottom bar stays at 4-5 tabs. */}
+          <NavLink to="/ai" aria-label="Squad AI" className={({ isActive }) => cx('relative grid h-10 w-10 place-items-center rounded-lg transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
             <Sparkles className="h-5 w-5" aria-hidden />
-            <AiDot ready={aiReady} busy={aiBusy && !wide} className="absolute right-1 top-1" />
+            <AiDot ready={aiReady} busy={aiBusy && !wide} className="absolute right-1.5 top-1.5" />
           </NavLink>
-          {isCaptain && (
-            <NavLink to="/calendar" aria-label="Calendar" className={({ isActive }) => cx('rounded-lg p-2 transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
-              <CalendarDays className="h-5 w-5" aria-hidden />
-            </NavLink>
-          )}
+          <NavLink to="/settings" aria-label="Settings" className={({ isActive }) => cx('grid h-10 w-10 place-items-center rounded-lg transition-colors', isActive ? 'bg-ember-500/15 text-ember-400' : 'text-zinc-400 hover:bg-white/5 hover:text-white')}>
+            {({ isActive }) => user?.avatar
+              ? <span className={cx('rounded-full p-[2px] ring-1', isActive ? 'ring-ember-400' : 'ring-white/15')}><Avatar name={user.ign} src={user.avatar} size={26} /></span>
+              : <Settings className={cx('h-5 w-5 transition-transform duration-300', isActive && 'rotate-45')} aria-hidden />}
+          </NavLink>
         </div>
       </div>
 
@@ -134,18 +157,18 @@ export function Layout() {
 
       {/* Mobile bottom nav */}
       <nav data-bottomnav aria-label="Main" className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-ink-900/95 backdrop-blur-md lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <ul className="mx-auto flex max-w-lg justify-around px-2">
-          {items.filter((i) => i.phoneBar !== false).map(({ to, label, icon: I }) => (
-            <li key={to} className="flex-1">
-              <NavLink to={to} end={to === '/'} className="relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-transform duration-150 active:scale-90">
+        <ul className="mx-auto flex max-w-lg justify-around px-1">
+          {phoneItems.map(({ to, label, icon: I }) => (
+            <li key={to} className="min-w-0 flex-1">
+              <NavLink to={to} end={to === '/'} className="relative flex min-h-[56px] flex-col items-center justify-center gap-1 py-2 transition-transform duration-150 active:scale-90">
                 {({ isActive }) => (
                   <>
                     {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-[3px] w-10 bg-ember-400 shadow-glow [clip-path:polygon(4px_0,100%_0,calc(100%-4px)_100%,0_100%)]" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                     <motion.span className="relative" animate={{ scale: isActive ? 1.12 : 1, y: isActive ? -1 : 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
-                      <I className={cx('h-5 w-5 transition-colors duration-200', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
-                      {badges[to] ? <span className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-ember-500 px-1 text-center text-[9px] font-bold leading-4 text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
+                      <I className={cx('h-[22px] w-[22px] transition-colors duration-200', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
+                      {badges[to] ? <span className="absolute -right-3 -top-1.5 min-w-[16px] rounded-full bg-ember-500 px-1 text-center text-[9px] font-bold leading-4 text-ink-950 ring-2 ring-ink-900" aria-label={`${badges[to]} new`}>{badgeText(badges[to])}</span> : null}
                     </motion.span>
-                    <span className={cx('font-display text-[11px] font-bold uppercase tracking-wider transition-colors duration-200', isActive ? 'text-white' : 'text-zinc-500')}>{label}</span>
+                    <span className={cx('whitespace-nowrap font-display text-[11px] font-bold uppercase tracking-wide transition-colors duration-200', isActive ? 'text-white' : 'text-zinc-500')}>{label}</span>
                   </>
                 )}
               </NavLink>

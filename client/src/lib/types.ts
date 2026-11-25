@@ -123,6 +123,20 @@ export interface NotificationLog {
   error: string | null;
 }
 
+export type InboxKind = 'squad' | 'captain_alert' | 'selected' | 'results' | 'room' | 'invite' | 'ai_message';
+
+/** Your own copy of a notification SquadSync sent you (kept 30 days, or until you delete it). */
+export interface InboxItem {
+  id: string;
+  kind: InboxKind;
+  title: string;
+  body: string;
+  url: string;
+  matchId: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
 export interface MatchStat {
   userId: string;
   kills: number;

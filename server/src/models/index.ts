@@ -15,3 +15,4 @@ export * from './MatchScreenshot.js';
 export * from './ClassicInvite.js';
 export * from './AiProposal.js';
 export * from './AiTurn.js';
+export * from './InboxItem.js';

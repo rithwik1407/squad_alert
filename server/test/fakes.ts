@@ -34,6 +34,12 @@ export class MemoryRepo implements DispatchRepo {
   logs: LogEntry[] = [];
   captainAlerted = new Set<string>();
   claims = new Set<string>();
+  /** Inbox copies, one per (user, match, kind): a newer one replaces the older, like the Mongo upsert. */
+  inbox = new Map<string, { userId: string; matchId: string; kind: string; title: string; body: string }>();
+
+  async saveInbox(userId: string, matchId: string, kind: string, p: { title: string; body: string }) {
+    this.inbox.set(`${userId}|${matchId}|${kind}`, { userId, matchId, kind, title: p.title, body: p.body });
+  }
 
   async claim(m: string, u: string, k: string) {
     const key = `${m}|${u}|${k}`;

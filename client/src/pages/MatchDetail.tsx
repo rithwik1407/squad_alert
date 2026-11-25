@@ -597,7 +597,7 @@ function SeriesCard({ name }: { name: string }) {
         </div>
         <div className="flex gap-2">
           {canEdit && series && <Button variant="ghost" icon={<Pencil className="h-4 w-4" aria-hidden />} onClick={() => setEditing(true)}>Edit</Button>}
-          <Link to="/scrims" className="btn-ghost">All organizers</Link>
+          <Link to="/calendar?view=scrims" className="btn-ghost">All organizers</Link>
         </div>
       </div>
       {series ? <OrganizerDetails s={series} /> : (

@@ -17,8 +17,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const TeamPage = lazy(() => import('./pages/Team'));
 const Stats = lazy(() => import('./pages/Stats'));
 const Join = lazy(() => import('./pages/Join'));
-const Scrims = lazy(() => import('./pages/Scrims'));
-const CalendarPage = lazy(() => import('./pages/Calendar'));
+const CalendarHub = lazy(() => import('./pages/CalendarHub'));
 const Classic = lazy(() => import('./pages/Classic'));
 const Assistant = lazy(() => import('./pages/Assistant'));
 
@@ -84,8 +83,9 @@ export function App() {
           <Route path="team" element={<Protected captain><TeamPage /></Protected>} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="stats" element={<Stats />} />
-          <Route path="scrims" element={<Scrims />} />
-          <Route path="calendar" element={<CalendarPage />} />
+          {/* Scrims now lives inside the Calendar tab. */}
+          <Route path="scrims" element={<Navigate to="/calendar?view=scrims" replace />} />
+          <Route path="calendar" element={<CalendarHub />} />
           <Route path="classic/:id" element={<Classic />} />
           <Route path="ai" element={<Assistant />} />
           <Route path="settings" element={<Settings />} />

@@ -9,6 +9,7 @@ import { config } from '../config.js';
 import { badRequest, locked, notFound } from '../lib/errors.js';
 import { Availability, Match, MAP_TBD, PICKABLE_MAPS, MATCH_TYPES, Squad, SQUAD_SIZE, Team, type AiProposalDoc } from '../models/index.js';
 import { FcmProvider } from '../notifications/fcm.js';
+import { saveToInbox } from '../lib/inbox.js';
 import { TelegramProvider } from '../notifications/telegram.js';
 import type { NotificationProvider } from '../notifications/types.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
@@ -33,6 +34,8 @@ const providerFor: Record<Channel, () => NotificationProvider> = { telegram: () 
 export async function sendDirect(userIds: string[], msg: DirectMessage, channels: Channel[]): Promise<DeliveryReport> {
   const providers = channels.map((c) => providerFor[c]()).filter((p) => p.isConfigured());
   const users = await mongoDispatchRepo.getRecipients([...new Set(userIds)]);
+  // Every member it was meant for gets an Inbox copy, even if their phone or Telegram isn't linked.
+  await saveToInbox(users.map((u) => u.id), { kind: 'ai_message', title: msg.title, body: msg.body, url: msg.url });
   const report: DeliveryReport = { sent: [], failed: [], unreachable: [] };
   await Promise.all(users.map(async (u) => {
     const usable = providers.filter((p) => p.canReach(u));
