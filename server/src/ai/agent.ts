@@ -26,6 +26,8 @@ export interface ChatTurn { role: 'user' | 'assistant'; text: string }
 
 export interface AgentInput {
   history: ChatTurn[];
+  /** Small talk: answer in chat without offering any tools, so nothing is drawn. */
+  chatOnly?: boolean;
   ctx: ToolContext & { teamName: string; userIgn: string; roster: string[] };
   emit: (e: AgentEvent) => void;
   signal?: AbortSignal;
@@ -43,11 +45,11 @@ export function systemPrompt(ctx: AgentInput['ctx'], now = new Date()) {
 You analyze the team's real records, recommend squads and fixes, and act only through tools, with the captain's approval.
 
 Context: today is ${today} (${clock}, time zone ${tz}). You are talking to ${ctx.userIgn}, who is ${ctx.isCaptain ? 'the CAPTAIN' : 'a PLAYER (not the captain)'}.
-Roster: ${ctx.roster.join(', ') || 'unknown'}. A squad is 4 players.
+Players: ${ctx.roster.join(', ') || 'unknown'}. A squad is 4 players. The RARE admin account only manages custom rooms and is not a player: never list, rank, pick or compare it.
 
 Ground rules
 1. Never invent numbers. Every stat must come from a tool result in this conversation. If data is missing, say so and say what to log (results screenshot, check-ins, placement).
-2. Pick the right tool first: get_roster, list_matches, get_player_stats, compare_players, analyze_performance, get_match_report, analyze_attendance, best_time_slots, recommend_squad, check_schedule. Call several tools if the question needs them. Resolve relative dates ("tomorrow", "Friday") yourself from today's date.
+2. Chat first, visuals on demand. Greetings, thanks, small talk and general BGMI questions ("what is a third zone?", "tips for IGLs") get a short, friendly chat reply with NO tool calls. Call tools only when the answer depends on this team's data: squad picks, player stats, comparisons, performance, maps, attendance, best times, match reports, schedule checks, or actions. Then pick the right one: get_roster, list_matches, get_player_stats, compare_players, analyze_performance, get_match_report, analyze_attendance, best_time_slots, recommend_squad, check_schedule (several if needed). Every tool result is drawn on the dashboard, so never call a tool "just in case". Resolve relative dates ("tomorrow", "Friday") yourself from today's date.
 3. Write actions (propose_scrim, propose_squad) only create a proposal card. Nothing changes until the captain taps Approve. Never say something was created or saved. ${ctx.isCaptain ? 'Before propose_scrim, call check_schedule for clashes. If the event name is missing, use "Scrim".' : 'This user is not the captain: do not call propose_* tools; offer the analysis and suggest they ask the captain.'}
 4. Answer with a short bold headline, 2 to 4 sharp bullet insights, and one concrete next step. Plain English, BGMI terms (IGL, rotations, zone, drop, third zone), no filler, no tables in text.
 5. The tools already draw charts, tables, squad cards and reports on the dashboard next to the chat. Refer to them ("see the trend chart") instead of repeating every number.
@@ -129,7 +131,7 @@ async function* sse(res: Response): AsyncGenerator<unknown> {
   }
 }
 
-async function geminiTurn(model: string, system: string, contents: Content[], emit: AgentInput['emit'], signal?: AbortSignal, withThinking = true): Promise<{ parts: Part[]; streamed: boolean }> {
+async function geminiTurn(model: string, system: string, contents: Content[], emit: AgentInput['emit'], signal?: AbortSignal, withThinking = true, useTools = true): Promise<{ parts: Part[]; streamed: boolean }> {
   const res = await fetch(`${GEMINI_API}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': config.geminiApiKey },
@@ -137,8 +139,7 @@ async function geminiTurn(model: string, system: string, contents: Content[], em
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents,
-      tools: geminiTools,
-      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      ...(useTools ? { tools: geminiTools, toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
       generationConfig: { temperature: 0.4, maxOutputTokens: 2048, ...(withThinking && thinkingFor(model) ? { thinkingConfig: thinkingFor(model) } : {}) },
     }),
   }).catch((e) => { throw new EngineError((e as Error).message, 'busy'); });
@@ -146,7 +147,7 @@ async function geminiTurn(model: string, system: string, contents: Content[], em
     const body = await res.json().catch(() => ({})) as { error?: { message?: string } };
     const err = body.error?.message ?? `HTTP ${res.status}`;
     console.warn(`[ai] Gemini ${model} failed (${res.status}): ${err}`);
-    if (res.status === 400 && withThinking && /thinking/i.test(err)) return geminiTurn(model, system, contents, emit, signal, false);
+    if (res.status === 400 && withThinking && /thinking/i.test(err)) return geminiTurn(model, system, contents, emit, signal, false, useTools);
     if (/api key not valid|api_key_invalid/i.test(err)) throw new EngineError('GEMINI_API_KEY is not valid', 'fatal');
     if (res.status === 429 || res.status >= 500 || /overloaded|high demand/i.test(err)) throw new EngineError(err, 'busy');
     throw new EngineError(err, 'skip');
@@ -175,7 +176,7 @@ async function runGemini(input: AgentInput, run: ReturnType<typeof makeRunner>['
     const pool = model ? [model] : candidates;
     for (let i = 0; i < pool.length && !turn; i++) {
       try {
-        turn = await geminiTurn(pool[i], system, contents, input.emit, input.signal);
+        turn = await geminiTurn(pool[i], system, contents, input.emit, input.signal, true, !input.chatOnly);
         if (!model) { model = pool[i]; lastGoodGemini = model; input.emit({ type: 'meta', engine: 'gemini', model }); }
       } catch (e) {
         lastErr = e instanceof EngineError ? e : new EngineError((e as Error).message, 'busy');
@@ -220,7 +221,7 @@ async function runGroq(input: AgentInput, run: ReturnType<typeof makeRunner>['ru
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${config.groqApiKey}` },
         signal: input.signal ? AbortSignal.any([input.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
-        body: JSON.stringify({ model: m, messages, tools, tool_choice: 'auto', temperature: 0.4, max_tokens: 1500 }),
+        body: JSON.stringify({ model: m, messages, ...(input.chatOnly ? {} : { tools, tool_choice: 'auto' }), temperature: 0.4, max_tokens: 1500 }),
       }).catch((e) => { throw new EngineError((e as Error).message, 'busy'); });
       const b = await res.json().catch(() => ({})) as GroqBody;
       if (res.ok) { body = b; if (!model) { model = m; input.emit({ type: 'meta', engine: 'groq', model }); } break; }
@@ -247,6 +248,31 @@ async function runGroq(input: AgentInput, run: ReturnType<typeof makeRunner>['ru
 
 /* ───────────────────────── Offline analyst ───────────────────────── */
 
+const SMALL_TALK = /^(hi+|hii+|hey+|hello+|yo|sup|hola|namaste|good (morning|afternoon|evening|night)|gm|gn|thanks?( you)?|thank u|thx|ty|ok(ay)?|cool|nice|great|awesome|bye|see you|who are you|what can you do|help|how are you|what'?s up)[\s!.?,]*$/i;
+
+/** Greetings and chit-chat that should get a plain chat reply, never tools or charts. */
+export const isSmallTalk = (q: string) => SMALL_TALK.test(q.trim().replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim());
+
+const HELP = `I'm Squad Intelligence, your team's analyst. Ask me things like:
+
+- "Suggest today's best four players"
+- "Compare Akshay and Bittu over the last 15 matches"
+- "Analyze our last 10 matches"
+- "Who misses scrims?"
+- "Which time is best for our scrims?"
+- "Report for our last match"
+
+I'll answer here and chart the data on the dashboard.`;
+
+function offlineChat(q: string) {
+  const s = q.toLowerCase();
+  if (/thank|thx|ty\b/.test(s)) return 'Anytime. Ask me whenever you want the numbers on the squad.';
+  if (/bye|see you|gn|good night/.test(s)) return 'GG. Catch you before the next scrim.';
+  if (/how are you|what'?s up|sup/.test(s)) return `Ready for scrims. ${HELP}`;
+  if (/who are you|what can you do|help/.test(s)) return HELP;
+  return `Hey! ${HELP}`;
+}
+
 export function pickOfflineTools(q: string, roster: string[]): { name: string; args: Record<string, unknown> }[] {
   const s = q.toLowerCase();
   const n = /last\s+(\d{1,3})/.exec(s)?.[1];
@@ -260,25 +286,28 @@ export function pickOfflineTools(q: string, roster: string[]): { name: string; a
   if (/best time|time slot|what time|which time|when should|availability|available/.test(s)) out.push({ name: 'best_time_slots', args: {} });
   if (/report|last (match|scrim|game)|yesterday/.test(s)) out.push({ name: 'get_match_report', args: {} });
   if (/mvp|top frag|best player|stats|kills|damage|who is our/.test(s) && !out.some((o) => o.name === 'compare_players')) out.push({ name: 'get_player_stats', args: { players: named.length === 1 ? named : [], ...last, ...days } });
-  if (/analy|perform|weak|strength|trend|improve|map|mistake|rotation|placement|how are we/.test(s) || !out.length) out.push({ name: 'analyze_performance', args: { ...last, ...days } });
+  if (/analy|perform|weak|strength|trend|improve|map|mistake|placement|how are we|how did we/.test(s)) out.push({ name: 'analyze_performance', args: { ...last, ...days } });
   return out.slice(0, 3);
 }
 
 async function runOffline(input: AgentInput, run: ReturnType<typeof makeRunner>['run'], done: ToolOutput[], reason: string) {
   input.emit({ type: 'meta', engine: 'offline' });
   const q = [...input.history].reverse().find((t) => t.role === 'user')?.text ?? '';
-  if (/schedule|create|book|set up|add/.test(q.toLowerCase()) && /scrim|match|tournament/.test(q.toLowerCase())) {
+  if (!input.chatOnly && /schedule|create|book|set up|add/.test(q.toLowerCase()) && /scrim|match|tournament/.test(q.toLowerCase())) {
     input.emit({ type: 'text', delta: `${reason} Scheduling from a sentence needs the AI engine, so add the scrim on the Matches page for now. Here's what the data says:\n\n` });
   }
   const before = done.length;
-  for (const t of pickOfflineTools(q, input.ctx.roster)) await run(t.name, t.args);
-  const text = done.slice(before).map((d) => d.summary).join('\n\n');
+  const tools = input.chatOnly ? [] : pickOfflineTools(q, input.ctx.roster);
+  for (const t of tools) await run(t.name, t.args);
+  const text = tools.length ? done.slice(before).map((d) => d.summary).join('\n\n') : offlineChat(q);
   for (const piece of text.match(/[\s\S]{1,18}/g) ?? []) input.emit({ type: 'text', delta: piece });
 }
 
 /* ───────────────────────── Entry ───────────────────────── */
 
 export async function runAgent(input: AgentInput) {
+  const last = [...input.history].reverse().find((t) => t.role === 'user')?.text ?? '';
+  if (input.chatOnly === undefined) input = { ...input, chatOnly: isSmallTalk(last) };
   const { run, done } = makeRunner(input);
   const engines: ('gemini' | 'groq')[] = [];
   if (config.geminiApiKey) engines.push('gemini');
@@ -305,7 +334,7 @@ export async function runAgent(input: AgentInput) {
       }
     }
   }
-  if (engines.length) input.emit({ type: 'notice', message: `${reason} Answering with the built-in analyst.` });
+  if (engines.length && !input.chatOnly) input.emit({ type: 'notice', message: `${reason} Answering with the built-in analyst.` });
   await runOffline(input, run, done, reason);
   input.emit({ type: 'done' });
 }

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'framer-motion';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -37,7 +37,7 @@ const fmt = (v: unknown) => (typeof v === 'number' ? v.toLocaleString('en-IN', {
 export function Panel({ title, subtitle, children, className, icon, action }: { title: string; subtitle?: string; children: ReactNode; className?: string; icon?: ReactNode; action?: ReactNode }) {
   return (
     <motion.section layout="position" initial={{ opacity: 0, y: 16, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={spring}
-      className={cx('glass gborder min-w-0 p-4 sm:p-5', className)}>
+      className={cx('glass gborder h-full min-w-0 p-4 shadow-[0_24px_48px_-24px_rgba(0,0,0,.9)] sm:p-5', className)}>
       <header className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="hud-label !text-zinc-300">{icon}{title}</h3>
@@ -68,6 +68,80 @@ export function BlockView({ block, isCaptain }: { block: BlockWithId; isCaptain:
 /** Wide blocks take the full dashboard row; the rest pair up two by two on large screens. */
 export const isWide = (b: Block) => b.type === 'kpis' || b.type === 'line' || b.type === 'table' || b.type === 'squad' || b.type === 'report' || b.type === 'heatmap' || (b.type === 'bar' && b.xKey === 'map');
 
+
+/**
+ * 3D tilt: the card leans toward the pointer with a spring and its content floats above the face.
+ * Mouse only (touch scrolls normally) and off for reduced motion.
+ */
+export function Tilt({ children, className, depth = 22, max = 9 }: { children: ReactNode; className?: string; depth?: number; max?: number }) {
+  const reduce = useReducedMotion();
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rx = useSpring(useTransform(y, [-0.5, 0.5], [max, -max]), { stiffness: 260, damping: 22 });
+  const ry = useSpring(useTransform(x, [-0.5, 0.5], [-max, max]), { stiffness: 260, damping: 22 });
+  const glareX = useTransform(x, [-0.5, 0.5], ['0%', '100%']);
+  const glare = useTransform(glareX, (gx) => `radial-gradient(circle at ${gx} 0%, rgba(255,255,255,.14), transparent 60%)`);
+  if (reduce) return <div className={className}>{children}</div>;
+  return (
+    <div style={{ perspective: 900 }} className="h-full">
+      <motion.div
+        className={cx('relative h-full [transform-style:preserve-3d]', className)}
+        style={{ rotateX: rx, rotateY: ry }}
+        onPointerMove={(e) => {
+          if (e.pointerType !== 'mouse') return;
+          const r = e.currentTarget.getBoundingClientRect();
+          x.set((e.clientX - r.left) / r.width - 0.5);
+          y.set((e.clientY - r.top) / r.height - 0.5);
+        }}
+        onPointerLeave={() => { x.set(0); y.set(0); }}
+      >
+        <div className="h-full" style={{ transform: `translateZ(${depth}px)` }}>{children}</div>
+        <motion.span aria-hidden className="pointer-events-none absolute inset-0 rounded-[inherit]" style={{ background: glare }} />
+      </motion.div>
+    </div>
+  );
+}
+
+function shade(hex: string, amt: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v: number) => Math.max(0, Math.min(255, Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt)));
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
+/** Extruded 3D bar for Recharts: front face plus a lit top and a shaded side. */
+function Bar3D(props: { x?: number; y?: number; width?: number; height?: number; fill?: string }) {
+  const { x = 0, y = 0, width: w = 0, height: h = 0, fill = COLORS[0] } = props;
+  if (h <= 0 || w <= 0) return null;
+  const d = Math.min(7, w * 0.4);
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} fill={fill} />
+      <rect x={x} y={y} width={w} height={h} fill="url(#bar3d-shine)" />
+      <polygon points={`${x},${y} ${x + d},${y - d} ${x + w + d},${y - d} ${x + w},${y}`} fill={shade(fill, 0.35)} />
+      <polygon points={`${x + w},${y} ${x + w + d},${y - d} ${x + w + d},${y + h - d} ${x + w},${y + h}`} fill={shade(fill, -0.45)} />
+    </g>
+  );
+}
+
+/**
+ * Lays blocks out two per row on wide screens without leaving holes: a half-width block with no
+ * partner (odd one out, or followed by a full-width block) stretches across the row.
+ */
+export function BlockGrid({ blocks, isCaptain }: { blocks: BlockWithId[]; isCaptain: boolean }) {
+  const wide: boolean[] = [];
+  for (let i = 0; i < blocks.length;) {
+    if (isWide(blocks[i])) { wide.push(true); i++; continue; }
+    if (i + 1 < blocks.length && !isWide(blocks[i + 1])) { wide.push(false, false); i += 2; } else { wide.push(true); i++; }
+  }
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {blocks.map((b, i) => (
+        <div key={b.id} className={cx('min-w-0', wide[i] && 'xl:col-span-2')}><BlockView block={b} isCaptain={isCaptain} /></div>
+      ))}
+    </div>
+  );
+}
+
 /* ───────────────────────── KPI strip ───────────────────────── */
 
 function KpiValue({ k }: { k: Kpi }) {
@@ -79,10 +153,12 @@ function KpiValue({ k }: { k: Kpi }) {
 function KpiStrip({ block }: { block: B<'kpis'> }) {
   return (
     <Panel title={block.title} icon={null}>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md bg-white/[0.06] sm:grid-cols-3 xl:grid-cols-6">
+      <div className={cx('grid gap-3', block.items.length % 3 === 0 ? 'grid-cols-2 sm:grid-cols-3 2xl:grid-cols-6' : 'grid-cols-2 sm:grid-cols-4')}>
         {block.items.map((k, i) => (
-          <motion.div key={k.label} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: i * 0.04 }}
-            className="relative bg-ink-900/90 p-3">
+          <motion.div key={k.label} initial={{ opacity: 0, y: 14, rotateX: -25 }} animate={{ opacity: 1, y: 0, rotateX: 0 }} transition={{ ...spring, delay: i * 0.05 }} style={{ transformPerspective: 700 }}>
+          <Tilt depth={16}>
+          <div className="relative h-full overflow-hidden rounded-md border border-white/[0.08] bg-gradient-to-b from-ink-700/70 to-ink-900 p-3 shadow-[0_10px_0_-4px_rgba(0,0,0,.55),0_18px_30px_-12px_rgba(0,0,0,.8),inset_0_1px_0_rgba(255,255,255,.08)]">
+            <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-ember-400/80 via-ember-500/30 to-transparent" />
             <p className="font-display text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500">{k.label}</p>
             <p className={cx('mt-1 font-mono text-2xl font-bold tabular-nums', k.tone === 'good' ? 'text-emerald-300' : 'text-white')}><KpiValue k={k} />{k.unit && <span className="ml-1 text-sm text-zinc-500">{k.unit}</span>}</p>
             {k.delta != null ? (
@@ -91,6 +167,8 @@ function KpiStrip({ block }: { block: B<'kpis'> }) {
                 <span className="sr-only">vs the earlier matches</span>
               </p>
             ) : k.sub ? <p className="mt-0.5 text-xs text-zinc-500">{k.sub}</p> : null}
+          </div>
+          </Tilt>
           </motion.div>
         ))}
       </div>
@@ -126,6 +204,10 @@ function TrendChart({ block }: { block: ChartBlock }) {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={block.data} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
             <defs>
+              <filter id={`${gid}-glow`} x="-20%" y="-50%" width="140%" height="200%">
+                <feGaussianBlur stdDeviation="4" result="b" />
+                <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
               <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={COLORS[0]} stopOpacity={0.45} />
                 <stop offset="100%" stopColor={COLORS[0]} stopOpacity={0} />
@@ -138,7 +220,7 @@ function TrendChart({ block }: { block: ChartBlock }) {
               <TooltipCard title={`Match ${payload[0].payload[block.xKey]}`} subtitle={[payload[0].payload.date, payload[0].payload.place ? `#${payload[0].payload.place}` : ''].filter(Boolean).join(' · ')}
                 rows={[{ name: s.label, color: COLORS[0], value: num(payload[0].value) }]} />
             ) : null} />
-            <Area key={s.key} type="monotone" dataKey={s.key} stroke={COLORS[0]} strokeWidth={2.5} fill={`url(#${gid})`}
+            <Area key={s.key} type="monotone" dataKey={s.key} stroke={COLORS[0]} strokeWidth={2.5} fill={`url(#${gid})`} filter={`url(#${gid}-glow)`}
               dot={{ r: 2.5, fill: COLORS[0], strokeWidth: 0 }} activeDot={{ r: 5, stroke: '#0c0c11', strokeWidth: 2 }} animationDuration={900} />
           </AreaChart>
         </ResponsiveContainer>
@@ -159,7 +241,14 @@ function Bars({ block }: { block: ChartBlock }) {
       </div>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={block.data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }} barGap={2}>
+          <BarChart data={block.data} margin={{ top: 12, right: 12, left: -18, bottom: 0 }} barGap={4}>
+            <defs>
+              <linearGradient id="bar3d-shine" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#fff" stopOpacity={0.18} />
+                <stop offset="45%" stopColor="#fff" stopOpacity={0} />
+                <stop offset="100%" stopColor="#000" stopOpacity={0.25} />
+              </linearGradient>
+            </defs>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis dataKey={block.xKey} tick={AXIS} tickFormatter={short} axisLine={false} tickLine={false} interval={0} angle={many ? -30 : 0} textAnchor={many ? 'end' : 'middle'} height={many ? 46 : 24} />
             <YAxis tick={AXIS} axisLine={false} tickLine={false} width={40} />
@@ -167,7 +256,7 @@ function Bars({ block }: { block: ChartBlock }) {
               <TooltipCard title={String(label)} rows={payload.map((p, i) => ({ name: String(p.name), color: COLORS[i % COLORS.length], value: num(p.value) }))} unit={block.unit} />
             ) : null} />
             {block.series.map((s, i) => (
-              <Bar key={s.key} dataKey={s.key} name={s.label} fill={COLORS[i % COLORS.length]} radius={[3, 3, 0, 0]} maxBarSize={28} animationDuration={700} animationBegin={i * 90} />
+              <Bar key={s.key} dataKey={s.key} name={s.label} fill={COLORS[i % COLORS.length]} shape={<Bar3D />} maxBarSize={26} animationDuration={700} animationBegin={i * 90} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -183,21 +272,26 @@ function MapTiles({ block }: { block: ChartBlock }) {
   const best = Math.max(...block.data.map((d) => num(d.avgPoints) || 0));
   return (
     <Panel title={block.title} subtitle={block.subtitle}>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {/* Column count follows the number of maps, so the row is always full (no empty slot on any screen). */}
+      <div className={cx('grid gap-2 sm:gap-3', block.data.length === 1 ? 'grid-cols-1' : block.data.length === 2 || block.data.length === 4 ? 'grid-cols-2' : 'grid-cols-3')}>
         {block.data.map((d, i) => {
           const name = String(d.map);
           const top = num(d.avgPoints) === best;
           return (
-            <motion.div key={name} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: i * 0.06 }} whileHover={{ y: -3 }}
-              className={cx('relative isolate overflow-hidden rounded-md border p-3', top ? 'border-ember-400/50' : 'border-white/10')}>
-              {MAP_IMG[name] && <img src={MAP_IMG[name]} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-40" />}
+            <motion.div key={name} initial={{ opacity: 0, y: 18, rotateX: -30 }} animate={{ opacity: 1, y: 0, rotateX: 0 }} transition={{ ...spring, delay: i * 0.07 }} style={{ transformPerspective: 800 }}>
+            <Tilt depth={26} max={12}>
+            <div className={cx('relative isolate h-full overflow-hidden rounded-md border p-2.5 shadow-[0_14px_0_-6px_rgba(0,0,0,.6),0_24px_40px_-16px_rgba(0,0,0,.9)] sm:p-3', top ? 'border-ember-400/60 shadow-glow' : 'border-white/10')}>
+              {MAP_IMG[name] && <img src={MAP_IMG[name]} alt="" className="absolute inset-0 -z-10 h-full w-full scale-110 object-cover opacity-45" />}
               <div className="absolute inset-0 -z-10 bg-gradient-to-t from-ink-950 via-ink-950/70 to-ink-950/20" />
               <div className="flex items-center justify-between">
-                <p className="font-display text-lg font-bold uppercase tracking-wide text-white">{name}</p>
-                <span className="font-mono text-[11px] text-zinc-400">{fmt(d.matches)} m</span>
+                <p className="truncate font-display text-sm font-bold uppercase tracking-wide text-white sm:text-lg">{name}</p>
+                <span className="hidden font-mono text-[11px] text-zinc-400 sm:inline">{fmt(d.matches)} m</span>
               </div>
-              <p className={cx('mt-6 font-mono text-2xl font-bold', top ? 'text-ember-300' : 'text-white')}><CountUp value={num(d.avgPoints)} decimals={1} /><span className="ml-1 text-xs text-zinc-400">pts</span></p>
-              <p className="text-xs text-zinc-400">{fmt(d.avgKills)} kills · {fmt(d.avgSurvival)} min alive</p>
+              {top && <span className="chip mt-1 bg-ember-500/20 !px-1.5 !py-0.5 text-[9px] text-ember-200 ring-1 ring-ember-400/40">Best</span>}
+              <p className={cx('font-mono text-xl font-bold sm:text-2xl', top ? 'mt-2 text-ember-300' : 'mt-[30px] text-white')}><CountUp value={num(d.avgPoints)} decimals={1} /><span className="ml-1 text-[10px] text-zinc-400 sm:text-xs">pts</span></p>
+              <p className="text-[11px] leading-snug text-zinc-400 sm:text-xs">{fmt(d.avgKills)} kills · {fmt(d.avgSurvival)}m alive</p>
+            </div>
+            </Tilt>
             </motion.div>
           );
         })}
@@ -216,7 +310,7 @@ function RadarBlock({ block }: { block: B<'radar'> }) {
             <PolarAngleAxis dataKey="axis" tick={{ fill: '#a1a1aa', fontSize: 11, fontWeight: 600 }} />
             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
             {block.series.map((s, i) => (
-              <Radar key={s.key} dataKey={s.key} name={s.label} stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={i ? 0.12 : 0.25} strokeWidth={2} animationDuration={900} />
+              <Radar key={s.key} dataKey={s.key} name={s.label} stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={i ? 0.12 : 0.25} strokeWidth={2} animationDuration={900} style={{ filter: `drop-shadow(0 0 6px ${COLORS[i]}88)` }} />
             ))}
             <Tooltip content={({ active, payload, label }) => active && payload?.length ? (
               <TooltipCard title={String(label)} rows={payload.map((p, i) => ({ name: String(p.name), color: COLORS[i], value: num(p.value) }))} />
@@ -320,8 +414,9 @@ const ROLE_ICON: Record<string, typeof Target> = { IGL: Crosshair, Assaulter: Sw
 function PickCard({ p, i, sub }: { p: SquadPick; i: number; sub?: boolean }) {
   const RI = ROLE_ICON[p.gameRole] ?? Sparkles;
   return (
-    <motion.div initial={{ opacity: 0, y: 14, rotateX: -12 }} animate={{ opacity: 1, y: 0, rotateX: 0 }} transition={{ ...spring, delay: 0.08 * i }}
-      className={cx('relative flex items-center gap-3 overflow-hidden rounded-md border p-3', sub ? 'border-dashed border-white/15 bg-white/[0.02]' : 'border-ember-400/30 bg-gradient-to-r from-ember-500/[0.12] to-transparent')}>
+    <Tilt depth={18} max={7}>
+    <motion.div initial={{ opacity: 0, y: 14, rotateX: -20 }} animate={{ opacity: 1, y: 0, rotateX: 0 }} transition={{ ...spring, delay: 0.08 * i }} style={{ transformPerspective: 700 }}
+      className={cx('relative flex h-full items-center gap-3 overflow-hidden rounded-md border p-3 shadow-[0_12px_0_-6px_rgba(0,0,0,.55),0_20px_30px_-14px_rgba(0,0,0,.85)]', sub ? 'border-dashed border-white/15 bg-white/[0.02]' : 'border-ember-400/30 bg-gradient-to-r from-ember-500/[0.12] to-transparent')}>
       <span className="absolute left-0 top-0 font-display text-[44px] font-bold leading-none text-white/[0.04]">{sub ? 'S' : i + 1}</span>
       <Avatar name={p.ign} src={p.avatar} size={44} dim={sub} />
       <div className="min-w-0 flex-1">
@@ -331,6 +426,7 @@ function PickCard({ p, i, sub }: { p: SquadPick; i: number; sub?: boolean }) {
       </div>
       <ScoreRing score={p.score} />
     </motion.div>
+    </Tilt>
   );
 }
 
