@@ -215,17 +215,17 @@ function InviteComposer({ open, onClose }: { open: boolean; onClose: () => void 
           <button type="button" className="text-xs font-semibold text-ember-400 hover:text-ember-300"
             onClick={() => setPicked(all ? new Set() : new Set(mates.map((m) => m.id)))}>{all ? 'Clear' : 'Select all'}</button>
         </div>
-        <ul className="mt-2 max-h-[40vh] space-y-1.5 overflow-y-auto overscroll-contain pr-1">
+        <ul className="mt-2 grid max-h-[40vh] grid-cols-2 gap-2 overflow-y-auto overscroll-contain pr-1">
           {mates.map((m) => {
             const on = picked.has(m.id);
             return (
               <li key={m.id}>
                 <button type="button" onClick={() => toggle(m.id)} aria-pressed={on}
-                  className={cx('flex w-full items-center gap-3 rounded-xl border p-2 text-left', on ? 'border-ember-400/50 bg-ember-500/10' : 'border-white/[0.06] hover:bg-white/[0.04]')}>
-                  <Avatar name={m.ign} src={m.avatar} size={30} />
+                  className={cx('relative flex w-full items-center gap-2.5 overflow-hidden rounded-lg border p-2 text-left transition-[border-color,background-color,box-shadow] active:scale-[.97]', on ? 'border-ember-400/80 bg-ember-500/10 shadow-glow' : 'border-dashed border-white/15 hover:border-white/30')}>
+                  <span className="overflow-hidden rounded-md ring-1 ring-white/10"><Avatar name={m.ign} src={m.avatar} size={38} /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-white">{m.ign}</span>
-                    <span className="text-[11px] text-zinc-500">{[m.pushEnabled && 'App', m.telegramLinked && 'Telegram'].filter(Boolean).join(' + ') || 'No alerts on'}</span>
+                    <span className="block truncate font-display text-sm font-bold uppercase text-white">{m.ign}</span>
+                    <span className="block truncate text-[10px] text-zinc-500">{[m.pushEnabled && 'App', m.telegramLinked && 'Telegram'].filter(Boolean).join(' + ') || 'No alerts on'}</span>
                   </span>
                   <span className={cx('grid h-5 w-5 place-items-center rounded-md border transition-colors', on ? 'border-ember-400 bg-ember-500 text-ink-950' : 'border-white/20')}>
                     {on && <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />}

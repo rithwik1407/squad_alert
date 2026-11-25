@@ -48,7 +48,7 @@ export function Button({ variant = 'primary', loading, icon, children, className
 
 export function Skeleton({ className }: { className?: string }) {
   return (
-    <div className={cx('relative overflow-hidden rounded-xl bg-white/[0.05]', className)} aria-hidden>
+    <div className={cx('relative overflow-hidden rounded-md bg-white/[0.05]', className)} aria-hidden>
       <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
     </div>
   );
@@ -56,12 +56,15 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function PageHeader({ eyebrow, title, action, children }: { eyebrow?: string; title: string; action?: ReactNode; children?: ReactNode }) {
   return (
-    <header className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-7">
-      <div>
-        {eyebrow && <p className="eyebrow mb-1">{eyebrow}</p>}
+    <header className="relative mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.06] pb-4 sm:mb-7">
+      <div className="min-w-0">
+        {eyebrow && <p className="eyebrow mb-1.5">{eyebrow}</p>}
         <h1 className="text-3xl font-bold leading-none text-white sm:text-4xl">{title}</h1>
         {children && <p className="mt-2 text-sm text-zinc-400">{children}</p>}
       </div>
+      {/* Accent underline that draws in from the left, like a game menu header. */}
+      <motion.span aria-hidden className="absolute -bottom-px left-0 h-0.5 w-24 origin-left bg-gradient-to-r from-ember-400 to-transparent"
+        initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.1 }} />
       {action}
     </header>
   );
@@ -135,9 +138,10 @@ export function Field({ label, error, children, hint }: { label: string; error?:
 
 export function Stat({ label, value, icon, className, ...p }: { label: string; value: ReactNode; icon?: ReactNode } & HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cx('rounded-xl border border-white/[0.06] bg-white/[0.03] p-3', className)} {...p}>
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-zinc-400">{icon}{label}</div>
-      <div className="mt-1 font-display text-2xl font-bold text-white">{value}</div>
+    <div className={cx('relative overflow-hidden rounded-md border border-white/[0.06] bg-white/[0.03] p-3 pl-3.5', className)} {...p}>
+      <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 bg-ember-500/70" />
+      <div className="flex items-center gap-1.5 font-display text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400">{icon}{label}</div>
+      <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-white">{value}</div>
     </div>
   );
 }

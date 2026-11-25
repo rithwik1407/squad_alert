@@ -14,6 +14,41 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet" />
     <title>SquadSync</title>
+    <link rel="preload" as="image" href="/icons/logo.png" />
+    <style>
+      /* Boot intro: plain CSS so it plays while the app code downloads. Transform / opacity only (plus one glow filter on the crest). */
+      #intro { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: #07070a; overflow: hidden; cursor: pointer;
+        animation: intro-out .35s cubic-bezier(.22,1,.36,1) 1.25s forwards; }
+      #intro::before { content: ''; position: absolute; inset: 0; opacity: 0; animation: intro-fade .5s ease .15s forwards;
+        background: radial-gradient(420px 320px at 50% 46%, rgba(255,138,31,.28), transparent 70%),
+          linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 56px 56px,
+          linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 56px 56px; }
+      #intro .scan { position: absolute; left: 0; right: 0; top: 0; height: 120px; opacity: 0;
+        background: linear-gradient(180deg, transparent, rgba(255,169,77,.16) 70%, rgba(255,169,77,.65) 98%, transparent);
+        animation: intro-scan .8s cubic-bezier(.5,0,.3,1) .25s forwards; }
+      #intro .box { position: relative; display: flex; flex-direction: column; align-items: center; }
+      #intro .crest { width: 132px; height: 132px; opacity: 0; mix-blend-mode: screen; transform: scale(.6) translateY(14px);
+        animation: intro-crest .6s cubic-bezier(.2,1.4,.4,1) .1s forwards, intro-ignite .9s ease .1s forwards; }
+      #intro .ring { position: absolute; top: 66px; left: 50%; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%;
+        border: 2px solid rgba(255,138,31,.7); opacity: 0; animation: intro-ring .7s ease-out .45s forwards; }
+      #intro .name { margin-top: 18px; font: 700 34px/1 Rajdhani, system-ui, sans-serif; color: #fff; text-transform: uppercase;
+        letter-spacing: .9em; opacity: 0; animation: intro-name .55s cubic-bezier(.22,1,.36,1) .45s forwards; }
+      #intro .name b { color: #ff8a1f; font-weight: 700; }
+      #intro .tag { margin-top: 10px; font: 600 11px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .34em; color: #71717a;
+        opacity: 0; animation: intro-fade .4s ease .75s forwards; }
+      #intro .bar { margin-top: 16px; width: 160px; height: 2px; background: rgba(255,255,255,.08); overflow: hidden; }
+      #intro .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff8a1f, #ffc078); transform: scaleX(0); transform-origin: left;
+        animation: intro-bar 1s cubic-bezier(.65,0,.35,1) .2s forwards; }
+      @keyframes intro-fade { to { opacity: 1; } }
+      @keyframes intro-crest { to { opacity: 1; transform: none; } }
+      @keyframes intro-ignite { 0% { filter: brightness(0) drop-shadow(0 0 0 rgba(255,138,31,0)); } 55% { filter: brightness(1.5) drop-shadow(0 0 28px rgba(255,138,31,.9)); } 100% { filter: brightness(1) drop-shadow(0 0 16px rgba(255,138,31,.45)); } }
+      @keyframes intro-ring { 0% { opacity: .9; transform: scale(.8); } 100% { opacity: 0; transform: scale(2.1); } }
+      @keyframes intro-name { to { opacity: 1; letter-spacing: .22em; } }
+      @keyframes intro-scan { 0% { opacity: 1; transform: translateY(-120px); } 100% { opacity: 0; transform: translateY(100vh); } }
+      @keyframes intro-bar { to { transform: none; } }
+      @keyframes intro-out { to { opacity: 0; transform: scale(1.04); visibility: hidden; } }
+      @media (prefers-reduced-motion: reduce) { #intro { display: none; } }
+    </style>
     <script>
       // Player's accent colour (Settings), applied before first paint so there's no flash.
       try { var a = localStorage.getItem('squadsync-accent'); if (a && a !== 'ember') document.documentElement.setAttribute('data-accent', a); } catch (e) {}
@@ -22,6 +57,28 @@
     </script>
   </head>
   <body>
+    <div id="intro" aria-hidden="true">
+      <div class="scan"></div>
+      <div class="box">
+        <span class="ring"></span>
+        <img class="crest" src="/icons/logo.png" alt="" width="132" height="132" />
+        <div class="name">Team <b>Rare</b></div>
+        <div class="tag">SQUADSYNC // BGMI</div>
+        <div class="bar"><i></i></div>
+      </div>
+    </div>
+    <script>
+      // Intro plays once per browser session. Tap skips; reduced motion never shows it (see the CSS).
+      (function () {
+        var el = document.getElementById('intro');
+        var seen = false;
+        try { seen = sessionStorage.getItem('rare-intro') === '1'; sessionStorage.setItem('rare-intro', '1'); } catch (e) {}
+        if (seen || location.pathname.indexOf('/join') === 0) { el.remove(); return; }
+        var done = function () { if (el && el.parentNode) el.remove(); };
+        el.addEventListener('click', done);
+        setTimeout(done, 1650);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

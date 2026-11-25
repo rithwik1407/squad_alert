@@ -48,18 +48,24 @@ export function Layout() {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/[0.06] bg-ink-900 p-5 lg:flex">
         <Logo />
         {team && (
-          <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Team</p>
-            <p className="font-display text-lg font-bold text-white">{team.name}</p>
+          <div className="glass mt-6 flex items-center gap-3 overflow-hidden p-3">
+            <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-ember-500/20 blur-2xl" />
+            <img src="/icons/logo.png" alt="" width={40} height={40} className="relative rounded-md ring-1 ring-ember-400/30" />
+            <div className="relative min-w-0">
+              <p className="font-display text-[10px] font-bold uppercase tracking-[0.24em] text-ember-400">Team</p>
+              <p className="truncate font-display text-lg font-bold uppercase leading-tight text-white">{team.name}</p>
+            </div>
           </div>
         )}
         <nav className="mt-6 flex flex-1 flex-col gap-1" aria-label="Main">
           {items.map(({ to, label, icon: I }) => (
             <NavLink key={to} to={to} end={to === '/'} className="group relative rounded-xl">
               {({ isActive }) => (
-                <span className={cx('relative z-10 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors', isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-100')}>
+                <span className={cx('relative z-10 flex items-center gap-3 rounded-md px-3 py-2.5 font-display text-[15px] font-bold uppercase tracking-wider transition-colors', isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-100')}>
                   {isActive && (
-                    <motion.span layoutId="side-active" className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-r from-ember-500/20 to-transparent ring-1 ring-ember-400/25" transition={{ type: 'spring', stiffness: 400, damping: 34 }} />
+                    <motion.span layoutId="side-active" className="absolute inset-0 -z-10 rounded-md bg-gradient-to-r from-ember-500/25 via-ember-500/[0.06] to-transparent" transition={{ type: 'spring', stiffness: 400, damping: 34 }}>
+                      <span className="absolute inset-y-1.5 left-0 w-[3px] bg-ember-400 shadow-glow" />
+                    </motion.span>
                   )}
                   <I className={cx('h-[18px] w-[18px] transition-[color,transform] duration-200', isActive ? 'text-ember-400' : 'group-hover:translate-x-0.5')} aria-hidden />
                   {label}
@@ -119,12 +125,12 @@ export function Layout() {
               <NavLink to={to} end={to === '/'} className="relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-transform duration-150 active:scale-90">
                 {({ isActive }) => (
                   <>
-                    {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-0.5 w-8 rounded-full bg-ember-400 shadow-glow" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+                    {isActive && <motion.span layoutId="bottom-active" className="absolute top-0 h-[3px] w-10 bg-ember-400 shadow-glow [clip-path:polygon(4px_0,100%_0,calc(100%-4px)_100%,0_100%)]" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
                     <motion.span className="relative" animate={{ scale: isActive ? 1.12 : 1, y: isActive ? -1 : 0 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
                       <I className={cx('h-5 w-5 transition-colors duration-200', isActive ? 'text-ember-400' : 'text-zinc-500')} aria-hidden />
                       {badges[to] ? <span className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-ember-500 px-1 text-center text-[9px] font-bold leading-4 text-ink-950" aria-label={`${badges[to]} waiting`}>{badges[to]}</span> : null}
                     </motion.span>
-                    <span className={cx('transition-colors duration-200', isActive ? 'text-white' : 'text-zinc-500')}>{label}</span>
+                    <span className={cx('font-display text-[11px] font-bold uppercase tracking-wider transition-colors duration-200', isActive ? 'text-white' : 'text-zinc-500')}>{label}</span>
                   </>
                 )}
               </NavLink>
