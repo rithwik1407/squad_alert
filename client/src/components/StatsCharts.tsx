@@ -1,6 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { animate, motion, useInView, useMotionValue, useTransform } from 'framer-motion';
-import { Trophy } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, animate, motion, useInView, useMotionValue, useTransform } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
 import { cx } from '@/components/ui';
 import { spring } from '@/lib/motion';
 
@@ -141,6 +141,84 @@ export function TooltipCard({ title, subtitle, rows, unit }: { title: string; su
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Shows a list a few rows at a time so a card never keeps growing.
+ * Prev/next buttons, page dots, and a sideways swipe on touch screens flip pages.
+ * Give it a `key` that changes with the data (match, filter) to jump back to page 1.
+ */
+export function Paged<T>({ items, size = 4, label, className, children }: {
+  items: T[]; size?: number; label: string; className?: string;
+  /** Renders one page; `offset` is the index of the first item on it. */
+  children: (page: T[], offset: number) => ReactNode;
+}) {
+  const pages = Math.max(1, Math.ceil(items.length / size));
+  const [page, setPage] = useState(0);
+  const [dir, setDir] = useState(1);
+  const p = Math.min(page, pages - 1);
+  const go = (n: number) => {
+    const next = Math.max(0, Math.min(pages - 1, n));
+    if (next === p) return;
+    setDir(next > p ? 1 : -1);
+    setPage(next);
+  };
+  const offset = p * size;
+  const slice = items.slice(offset, offset + size);
+
+  return (
+    <div className={className}>
+      <div className="relative overflow-hidden">
+        <AnimatePresence mode="wait" initial={false} custom={dir}>
+          <motion.div
+            key={p}
+            custom={dir}
+            initial={{ opacity: 0, x: 24 * dir }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -24 * dir }}
+            transition={{ duration: 0.2 }}
+            drag={pages > 1 ? 'x' : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.25}
+            dragDirectionLock
+            onDragEnd={(_, info) => {
+              if (info.offset.x < -50 || info.velocity.x < -400) go(p + 1);
+              else if (info.offset.x > 50 || info.velocity.x > 400) go(p - 1);
+            }}
+            style={{ touchAction: 'pan-y' }}
+          >
+            {children(slice, offset)}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      {pages > 1 && (
+        <nav aria-label={`${label} pages`} className="mt-3 flex items-center justify-between gap-2 border-t border-white/5 pt-3">
+          <button type="button" className="btn-ghost !p-2" aria-label="Previous page" disabled={p === 0} onClick={() => go(p - 1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="flex min-w-0 flex-col items-center gap-1.5">
+            {pages <= 8 && (
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: pages }, (_, i) => (
+                  <button key={i} type="button" onClick={() => go(i)} aria-label={`Page ${i + 1}`} aria-current={i === p ? 'page' : undefined}
+                    className="grid h-5 place-items-center px-0.5">
+                    <motion.span layout transition={spring}
+                      className={cx('block h-1.5 rounded-full', i === p ? 'w-5 bg-ember-400' : 'w-1.5 bg-white/20 hover:bg-white/40')} />
+                  </button>
+                ))}
+              </div>
+            )}
+            <span className="text-[11px] tabular-nums text-zinc-500">
+              {offset + 1}–{offset + slice.length} of {items.length}
+            </span>
+          </div>
+          <button type="button" className="btn-ghost !p-2" aria-label="Next page" disabled={p >= pages - 1} onClick={() => go(p + 1)}>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </nav>
+      )}
     </div>
   );
 }
