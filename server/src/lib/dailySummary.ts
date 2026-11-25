@@ -1,4 +1,5 @@
 import { scoreMvp } from './mvp.js';
+import { matchPoints } from './points.js';
 import { formatTimeIST } from './time.js';
 
 /**
@@ -90,10 +91,12 @@ export interface DailySummary {
   totalDamage: number;
   bestPlacement: { placement: number; title: string } | null;
   avgPlacement: number | null;
+  /** Points table for the day: placement points + 1 per kill, summed over the matches. */
+  points: { placement: number; kills: number; total: number };
   mvp: PlayerTotal | null;
   topFragger: PlayerTotal | null;
   players: PlayerTotal[];
-  matches: { title: string; type: string; map: string; startAt: Date; placement: number | null; kills: number | null; mvpName: string | null }[];
+  matches: { title: string; type: string; map: string; startAt: Date; placement: number | null; kills: number | null; points: number; mvpName: string | null }[];
 }
 
 const SEP = /[|丨｜ǀ┃│]/;
@@ -142,6 +145,20 @@ export function buildDailySummary(input: {
   const best = [...placed].sort((a, b) => a.placement! - b.placement!)[0];
   const strip = ({ survivalMin: _s, ...p }: PlayerTotal & { survivalMin: number }): PlayerTotal => p;
 
+  const listed = [...matches]
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime())
+    .map((m) => {
+      const ms = dayStats.filter((s) => s.matchId === m.id);
+      const mvpStat = ms.find((s) => s.mvp);
+      const kills = ms.length ? ms.reduce((a, s) => a + (s.kills || 0), 0) : null;
+      return {
+        title: m.title, type: m.type, map: m.map, startAt: m.startAt, placement: m.placement ?? null,
+        kills, points: matchPoints(m.placement, kills).total,
+        mvpName: mvpStat ? nameOf.get(mvpStat.userId) ?? null : null,
+      };
+    });
+  const pts = listed.map((m) => matchPoints(m.placement, m.kills));
+
   return {
     teamName: input.teamName,
     day: input.day,
@@ -156,17 +173,12 @@ export function buildDailySummary(input: {
     mvp: mvp ? strip(mvp) : null,
     topFragger: topFragger ? strip(topFragger) : null,
     players: rows.sort((a, b) => b.kills - a.kills || b.damage - a.damage).map(strip),
-    matches: [...matches]
-      .sort((a, b) => a.startAt.getTime() - b.startAt.getTime())
-      .map((m) => {
-        const ms = dayStats.filter((s) => s.matchId === m.id);
-        const mvpStat = ms.find((s) => s.mvp);
-        return {
-          title: m.title, type: m.type, map: m.map, startAt: m.startAt, placement: m.placement ?? null,
-          kills: ms.length ? ms.reduce((a, s) => a + (s.kills || 0), 0) : null,
-          mvpName: mvpStat ? nameOf.get(mvpStat.userId) ?? null : null,
-        };
-      }),
+    points: {
+      placement: pts.reduce((a, p) => a + p.placementPts, 0),
+      kills: pts.reduce((a, p) => a + p.killPts, 0),
+      total: pts.reduce((a, p) => a + p.total, 0),
+    },
+    matches: listed,
   };
 }
 
@@ -197,6 +209,9 @@ export function renderDailySummary(s: DailySummary, tz: string): string {
   const kinds = [s.scrims && plural(s.scrims, 'scrim'), s.tournaments && plural(s.tournaments, 'tournament')].filter(Boolean).join(', ');
   out.push(`🎮 <b>Matches played:</b> ${s.matchesPlayed}${kinds ? ` (${kinds})` : ''}`);
   if (s.withResults < s.matchesPlayed) out.push(`🗂 <b>Results uploaded:</b> ${s.withResults} of ${s.matchesPlayed}`);
+  if (s.points.total > 0) {
+    out.push(`🏆 <b>Points:</b> ${num(s.points.total)} (${num(s.points.placement)} placement + ${num(s.points.kills)} kills)`);
+  }
   if (s.players.length) out.push(`💀 <b>Team finishes:</b> ${num(s.totalKills)}   💥 <b>Damage:</b> ${num(s.totalDamage)}`);
   if (s.bestPlacement) {
     out.push(`🏁 <b>Best placement:</b> #${s.bestPlacement.placement} (${esc(s.bestPlacement.title)})` +
@@ -233,6 +248,7 @@ export function renderDailySummary(s: DailySummary, tz: string): string {
     const result = [
       m.placement ? `#${m.placement}` : null,
       m.kills != null ? `${m.kills} K` : null,
+      m.placement || m.kills != null ? `${m.points} pts` : null,
       m.mvpName ? `⭐ ${m.mvpName}` : null,
     ].filter(Boolean).join(' · ');
     out.push(`${i + 1}. ${esc(bits)} · ${esc(m.title)}${m.type === 'tournament' ? ' 🏆' : ''}`);

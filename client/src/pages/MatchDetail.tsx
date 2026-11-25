@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { isNotResultsError, pendingRead, startRead } from '@/lib/scorecardUpload';
+import { matchPoints, pointsLine } from '@/lib/points';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST } from '@/lib/time';
 import { list } from '@/lib/motion';
@@ -314,6 +315,8 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   const [readErr, setReadErr] = useState<string | null>(null);
   const [waited, setWaited] = useState(0);
   const [place, setPlace] = useState('');
+  /** The last screenshot read had no squad position on it: ask the admin to type it in. */
+  const [noPlace, setNoPlace] = useState(false);
   const byId = new Map(members.map((p) => [p.id, p]));
 
   useEffect(() => {
@@ -344,13 +347,18 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
     setWaited(read.seconds);
     read.listeners.add(setWaited);
     try {
-      const got = await read.promise;
+      const { rows: got, placement } = await read.promise;
       if (!mounted.current) return;
       const matched = got.filter((r) => r.userId);
       for (const r of matched) set(r.userId!, fromCard(r));
+      if (placement) setPlace(String(placement));
+      setNoPlace(!placement);
       setDirty(false);
       setUnmatched(got.filter((r) => !r.userId));
-      toast.success(`Read ${got.length} players and saved ${matched.length}${matched.length < got.length ? `. Pick who the other ${got.length - matched.length} are` : ''}. Fix anything wrong, then Save.`);
+      const kills = matched.reduce((a, r) => a + r.finishes, 0);
+      toast.success(`Read ${got.length} players and saved ${matched.length}${matched.length < got.length ? `. Pick who the other ${got.length - matched.length} are` : ''}. `
+        + (placement ? `Points ${pointsLine(placement, kills)}. ` : 'No position on the screenshot: type it in. ')
+        + 'Fix anything wrong, then Save.');
     } catch (e) {
       if (!mounted.current) return;
       if (isNotResultsError(e)) setNotResults(true);
@@ -405,6 +413,8 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   }
 
   const ids = Object.keys(rows);
+  const placeNum = Number(place) >= 1 && Number(place) <= 25 ? Math.round(Number(place)) : null;
+  const teamKills = ids.reduce((a, id) => a + (rows[id].joined ? rows[id].kills : 0), 0);
   const addable = members.filter((p) => !rows[p.id]);
   const num = (v: string) => Math.max(0, Number(v) || 0);
 
@@ -446,11 +456,16 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Position</span>
           <span className="flex items-center gap-1"><span className="font-display text-lg font-bold text-zinc-500">#</span>
             <input type="number" min={1} max={25} inputMode="numeric" aria-label="Squad position" placeholder="–" className="input w-20 py-1.5"
-              value={place} onChange={(e) => { setDirty(true); setPlace(e.target.value); }} /></span>
+              value={place} onChange={(e) => { setDirty(true); setNoPlace(false); setPlace(e.target.value); }} /></span>
         </label>
+        <PointsSummary placement={placeNum} kills={teamKills} />
         <ScreenshotThumb matchId={m.id} at={q.data?.screenshotAt ?? null} />
       </div>
-      <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers and position fill in automatically. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
+      {noPlace && !place && (
+        <p role="status" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2.5 text-xs text-amber-200">
+          The screenshot didn't show the squad's position. Type it in above and Save so the points table gets the placement points.</p>
+      )}
+      <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers and position fill in automatically. Points: placement (#1 10, #2 6, #3 5, #4 4, #5 3, #6 2, #7-8 1) plus 1 per kill. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
 
       {unmatched.length > 0 && (
         <div className="mb-3 space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
@@ -516,6 +531,20 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   );
 }
 
+/** Live points for the match while the admin edits: placement points + kill points. */
+function PointsSummary({ placement, kills }: { placement: number | null; kills: number }) {
+  const p = matchPoints(placement, kills);
+  return (
+    <div className="flex items-end gap-2 font-mono text-sm" aria-label={`Points: ${pointsLine(placement, kills)}`}>
+      <span className="flex flex-col"><span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Place pts</span><span className="text-zinc-200">{p.placementPts}</span></span>
+      <span className="pb-px text-zinc-600">+</span>
+      <span className="flex flex-col"><span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Kill pts</span><span className="text-zinc-200">{p.killPts}</span></span>
+      <span className="pb-px text-zinc-600">=</span>
+      <span className="flex flex-col"><span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Total</span><span className="font-bold text-ember-300">{p.total}</span></span>
+    </div>
+  );
+}
+
 /** What players see after the match: kills, damage and the MVP. */
 function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
   const q = useQuery({ queryKey: ['report', m.id], queryFn: () => api.report(m.id) });
@@ -529,6 +558,11 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
         <h2 className="flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Match results</h2>
         <div className="flex items-center gap-3">
           {data?.placement ? <span className="chip bg-ember-500/15 text-ember-300">Position #{data.placement}</span> : null}
+          {data && (data.placement || stats.length > 0) ? (
+            <span className="chip bg-white/[0.06] text-zinc-200" title={pointsLine(data.placement, stats.reduce((a, s) => a + s.kills, 0))}>
+              {matchPoints(data.placement, stats.reduce((a, s) => a + s.kills, 0)).total} pts
+            </span>
+          ) : null}
           <ScreenshotThumb matchId={m.id} at={data?.screenshotAt ?? null} />
         </div>
       </div>

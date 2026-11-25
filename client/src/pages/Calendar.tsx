@@ -350,7 +350,7 @@ function PointsNote({ system }: { system: CalendarMonth['pointsSystem'] }) {
   return (
     <p className="text-[11px] leading-relaxed text-zinc-500">
       Points use the standard BGMI table: {entries.map(([p, v]) => `#${p} ${v}`).join(', ')}, other places 0, plus {system.perKill} per kill.
-      Kills come from the saved scorecard and placement from "Finish match".
+      Uploading a results screenshot fills in both the kills and the squad's position; you can also set the position with "Finish match".
     </p>
   );
 }

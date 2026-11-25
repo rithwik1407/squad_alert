@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { buildCalendarDays, isMonthKey, monthRange, placementPoints } from '../src/lib/calendar.js';
+import { matchPoints } from '../src/lib/points.js';
 
 const TZ = 'Asia/Kolkata';
+
+describe('match points', () => {
+  it('adds position points and 1 point per kill', () => {
+    expect(matchPoints(1, 8)).toEqual({ placementPts: 10, killPts: 8, total: 18 });
+    expect(matchPoints(12, 3)).toEqual({ placementPts: 0, killPts: 3, total: 3 });
+    expect(matchPoints(null, null)).toEqual({ placementPts: 0, killPts: 0, total: 0 });
+  });
+});
 
 describe('placement points', () => {
   it('uses the standard BGMI table', () => {

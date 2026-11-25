@@ -1,3 +1,4 @@
+import { matchPoints } from './points.js';
 import { dayKey, dayRange } from './dailySummary.js';
 import { seriesKey } from './seriesName.js';
 
@@ -6,14 +7,7 @@ import { seriesKey } from './seriesName.js';
  * The route that loads the data is GET /api/matches/calendar.
  */
 
-/** Standard BGMI scrim points: placement points by finishing position, plus 1 point per finish (kill). */
-export const PLACEMENT_POINTS: Record<number, number> = { 1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1 };
-export const POINTS_PER_KILL = 1;
-
-export function placementPoints(placement: number | null | undefined): number {
-  if (!placement || placement < 1) return 0;
-  return PLACEMENT_POINTS[placement] ?? 0;
-}
+export { PLACEMENT_POINTS, POINTS_PER_KILL, placementPoints } from './points.js';
 
 /** "2026-11" → [first day of the month, first day of the next month) in `tz`. */
 export function monthRange(month: string, tz: string): { start: Date; end: Date } {
@@ -99,8 +93,7 @@ export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputSt
   const series = (m.tournamentName ?? '').trim() || m.title.trim();
   const kills = stats.length ? stats.reduce((a, s) => a + (s.kills || 0), 0) : null;
   const placement = m.placement ?? null;
-  const placementPts = placementPoints(placement);
-  const killPts = (kills ?? 0) * POINTS_PER_KILL;
+  const { placementPts, killPts, total } = matchPoints(placement, kills);
   return {
     id: m.id,
     title: m.title,
@@ -114,7 +107,7 @@ export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputSt
     kills,
     placementPts,
     killPts,
-    total: placementPts + killPts,
+    total,
     hasResult: placement != null || kills != null,
     stats: stats.map((s) => ({ userId: s.userId, kills: s.kills || 0, damage: s.damage || 0, assists: s.assists || 0, mvp: Boolean(s.mvp) })),
   };
