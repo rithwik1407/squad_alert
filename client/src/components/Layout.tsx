@@ -6,6 +6,7 @@ import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sp
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { useInbox } from '@/lib/useInbox';
+import { useLiveSync } from '@/lib/useLiveSync';
 import { aiStore, useAi } from '@/lib/aiStore';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
@@ -20,6 +21,8 @@ export function Layout() {
   useEffect(() => {
     if (navType !== 'POP') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, [loc.pathname, navType]);
+  // Teammates' changes (slots, results, squads, check-ins) show up without a refresh.
+  useLiveSync(Boolean(team));
   const { requests } = useJoinRequests();
   const wide = loc.pathname === '/ai';
   // A Squad AI answer finished while you were on another page.

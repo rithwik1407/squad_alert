@@ -304,11 +304,16 @@ export interface CalendarMatch {
   killPts: number;
   total: number;
   hasResult: boolean;
+  /** Finished. Only completed matches count toward points, totals and player numbers. */
+  completed: boolean;
   stats: { userId: string; kills: number; damage: number; assists: number; mvp: boolean }[];
 }
 
 export interface CalendarTotals {
+  /** Completed matches. */
   matches: number;
+  /** Not finished yet (upcoming or still running). */
+  upcoming: number;
   withResult: number;
   kills: number;
   placementPts: number;

@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { normalizePhone } from '../lib/phone.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { publicUser } from '../lib/serialize.js';
+import { teamRevision } from '../lib/liveSync.js';
 
 export const teamRouter = Router();
 
@@ -33,6 +34,12 @@ export async function loadTeamView(teamId: Types.ObjectId | string | null | unde
 }
 
 teamRouter.use(requireAuth);
+
+/** Live sync: a tiny revision string. When it changes, the app refetches matches, stats and the calendar. */
+teamRouter.get('/pulse', ah(async (req, res) => {
+  const teamId = req.user!.teamId;
+  res.json({ rev: teamId ? await teamRevision(teamId) : '0' });
+}));
 
 teamRouter.get('/', ah(async (req, res) => {
   res.json({ team: await loadTeamView(req.user!.teamId, req.user!.role === 'captain') });

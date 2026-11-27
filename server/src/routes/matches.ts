@@ -21,6 +21,8 @@ import { deleteMatchData } from '../lib/deleteMatches.js';
 import { buildCalendarDays, isMonthKey, monthRange, PLACEMENT_POINTS, POINTS_PER_KILL } from '../lib/calendar.js';
 import { dayKey } from '../lib/dailySummary.js';
 import { config } from '../config.js';
+import { batchSlotTargets, isCompleted } from '../lib/matchGroups.js';
+import { touchTeam } from '../lib/liveSync.js';
 
 /** Stats from a screenshot go out to players this long after reading, unless the admin hits Save first. */
 const RESULTS_DELAY_MS = 5 * 60_000;
@@ -110,6 +112,47 @@ export function matchesRouter(getQueue: () => QueueLike) {
       };
     });
   }
+
+  /** Copy `match`'s slot to the other unfinished matches from the same bulk add and scrim night. Returns their ids. */
+  async function shareSlot(match: MatchDoc): Promise<string[]> {
+    if (!match.batchId) return [];
+    const slot = match.slot ?? '';
+    const siblings = await Match.find({ teamId: match.teamId, batchId: match.batchId, _id: { $ne: match._id } })
+      .select('batchId startAt status slot roomId notifiedAt').lean();
+    const targets = batchSlotTargets(
+      { id: String(match._id), batchId: match.batchId, startAt: match.startAt, status: match.status, slot },
+      siblings.map((m) => ({ id: String(m._id), batchId: m.batchId, startAt: m.startAt, status: m.status ?? 'scheduled', slot: m.slot })),
+      slot,
+      config.displayTimeZone,
+    );
+    if (!targets.length) return [];
+    const ids = targets.map((t) => t.id);
+    await Match.updateMany({ _id: { $in: ids } }, { $set: { slot } });
+    // A squad that already got its room details hears about the new slot; the rest get it in their normal alert.
+    const told = siblings.filter((m) => ids.includes(String(m._id)) && m.roomId && m.notifiedAt);
+    await Promise.all(told.map((m) => enqueueImmediate(getQueue(), { matchId: String(m._id), trigger: 'room' })
+      .catch((e) => console.error('[room] could not queue slot update alert:', (e as Error).message))));
+    return ids;
+  }
+
+  /** The other matches added in the same bulk add on the same night (for "slot applies to N matches"). */
+  r.get('/:id/batch', requireCaptain, ah(async (req, res) => {
+    const match = await loadMatch(req);
+    if (!match.batchId) { res.json({ matches: [] }); return; }
+    const siblings = await Match.find({ teamId: match.teamId, batchId: match.batchId, _id: { $ne: match._id } })
+      .select('title batchId startAt status slot').sort({ startAt: 1 }).lean();
+    const targets = batchSlotTargets(
+      { id: String(match._id), batchId: match.batchId, startAt: match.startAt, status: match.status, slot: null },
+      siblings.map((m) => ({ id: String(m._id), batchId: m.batchId, startAt: m.startAt, status: m.status ?? 'scheduled', slot: m.slot })),
+      '\u0000',
+      config.displayTimeZone,
+    );
+    const keep = new Set(targets.map((t) => t.id));
+    res.json({
+      matches: siblings.filter((m) => keep.has(String(m._id)))
+        .map((m) => ({ id: String(m._id), title: m.title, startAt: m.startAt.toISOString(), slot: m.slot ?? '' })),
+    });
+  }));
 
   // ---------- list ----------
   r.get('/', ah(async (req, res) => {
@@ -291,6 +334,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
       body.drop = body.map === MAP_TBD ? '' : team?.drops.get(body.map) ?? '';
     }
     const oldRoom = `${match.roomId ?? ''}\u0000${match.roomPassword ?? ''}\u0000${match.slot ?? ''}`;
+    const oldSlot = match.slot ?? '';
     match.set(body);
     await match.save();
     const schedule = await upsertMatchJob(getQueue(), { id: String(match._id), ...match.toObject() });
@@ -299,7 +343,9 @@ export function matchesRouter(getQueue: () => QueueLike) {
       await enqueueImmediate(getQueue(), { matchId: String(match._id), trigger: 'room' })
         .catch((e) => console.error('[room] could not queue room update alert:', (e as Error).message));
     }
-    res.json({ match: (await view([match], String(req.user!._id)))[0], schedule });
+    // Matches added together are one lobby, so they share one slot: setting it on any of them sets it on all.
+    const slotShared = body.slot !== undefined && (match.slot ?? '') !== oldSlot ? await shareSlot(match) : [];
+    res.json({ match: (await view([match], String(req.user!._id)))[0], schedule, slotShared: slotShared.length });
   }));
 
   r.post('/:id/cancel', requireCaptain, ah(async (req, res) => {
@@ -489,6 +535,8 @@ export function matchesRouter(getQueue: () => QueueLike) {
       })));
       // Uploading the results screenshot means the match is over.
       await finish(matchId);
+      // The stats landed after the upload request ended, so tell teammates' apps to refresh.
+      await touchTeam(teamId);
       // Each player gets their own stats in a few minutes (time for the admin to correct a misread number).
       await scheduleResults(getQueue(), matchId, RESULTS_DELAY_MS)
         .catch((e) => console.error('[results] could not queue stats alerts:', (e as Error).message));
@@ -550,6 +598,8 @@ export function matchesRouter(getQueue: () => QueueLike) {
       { $set: { kills: e.kills, damage: e.damage, survivalMin: e.survivalMin, assists: e.assists, mvp: e.mvp, mvpScore: e.mvpScore } },
       { upsert: true },
     )));
+    // Saved results mean the match is over, so it now counts in stats and the calendar points table.
+    await finish(String(match._id));
     // Saving is the admin's final word: send each player only their own numbers now (once per player).
     await sendResultsNow(getQueue(), String(match._id))
       .catch((e) => console.error('[results] could not queue stats alerts:', (e as Error).message));

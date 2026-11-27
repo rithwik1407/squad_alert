@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
 import { Attendance, GAME_ROLES, isAdmin, Match, Squad, Stats, User } from '../models/index.js';
+import { isCompleted } from '../lib/matchGroups.js';
 import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
@@ -143,9 +144,12 @@ meRouter.delete('/telegram', ah(async (req, res) => {
 meRouter.get('/stats/team', ah(async (req, res) => {
   const teamId = req.user!.teamId;
   if (!teamId) { res.json({ players: [], matches: [] }); return; }
-  const matches = await Match.find({ teamId, startAt: { $lt: new Date() }, status: { $ne: 'cancelled' } })
-    .sort({ startAt: 1 }).select('title map type startAt placement').lean();
-  const stats = await Stats.find({ matchId: { $in: matches.map((m) => m._id) } }).lean();
+  const started = await Match.find({ teamId, startAt: { $lt: new Date() }, status: { $ne: 'cancelled' } })
+    .sort({ startAt: 1 }).select('title map type startAt placement status').lean();
+  const stats = await Stats.find({ matchId: { $in: started.map((m) => m._id) } }).lean();
+  // Only finished matches count toward the charts.
+  const withStats = new Set(stats.map((s) => String(s.matchId)));
+  const matches = started.filter((m) => isCompleted({ status: m.status ?? 'scheduled', startAt: m.startAt, placement: m.placement }, withStats.has(String(m._id))));
   const userIds = [...new Set(stats.map((s) => String(s.userId)))];
   const users = await User.find({ _id: { $in: userIds } }).select('name ign avatar').lean();
   const byMatch = new Map<string, typeof stats>();
@@ -187,8 +191,11 @@ meRouter.get('/stats', ah(async (req, res) => {
   ]);
   // History only lists matches the player actually played: picked for the squad, or has stats saved.
   const matchIds = [...new Set([...stats, ...squads].map((x) => String(x.matchId)))];
-  const matches = await Match.find({ _id: { $in: matchIds }, startAt: { $lt: new Date() } }).sort({ startAt: 1 }).lean();
+  const started = await Match.find({ _id: { $in: matchIds }, startAt: { $lt: new Date() } }).sort({ startAt: 1 }).lean();
   const statBy = new Map(stats.map((s) => [String(s.matchId), s]));
+  // Only finished matches count: a match that's still running (or was never finished) stays out until it is.
+  const matchHasStats = new Set((await Stats.find({ matchId: { $in: started.map((m) => m._id) } }).distinct('matchId')).map(String));
+  const matches = started.filter((m) => isCompleted({ status: m.status ?? 'scheduled', startAt: m.startAt, placement: m.placement }, matchHasStats.has(String(m._id))));
   const attBy = new Map(attendance.map((a) => [String(a.matchId), a]));
   const sqBy = new Map(squads.map((s) => [String(s.matchId), s]));
   const rows = matches.map((m) => {

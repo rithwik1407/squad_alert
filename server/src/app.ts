@@ -18,6 +18,7 @@ import { invitesRouter } from './routes/invites.js';
 import { aiRouter } from './routes/ai.js';
 import { inboxRouter } from './routes/inbox.js';
 import type { QueueLike } from './scheduler/queue.js';
+import { bumpOnWrite } from './lib/liveSync.js';
 
 export function createApp(getQueue: () => QueueLike) {
   const app = express();
@@ -49,6 +50,9 @@ export function createApp(getQueue: () => QueueLike) {
       timeZone: config.displayTimeZone,
     });
   });
+
+  // Changes here show up on teammates' screens without a refresh (see lib/liveSync.ts).
+  for (const path of ['/api/team', '/api/matches', '/api/scrims']) app.use(path, bumpOnWrite);
 
   app.use('/api/auth', authRouter);
   app.use('/api/team', teamRouter);

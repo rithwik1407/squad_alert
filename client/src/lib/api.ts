@@ -93,7 +93,12 @@ export const api = {
   checkin: () => request<{ matches: CheckinMatch[] }>('GET', '/matches/checkin'),
   setAvailability: (id: string, status: Availability, note = '') => request('PUT', `/matches/${id}/availability`, { status, note }),
   joining: (id: string) => request('POST', `/matches/${id}/joining`),
-  updateMatch: (id: string, b: Record<string, unknown>) => request<{ match: Match }>('PATCH', `/matches/${id}`, b),
+  /** slotShared: how many other matches from the same bulk add took the new slot. */
+  updateMatch: (id: string, b: Record<string, unknown>) => request<{ match: Match; slotShared?: number }>('PATCH', `/matches/${id}`, b),
+  /** Other unfinished matches added together with this one on the same night (they share its slot). */
+  matchBatch: (id: string) => request<{ matches: { id: string; title: string; startAt: string; slot: string }[] }>('GET', `/matches/${id}/batch`),
+  /** Live sync: changes when anything on the team changes. */
+  pulse: () => request<{ rev: string }>('GET', '/team/pulse'),
   cancelMatch: (id: string) => request<{ match: Match }>('POST', `/matches/${id}/cancel`),
   setStatus: (id: string, status: 'live' | 'done', placement?: number) =>
     request<{ match: Match }>('POST', `/matches/${id}/status`, { status, placement }),

@@ -48,6 +48,8 @@ export default function BulkMatchForm() {
   const [days, setDays] = useState(1);
   const [rows, setRows] = useState<Row[]>([row('20:00', 'Scrim 1'), row('21:00', 'Scrim 2'), row('22:00', 'Scrim 3')]);
   const [tournamentName, setTournamentName] = useState('');
+  /** One lobby, one slot: every match added here gets it, and setting it later on any of them updates all. */
+  const [slot, setSlot] = useState('');
   const [busy, setBusy] = useState(false);
   /** What the last schedule image said, shown above the rows so the admin can check it. */
   const [fromImage, setFromImage] = useState<ParsedSchedule | null>(null);
@@ -97,7 +99,7 @@ export default function BulkMatchForm() {
     e.preventDefault();
     setBusy(true);
     try {
-      const { matches } = await api.createMatches(planned.map((p) => ({ ...p, type, notifyOffsetMin: offset, tournamentName: tournamentName.trim() })));
+      const { matches } = await api.createMatches(planned.map((p) => ({ ...p, type, notifyOffsetMin: offset, tournamentName: tournamentName.trim(), slot: slot.trim() })));
       qc.invalidateQueries({ queryKey: ['matches'] });
       toast.success(`${matches.length} matches scheduled. Pick each squad before its alert.`);
       nav('/matches');
@@ -143,6 +145,11 @@ export default function BulkMatchForm() {
                 <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required for every scrim and tournament">
                   <input className="input" autoComplete="off" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
                 <SeriesSuggestions value={tournamentName} onPick={setTournamentName} />
+                </Field>
+              </div>
+              <div className="sm:col-span-3">
+                <Field label="Slot number (optional)" hint="These matches are one lobby, so they share one slot. Add it now, or later on any one match and it fills in on all of them.">
+                  <input className="input font-mono" value={slot} onChange={(e) => setSlot(e.target.value)} inputMode="numeric" placeholder="e.g. 12" maxLength={10} />
                 </Field>
               </div>
             </div>

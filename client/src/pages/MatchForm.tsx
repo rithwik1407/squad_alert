@@ -32,6 +32,9 @@ export default function MatchForm() {
   const fromId = params.get('from');
   const sourceId = id ?? fromId;
   const existing = useQuery({ queryKey: ['match', sourceId], queryFn: () => api.match(sourceId!).then((r) => r.match), enabled: Boolean(sourceId) });
+  // Matches added together in one bulk add share the lobby slot, so the slot set here goes to all of them.
+  const batch = useQuery({ queryKey: ['match', id, 'batch'], queryFn: () => api.matchBatch(id!).then((r) => r.matches), enabled: editing && Boolean(existing.data?.batchId) });
+  const batchMates = batch.data ?? [];
 
   const [title, setTitle] = useState('Scrim 1');
   const [type, setType] = useState<'scrim' | 'tournament'>('scrim');
@@ -102,10 +105,14 @@ export default function MatchForm() {
         delete (body as Partial<typeof body>).startAt;
         delete (body as Partial<typeof body>).notifyOffsetMin;
       }
-      const { match } = editing ? await api.updateMatch(id!, body) : await api.createMatch(body);
+      const res = editing ? await api.updateMatch(id!, body) : await api.createMatch(body);
+      const { match } = res;
+      const shared = 'slotShared' in res ? res.slotShared ?? 0 : 0;
       qc.invalidateQueries({ queryKey: ['matches'] });
-      qc.invalidateQueries({ queryKey: ['match', match.id] });
-      toast.success(editing ? 'Match updated, alert rescheduled' : `Scheduled. Alert at ${timeIST(match.notifyAt)}`);
+      qc.invalidateQueries({ queryKey: shared ? ['match'] : ['match', match.id] });
+      toast.success(editing
+        ? shared ? `Match updated. Slot ${match.slot || '(cleared)'} also set on ${shared} other match${shared === 1 ? '' : 'es'} from this lobby.` : 'Match updated, alert rescheduled'
+        : `Scheduled. Alert at ${timeIST(match.notifyAt)}`);
       nav(editing ? `/matches/${match.id}` : `/matches/${match.id}/squad`);
     } catch (err) {
       toast.error(err);
@@ -189,7 +196,9 @@ export default function MatchForm() {
               </Field>
               <Field label="Room ID" hint="Can be added later, right before the match"><input className="input font-mono" value={roomId} onChange={(e) => setRoomId(e.target.value)} inputMode="numeric" /></Field>
               <Field label="Room password"><input className="input font-mono" value={roomPassword} onChange={(e) => setRoomPassword(e.target.value)} /></Field>
-              <Field label="Slot number" hint={roomId ? 'Your team\'s slot in the room' : 'Add with the room ID'}>
+              <Field label="Slot number" hint={batchMates.length
+                ? `Same lobby: also sets the slot on ${batchMates.map((b) => `${b.title} (${timeIST(b.startAt)})`).join(', ')}`
+                : roomId ? 'Your team\'s slot in the room' : 'Add with the room ID'}>
                 <input className="input font-mono" value={slot} onChange={(e) => setSlot(e.target.value)} inputMode="numeric" placeholder="e.g. 12" maxLength={10} required={Boolean(roomId)} />
               </Field>
             </div>

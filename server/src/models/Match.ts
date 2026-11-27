@@ -28,6 +28,8 @@ const matchSchema = new Schema(
   },
   { timestamps: true },
 );
+// Live sync (GET /api/team/pulse) reads the team's most recently changed match.
+matchSchema.index({ teamId: 1, updatedAt: -1 });
 
 export type MatchAttrs = InferSchemaType<typeof matchSchema>;
 export type MatchDoc = HydratedDocument<MatchAttrs>;
