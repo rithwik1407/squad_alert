@@ -52,13 +52,47 @@ describe('calendar days', () => {
         { matchId: 'b', userId: 'u1', kills: 2, damage: 300, assists: 0, mvp: false },
       ],
       TZ,
+      Date.parse('2026-11-21T19:30:00Z'),
     );
     expect(days.map((d) => d.day)).toEqual(['2026-11-21', '2026-11-22']);
     expect(days[0].totals).toMatchObject({ matches: 1, kills: 8, placementPts: 10, killPts: 8, total: 18, wins: 1 });
     const d2 = days[1];
     expect(d2.matches[0].seriesKey).toBe(days[0].matches[0].seriesKey);
-    expect(d2.matches[1]).toMatchObject({ series: 'Solo', kills: null, total: 0, hasResult: false });
-    expect(d2.totals).toMatchObject({ matches: 2, withResult: 1, total: 6, bestPlacement: 4 });
+    expect(d2.matches[1]).toMatchObject({ series: 'Solo', kills: null, total: 0, hasResult: false, completed: false });
+    // The upcoming match is listed but doesn't count as played.
+    expect(d2.totals).toMatchObject({ matches: 1, upcoming: 1, withResult: 1, total: 6, bestPlacement: 4 });
     expect(d2.players).toEqual([{ userId: 'u1', matches: 1, kills: 2, damage: 300, assists: 0, mvps: 0 }]);
+  });
+});
+
+describe('completed-only stats', () => {
+  const now = Date.parse('2026-11-27T15:00:00Z');
+  it('leaves upcoming and running matches out of points and player numbers', () => {
+    const days = buildCalendarDays(
+      [
+        { id: 'done', title: 'M1', tournamentName: 'EG', type: 'scrim', map: 'Erangel', startAt: new Date('2026-11-27T13:00:00Z'), status: 'done', placement: 2 },
+        // Running, nothing saved yet.
+        { id: 'live', title: 'M2', tournamentName: 'EG', type: 'scrim', map: 'Erangel', startAt: new Date('2026-11-27T14:30:00Z'), status: 'live', placement: null },
+        // Later tonight. A stray placement must not count before it is played.
+        { id: 'later', title: 'M3', tournamentName: 'EG', type: 'scrim', map: 'Erangel', startAt: new Date('2026-11-27T16:00:00Z'), status: 'scheduled', placement: 1 },
+      ],
+      [{ matchId: 'done', userId: 'u1', kills: 4, damage: 500, assists: 1, mvp: true }],
+      TZ,
+      now,
+    );
+    expect(days).toHaveLength(1);
+    expect(days[0].totals).toMatchObject({ matches: 1, upcoming: 2, total: 10, wins: 0 });
+    expect(days[0].matches.find((m) => m.id === 'later')).toMatchObject({ completed: false, placement: null, total: 0 });
+    expect(days[0].players).toEqual([{ userId: 'u1', matches: 1, kills: 4, damage: 500, assists: 1, mvps: 1 }]);
+  });
+
+  it('counts a started match once its result is saved, even before it is marked done', () => {
+    const days = buildCalendarDays(
+      [{ id: 'x', title: 'M1', tournamentName: 'EG', type: 'scrim', map: 'Erangel', startAt: new Date('2026-11-27T13:00:00Z'), status: 'live', placement: 3 }],
+      [],
+      TZ,
+      now,
+    );
+    expect(days[0].totals).toMatchObject({ matches: 1, upcoming: 0, total: 5 });
   });
 });

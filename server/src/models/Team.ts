@@ -15,6 +15,8 @@ const teamSchema = new Schema(
     joinCode: { type: String, required: true, unique: true, uppercase: true },
     /** Default drop spot per map, e.g. { Erangel: 'Quarry' }. */
     drops: { type: Map, of: String, default: {} },
+    /** Bumped after any change to the team's matches, stats or squads. Apps poll it to refresh live. */
+    liveRevAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

@@ -97,13 +97,15 @@ export default function CalendarPage() {
 
   const monthTotals = useMemo(() => {
     const all = (data?.days ?? []).flatMap((d) => d.matches);
-    return { days: data?.days.length ?? 0, matches: all.length, points: all.reduce((a, m) => a + m.total, 0), wins: all.filter((m) => m.placement === 1).length };
+    // Only finished matches count; the rest of this month's matches show as upcoming.
+    const played = all.filter((m) => m.completed);
+    return { played: played.length, upcoming: all.length - played.length, points: played.reduce((a, m) => a + m.total, 0), wins: played.filter((m) => m.placement === 1).length };
   }, [data]);
   const legend = useMemo(() => groupBySeries((data?.days ?? []).flatMap((d) => d.matches)).sort((a, b) => b.total - a.total), [data]);
 
   return (
     <div>
-      <PageHeader eyebrow="Match history" title="Calendar">Every day we played, with the scrims and tournaments on it. Tap a day for its matches and points table.</PageHeader>
+      <PageHeader eyebrow="Matches this month" title="Calendar">Every match this month, played and coming up. Points and player numbers only count once a match is finished. Tap a day for its matches and points table.</PageHeader>
 
       {q.isLoading || !data || !month ? (
         <div className="grid gap-4 lg:grid-cols-[250px_minmax(0,1fr)]"><Skeleton className="h-72" /><Skeleton className="h-[520px]" /></div>
@@ -115,8 +117,8 @@ export default function CalendarPage() {
               <div>
                 <p className="hud-label mb-3">This month</p>
                 <dl className="grid grid-cols-4 gap-2 lg:grid-cols-2">
-                  <MiniStat label="Days" value={monthTotals.days} />
-                  <MiniStat label="Matches" value={monthTotals.matches} />
+                  <MiniStat label="Played" value={monthTotals.played} />
+                  <MiniStat label="Upcoming" value={monthTotals.upcoming} />
                   <MiniStat label="Points" value={monthTotals.points} accent />
                   <MiniStat label="Wins" value={monthTotals.wins} gold={monthTotals.wins > 0} />
                 </dl>
@@ -221,31 +223,36 @@ function MonthGrid({ month, today, byDay, selected, filter, onPick }: {
           const groups = groupBySeries(shown);
           const active = shown.length > 0;
           const total = shown.reduce((a, m) => a + m.total, 0);
+          const anyPlayed = shown.some((m) => m.completed);
+          const allUpcoming = active && !anyPlayed;
           const isSel = key === selected;
           const isToday = key === today;
           return (
             <motion.button key={key} disabled={!active} onClick={() => onPick(key)} aria-pressed={isSel}
               variants={{ initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 } }}
               whileHover={active ? { y: -2 } : undefined} whileTap={active ? { scale: 0.96 } : undefined}
-              aria-label={`${dayLabel(key)}${active ? `, ${groups.map((g) => g.name).join(', ')}, ${shown.length} ${shown.length === 1 ? 'match' : 'matches'}, ${pts(total)}` : ', no matches'}`}
+              aria-label={`${dayLabel(key)}${active ? `, ${groups.map((g) => g.name).join(', ')}, ${shown.length} ${shown.length === 1 ? 'match' : 'matches'}${anyPlayed ? `, ${pts(total)}` : ', upcoming'}` : ', no matches'}`}
               className={cx(
                 'group relative flex min-h-[64px] flex-col overflow-hidden rounded-md border text-left sm:min-h-[96px] lg:min-h-[108px]',
                 active ? 'border-white/10 bg-ink-800/80 hover:border-ember-400/50' : 'cursor-default border-white/[0.04] bg-white/[0.015]',
+                allUpcoming && '!border-dashed',
                 isSel && '!border-ember-400 shadow-glow',
               )}>
               {/* Header strip: date number + day points */}
               <span className={cx('flex items-center justify-between px-1 py-0.5 sm:px-1.5', active ? 'bg-white/[0.06]' : '', isSel && '!bg-ember-500/25')}>
                 <span className={cx('grid h-5 min-w-5 place-items-center rounded-[3px] px-0.5 font-mono text-[11px] font-bold leading-none sm:text-xs',
                   isToday ? 'bg-ember-500 text-ink-950' : active ? 'text-white' : 'text-zinc-600')}>{Number(key.slice(8))}</span>
-                {active && <span className="hidden font-mono text-[10px] font-bold text-ember-300 sm:inline">{total}<span className="text-zinc-500">p</span></span>}
+                {anyPlayed && <span className="hidden font-mono text-[10px] font-bold text-ember-300 sm:inline">{total}<span className="text-zinc-500">p</span></span>}
+                {allUpcoming && <span className="hidden text-[9px] font-bold uppercase tracking-wider text-zinc-400 sm:inline">Soon</span>}
               </span>
               {active && (
                 <span className="flex flex-1 flex-col gap-0.5 p-0.5 sm:gap-1 sm:p-1">
                   {groups.slice(0, 3).map((g, gi) => {
                     const c = seriesColor(g.key, g.type);
+                    const later = g.matches.every((m) => !m.completed);
                     return (
-                      <span key={g.key} className={cx('flex items-center gap-1 truncate rounded-[3px] border-l-2 px-0.5 py-px text-[8px] font-bold leading-tight sm:px-1 sm:py-0.5 sm:text-[10px] sm:font-semibold', gi > 1 && 'hidden sm:flex')}
-                        style={{ background: `${c}26`, borderColor: c, color: c }}>
+                      <span key={g.key} className={cx('flex items-center gap-1 truncate rounded-[3px] border-l-2 px-0.5 py-px text-[8px] font-bold leading-tight sm:px-1 sm:py-0.5 sm:text-[10px] sm:font-semibold', gi > 1 && 'hidden sm:flex', later && 'border-dashed opacity-70')}
+                        style={{ background: later ? 'transparent' : `${c}26`, borderColor: c, color: c }}>
                         <span className="truncate sm:hidden">{abbrev(g.name)}</span>
                         <span className="hidden truncate text-zinc-100 sm:inline">{g.name}</span>
                         {g.matches.length > 1 && <span className="ml-auto hidden shrink-0 font-mono text-[9px] opacity-80 md:inline">×{g.matches.length}</span>}
@@ -254,7 +261,7 @@ function MonthGrid({ month, today, byDay, selected, filter, onPick }: {
                   })}
                   {groups.length > 3 && <span className="hidden px-1 text-[10px] text-zinc-500 sm:block">+{groups.length - 3} more</span>}
                   {groups.length > 2 && <span className="px-0.5 text-[8px] text-zinc-500 sm:hidden">+{groups.length - 2}</span>}
-                  <span className="mt-auto px-0.5 font-mono text-[9px] font-bold text-ember-300 sm:hidden">{total}</span>
+                  {anyPlayed && <span className="mt-auto px-0.5 font-mono text-[9px] font-bold text-ember-300 sm:hidden">{total}</span>}
                 </span>
               )}
             </motion.button>
@@ -316,19 +323,22 @@ function TotalsChips({ t }: { t: CalendarTotals }) {
 
 function DayPanel({ day, data }: { day: CalendarDay; data: CalendarMonth }) {
   const groups = groupBySeries(day.matches);
+  // The points table only has finished matches; the others are listed above as upcoming / live.
+  const playedGroups = groupBySeries(day.matches.filter((m) => m.completed));
   const players = new Map(data.players.map((p) => [p.id, p]));
   const missing = day.totals.matches - day.totals.withResult;
+  const upcoming = day.totals.upcoming ?? 0;
   return (
     <div className="space-y-6">
       <div>
-        <p className="eyebrow">{day.totals.matches} {day.totals.matches === 1 ? 'match' : 'matches'} · {groups.length} {groups.length === 1 ? 'series' : 'series'}</p>
+        <p className="eyebrow">{day.totals.matches} played{upcoming ? ` · ${upcoming} upcoming` : ''} · {groups.length} series</p>
         <h2 className="mt-1 text-3xl font-bold uppercase text-white">{dayLabel(day.day)}</h2>
         <div className="mt-3"><TotalsChips t={day.totals} /></div>
       </div>
 
       {/* What we played: one block per scrim / tournament, each match a row */}
       <section>
-        <p className="hud-label mb-2">Matches played</p>
+        <p className="hud-label mb-2">{upcoming && !day.totals.matches ? 'Matches' : 'Matches played'}</p>
         <motion.div className="space-y-3" initial="initial" animate="animate" variants={{ initial: {}, animate: { transition: { staggerChildren: 0.05 } } }}>
           {groups.map((g) => {
             const c = seriesColor(g.key, g.type);
@@ -349,10 +359,18 @@ function DayPanel({ day, data }: { day: CalendarDay; data: CalendarMonth }) {
                         <span className="w-6 shrink-0 font-mono text-xs text-zinc-500">M{i + 1}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-zinc-100">{m.title}</span>
-                          <span className="block truncate text-[11px] text-zinc-500">{timeIST(m.startAt)} · {mapLabel(m.map)}{!m.hasResult && ' · no result yet'}</span>
+                          <span className="block truncate text-[11px] text-zinc-500">{timeIST(m.startAt)} · {mapLabel(m.map)}{m.completed && !m.hasResult && ' · no result yet'}</span>
                         </span>
-                        <span className={cx('cut-sm shrink-0 px-1.5 py-0.5 font-mono text-xs font-bold', m.placement === 1 ? 'bg-amber-400 text-ink-950' : 'bg-white/[0.06] text-zinc-200')}>{placeLabel(m.placement)}</span>
-                        <span className="w-9 shrink-0 text-right font-mono text-sm font-bold text-white">{m.total}</span>
+                        {m.completed ? (
+                          <>
+                            <span className={cx('cut-sm shrink-0 px-1.5 py-0.5 font-mono text-xs font-bold', m.placement === 1 ? 'bg-amber-400 text-ink-950' : 'bg-white/[0.06] text-zinc-200')}>{placeLabel(m.placement)}</span>
+                            <span className="w-9 shrink-0 text-right font-mono text-sm font-bold text-white">{m.total}</span>
+                          </>
+                        ) : (
+                          <span className={cx('chip shrink-0 !text-[10px]', m.status === 'live' ? 'bg-red-500/15 text-red-300' : 'bg-white/[0.06] text-zinc-400')}>
+                            {m.status === 'live' || new Date(m.startAt).getTime() <= Date.now() ? 'Live' : 'Upcoming'}
+                          </span>
+                        )}
                       </Link>
                     </li>
                   ))}
@@ -363,6 +381,10 @@ function DayPanel({ day, data }: { day: CalendarDay; data: CalendarMonth }) {
         </motion.div>
       </section>
 
+      {playedGroups.length === 0 ? (
+        <p className="flex items-start gap-1.5 text-xs text-zinc-500"><Info className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+          The points table fills in as matches finish (Finish match, or upload the results screenshot).</p>
+      ) : (
       <section>
         <p className="hud-label mb-2">Points table</p>
         <table className="w-full table-fixed text-sm">
@@ -376,7 +398,7 @@ function DayPanel({ day, data }: { day: CalendarDay; data: CalendarMonth }) {
               <th className="py-2 pl-1 text-right font-bold">Total</th>
             </tr>
           </thead>
-          {groups.map((g) => {
+          {playedGroups.map((g) => {
             const c = seriesColor(g.key, g.type);
             return (
               <tbody key={g.key}>
@@ -410,7 +432,12 @@ function DayPanel({ day, data }: { day: CalendarDay; data: CalendarMonth }) {
           <p className="mt-2 flex items-start gap-1.5 text-[11px] text-zinc-500"><Info className="mt-px h-3 w-3 shrink-0" aria-hidden />
             {missing} {missing === 1 ? 'match has' : 'matches have'} no placement or scorecard yet, so {missing === 1 ? 'it counts' : 'they count'} 0 for now.</p>
         )}
+        {upcoming > 0 && (
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-zinc-500"><Info className="mt-px h-3 w-3 shrink-0" aria-hidden />
+            {upcoming} more {upcoming === 1 ? 'match' : 'matches'} this day {upcoming === 1 ? 'adds' : 'add'} to the table once finished.</p>
+        )}
       </section>
+      )}
 
       {day.players.length > 0 && (
         <section>
@@ -479,8 +506,12 @@ function SeriesClusters({ data, onPickDay }: { data: CalendarMonth; onPickDay: (
                                 <Link to={`/matches/${m.id}`} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/[0.04]">
                                   <span className="w-16 shrink-0 text-xs text-zinc-500">{timeIST(m.startAt)}</span>
                                   <span className="min-w-0 flex-1 truncate text-zinc-100">{m.title}<span className="text-zinc-500"> · {mapLabel(m.map)}</span></span>
-                                  <span className="font-mono text-xs text-zinc-400">{placeLabel(m.placement)}</span>
-                                  <span className="w-12 text-right font-mono text-xs font-bold text-white">{m.total}</span>
+                                  {m.completed ? (
+                                    <>
+                                      <span className="font-mono text-xs text-zinc-400">{placeLabel(m.placement)}</span>
+                                      <span className="w-12 text-right font-mono text-xs font-bold text-white">{m.total}</span>
+                                    </>
+                                  ) : <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Upcoming</span>}
                                 </Link>
                               </li>
                             ))}

@@ -1,6 +1,7 @@
 import { matchPoints } from './points.js';
 import { dayKey, dayRange } from './dailySummary.js';
 import { seriesKey } from './seriesName.js';
+import { isCompleted } from './matchGroups.js';
 
 /**
  * Match calendar and day-by-day points tables: pure helpers (no DB) so they are easy to test.
@@ -58,11 +59,16 @@ export interface CalendarMatch {
   total: number;
   /** True once a placement or a scorecard is saved. */
   hasResult: boolean;
+  /** Finished (see isCompleted). Only completed matches count toward points, totals and player numbers. */
+  completed: boolean;
   stats: { userId: string; kills: number; damage: number; assists: number; mvp: boolean }[];
 }
 
 export interface DayTotals {
+  /** Completed matches. */
   matches: number;
+  /** Matches this day that haven't finished yet (upcoming or still running). */
+  upcoming: number;
   withResult: number;
   kills: number;
   placementPts: number;
@@ -89,10 +95,13 @@ export interface CalendarDay {
   players: CalendarPlayerDay[];
 }
 
-export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputStat[]): CalendarMatch {
+export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputStat[], now = Date.now()): CalendarMatch {
   const series = (m.tournamentName ?? '').trim() || m.title.trim();
-  const kills = stats.length ? stats.reduce((a, s) => a + (s.kills || 0), 0) : null;
-  const placement = m.placement ?? null;
+  const completed = isCompleted(m, stats.length > 0, now);
+  // Nothing counts until the match is finished.
+  const counted = completed ? stats : [];
+  const kills = counted.length ? counted.reduce((a, s) => a + (s.kills || 0), 0) : null;
+  const placement = completed ? m.placement ?? null : null;
   const { placementPts, killPts, total } = matchPoints(placement, kills);
   return {
     id: m.id,
@@ -109,14 +118,17 @@ export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputSt
     killPts,
     total,
     hasResult: placement != null || kills != null,
-    stats: stats.map((s) => ({ userId: s.userId, kills: s.kills || 0, damage: s.damage || 0, assists: s.assists || 0, mvp: Boolean(s.mvp) })),
+    completed,
+    stats: counted.map((s) => ({ userId: s.userId, kills: s.kills || 0, damage: s.damage || 0, assists: s.assists || 0, mvp: Boolean(s.mvp) })),
   };
 }
 
-export function sumTotals(matches: CalendarMatch[]): DayTotals {
+export function sumTotals(all: CalendarMatch[]): DayTotals {
+  const matches = all.filter((m) => m.completed);
   const placed = matches.map((m) => m.placement).filter((p): p is number => p != null && p > 0);
   return {
     matches: matches.length,
+    upcoming: all.length - matches.length,
     withResult: matches.filter((m) => m.hasResult).length,
     kills: matches.reduce((a, m) => a + (m.kills ?? 0), 0),
     placementPts: matches.reduce((a, m) => a + m.placementPts, 0),
@@ -130,6 +142,7 @@ export function sumTotals(matches: CalendarMatch[]): DayTotals {
 function playerTotals(matches: CalendarMatch[]): CalendarPlayerDay[] {
   const by = new Map<string, CalendarPlayerDay>();
   for (const m of matches) {
+    if (!m.completed) continue;
     for (const s of m.stats) {
       const p = by.get(s.userId) ?? { userId: s.userId, matches: 0, kills: 0, damage: 0, assists: 0, mvps: 0 };
       p.matches += 1;
@@ -144,13 +157,13 @@ function playerTotals(matches: CalendarMatch[]): CalendarPlayerDay[] {
 }
 
 /** Group the month's matches by day (in `tz`), oldest first, each with its points table. */
-export function buildCalendarDays(matches: CalendarInputMatch[], stats: CalendarInputStat[], tz: string): CalendarDay[] {
+export function buildCalendarDays(matches: CalendarInputMatch[], stats: CalendarInputStat[], tz: string, now = Date.now()): CalendarDay[] {
   const statsBy = new Map<string, CalendarInputStat[]>();
   for (const s of stats) statsBy.set(s.matchId, [...(statsBy.get(s.matchId) ?? []), s]);
   const days = new Map<string, CalendarMatch[]>();
   for (const m of [...matches].sort((a, b) => a.startAt.getTime() - b.startAt.getTime())) {
     const k = dayKey(m.startAt, tz);
-    days.set(k, [...(days.get(k) ?? []), buildCalendarMatch(m, statsBy.get(m.id) ?? [])]);
+    days.set(k, [...(days.get(k) ?? []), buildCalendarMatch(m, statsBy.get(m.id) ?? [], now)]);
   }
   return [...days.entries()]
     .sort(([a], [b]) => a.localeCompare(b))

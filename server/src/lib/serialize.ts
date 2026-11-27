@@ -39,6 +39,7 @@ export function serializeMatch(
     _id: Id; teamId: Id; title: string; type: string; map: string; drop?: string | null; startAt: Date;
     notifyOffsetMin: number; roomId?: string | null; roomPassword?: string | null; slot?: string | null; status: string;
     notifiedAt?: Date | null; captainAlertedAt?: Date | null; tournamentName?: string | null; placement?: number | null;
+    batchId?: string | null;
   },
   squad?: { selectedIds: Id[]; benchedId?: Id | null; confirmed: boolean; updatedAt?: Date } | null,
   logs?: LogSummary,
@@ -62,6 +63,8 @@ export function serializeMatch(
     locked: Boolean(m.notifiedAt),
     tournamentName: m.tournamentName ?? '',
     placement: m.placement ?? null,
+    /** Matches added together in one bulk add share this id (and their lobby slot). */
+    batchId: m.batchId ?? null,
     squad: squad
       ? {
           selectedIds: squad.selectedIds.map(String),
