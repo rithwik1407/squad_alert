@@ -7,7 +7,7 @@ import {
   MessageSquare, MessageSquarePlus, Sparkles, Square, Swords, Trash2, Trophy, UserCheck, Users, X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Avatar, cx, Skeleton } from '@/components/ui';
+import { cx, Skeleton } from '@/components/ui';
 import { useDialog } from '@/components/Modal';
 import { useToast } from '@/components/Toast';
 import { BlockGrid, Panel } from '@/components/ai/Blocks';
@@ -86,7 +86,7 @@ function Answer({ m }: { m: AiMsg }) {
 
 function ToolSteps({ steps }: { steps: ToolStep[] }) {
   return (
-    <ul className="mb-2 space-y-1" aria-label="What the AI checked">
+    <ul className="mb-2.5 space-y-1 border-l border-white/10 pl-3" aria-label="What the AI checked">
       <AnimatePresence initial={false}>
         {steps.map((s) => (
           <motion.li key={s.id} initial={{ opacity: 0, x: -8, height: 0 }} animate={{ opacity: 1, x: 0, height: 'auto' }} transition={spring}
@@ -95,7 +95,6 @@ function ToolSteps({ steps }: { steps: ToolStep[] }) {
               {s.status === 'start' ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : s.status === 'done' ? <Check className="h-2.5 w-2.5" aria-hidden /> : <CircleAlert className="h-2.5 w-2.5" aria-hidden />}
             </span>
             <span className={s.status === 'start' ? 'text-zinc-200' : 'text-zinc-500'}>{s.label}{s.status === 'start' ? '…' : ''}</span>
-            {s.ms != null && <span className="font-mono text-[10px] text-zinc-600">{s.ms}ms</span>}
           </motion.li>
         ))}
       </AnimatePresence>
@@ -103,14 +102,25 @@ function ToolSteps({ steps }: { steps: ToolStep[] }) {
   );
 }
 
-function EngineChip({ engine, label, model }: { engine?: string; label?: string; model?: string }) {
+/** One quiet status line under the name: online, or the built-in fallback. */
+function EngineStatus({ engine, label, model, busy }: { engine?: string; label?: string; model?: string; busy: boolean }) {
   const offline = engine === 'offline';
-  const text = !engine ? '…' : offline ? 'Built-in analyst' : `${label ?? engine} · live`;
+  const text = busy ? 'Thinking…' : !engine ? 'Connecting…' : offline ? 'Basic mode' : 'Online';
   return (
-    <span title={model ? `Answered by ${label ?? engine} · ${model}` : undefined}
-      className={cx('chip max-w-[11rem] ring-1', offline ? 'bg-zinc-500/10 text-zinc-300 ring-zinc-400/20' : 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/25')}>
-      <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', offline ? 'bg-zinc-400' : 'animate-pulse bg-emerald-400')} />
-      <span className="truncate">{text}</span>
+    <span title={model ? `${label ?? engine} · ${model}` : undefined} className="flex items-center gap-1.5 text-xs text-zinc-400">
+      <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', busy ? 'animate-pulse bg-ember-400' : offline || !engine ? 'bg-zinc-500' : 'bg-emerald-400')} />
+      {text}
+    </span>
+  );
+}
+
+/** The assistant's face: a small glowing orb with the sparkle. */
+function AiOrb({ size = 32, live }: { size?: number; live?: boolean }) {
+  return (
+    <span className="relative grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-ember-300 via-ember-500 to-ember-700 text-ink-950 shadow-[0_0_18px_rgb(var(--ember-500)/.35)]"
+      style={{ width: size, height: size }} aria-hidden>
+      {live && <span className="absolute inset-0 animate-ping rounded-full bg-ember-400/30" />}
+      <Sparkles className="relative" style={{ width: size * 0.48, height: size * 0.48 }} strokeWidth={2.4} />
     </span>
   );
 }
@@ -341,22 +351,26 @@ export default function Assistant() {
   );
 
   /* ─────────── Chat ─────────── */
+  const firstName = (user?.ign ?? '').replace(/^RARE丨/i, '');
   const empty = (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
-      <p className="font-display text-2xl font-bold uppercase leading-tight text-white">Your AI team manager</p>
-      <p className="mt-1 text-sm leading-relaxed text-zinc-400">Chat normally, or ask about {team?.name ?? 'your team'}: data questions get charted.{isCaptain ? ' Actions wait for your approval.' : ' You can also check in or message the captain.'}</p>
-      <div className="mt-4 grid gap-2">
-        {suggestions.isLoading ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[58px]" />) : sugg.map((p, i) => {
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring} className="flex min-h-full flex-col justify-center py-2">
+      <div className="flex flex-col items-center text-center">
+        <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 18 }}>
+          <AiOrb size={52} />
+        </motion.div>
+        <p className="mt-3 text-xl font-semibold text-white">Hi{firstName ? ` ${firstName}` : ''}, how can I help?</p>
+        <p className="mt-1 max-w-xs text-sm text-zinc-400">Ask anything about {team?.name ?? 'your team'}. {isCaptain ? 'Actions wait for your OK.' : 'Stats come with charts.'}</p>
+      </div>
+      <p className="mb-2 mt-6 text-xs font-medium text-zinc-500">Try asking</p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+        {suggestions.isLoading ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded-xl" />) : sugg.map((p, i) => {
           const I = CAT_ICON[p.cat] ?? Sparkles;
           return (
-            <motion.button key={p.id} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ ...spring, delay: 0.04 * i }}
-              whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }} onClick={() => send(p.q)}
-              className="group flex items-center gap-3 rounded-md border border-white/[0.07] bg-white/[0.02] px-3 py-2.5 text-left hover:border-ember-400/40 hover:bg-ember-500/[0.06]">
-              <I className="h-4 w-4 shrink-0 text-ember-400" aria-hidden />
-              <span className="min-w-0 flex-1">
-                <span className="block font-display text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">{p.cat}</span>
-                <span className="block text-sm text-zinc-200 group-hover:text-white">{p.q}</span>
-              </span>
+            <motion.button key={p.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.05 * i }}
+              whileTap={{ scale: 0.98 }} onClick={() => send(p.q)}
+              className="group flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-3 text-left hover:border-ember-400/40 hover:bg-ember-500/[0.06]">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ember-500/10 text-ember-400"><I className="h-4 w-4" aria-hidden /></span>
+              <span className="min-w-0 flex-1 text-sm text-zinc-200 group-hover:text-white">{p.q}</span>
             </motion.button>
           );
         })}
@@ -366,14 +380,13 @@ export default function Assistant() {
 
   const messages = msgs.map((m) => m.role === 'user' ? (
     <motion.div key={m.id} id={m.turnId ? `turn-${m.turnId}` : undefined} initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={spring}
-      className="flex scroll-mt-3 justify-end gap-2">
-      <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg rounded-tr-sm border border-ember-400/25 bg-ember-500/[0.12] px-3 py-2 text-[15px] leading-relaxed text-white sm:text-sm">{m.text}</p>
-      {user && <span className="hidden sm:block"><Avatar name={user.ign} src={user.avatar} size={28} /></span>}
+      className="flex scroll-mt-3 justify-end">
+      <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-gradient-to-b from-ember-400 to-ember-500 px-3.5 py-2 text-[15px] leading-relaxed text-ink-950 sm:text-sm">{m.text}</p>
     </motion.div>
   ) : (
     <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring} className="flex gap-2.5">
-      <span className="mt-0.5 hidden h-7 w-7 shrink-0 place-items-center bg-gradient-to-b from-ember-400 to-ember-600 text-ink-950 cut-sm sm:grid"><Sparkles className="h-3.5 w-3.5" aria-hidden /></span>
-      <div className="min-w-0 flex-1 text-[15px] leading-relaxed sm:text-sm">
+      <span className="mt-1"><AiOrb size={26} live={!m.done} /></span>
+      <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-white/[0.06] bg-white/[0.035] px-3.5 py-2.5 text-[15px] leading-relaxed sm:text-sm">
         {m.tools && m.tools.length > 0 && <ToolSteps steps={m.tools} />}
         {m.notice && <p className="mb-2 rounded border border-amber-400/20 bg-amber-400/[0.06] px-2 py-1 text-xs text-amber-200">{m.notice}</p>}
         {m.error ? <p className="text-sm text-red-300">{m.text}</p>
@@ -381,34 +394,35 @@ export default function Assistant() {
             : !m.done && !m.tools?.length ? <span className="inline-flex gap-1" aria-label="Thinking">{[0, 1, 2].map((i) => <motion.span key={i} className="h-1.5 w-1.5 rounded-full bg-ember-400" animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }} />)}</span> : null}
         {m.groupId && groups.some((g) => g.id === m.groupId) && (
           <motion.button initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} onClick={() => showVisuals(m.groupId!)}
-            className={cx('mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold', isDesktop && view === m.groupId ? 'border-ember-400/50 bg-ember-500/10 text-ember-200' : 'border-white/10 bg-white/[0.03] text-ember-300 hover:border-ember-400/40')}>
+            className={cx('mt-2.5 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold', isDesktop && view === m.groupId ? 'border-ember-400/50 bg-ember-500/10 text-ember-200' : 'border-white/10 bg-white/[0.03] text-ember-300 hover:border-ember-400/40')}>
             <LayoutDashboard className="h-3.5 w-3.5" aria-hidden />
             {isDesktop ? (view === m.groupId ? 'On the dashboard' : 'Show on dashboard') : `View visuals${groups.find((g) => g.id === m.groupId)?.blocks.length ? ` (${groups.find((g) => g.id === m.groupId)!.blocks.length})` : ''}`}
           </motion.button>
         )}
-        {m.done && m.label && m.engine !== 'offline' && <p className="mt-1.5 text-[10px] text-zinc-600">{m.label}{m.model ? ` · ${m.model}` : ''}</p>}
       </div>
     </motion.div>
   ));
 
   const chat = (
-    <div className={cx('glass gborder flex flex-col overflow-hidden p-0', frame ? 'h-full' : 'h-[calc(100dvh-27rem)] min-h-[340px] lg:sticky lg:top-6 lg:h-[calc(100dvh-3rem)]')}>
-      <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5 sm:px-4 sm:py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <BrainCircuit className="h-4 w-4 shrink-0 text-ember-400" aria-hidden />
-          <p className="truncate font-display text-base font-bold uppercase tracking-wider text-white"><span className="sm:hidden">Squad AI</span><span className="hidden sm:inline">Squad Intelligence</span></p>
+    <div className={cx('flex flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-ink-900/90 p-0 shadow-xl', frame ? 'h-full' : 'h-[calc(100dvh-27rem)] min-h-[340px] lg:sticky lg:top-6 lg:h-[calc(100dvh-3rem)]')}>
+      <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <AiOrb size={34} />
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold leading-tight text-white">Squad AI</p>
+            <EngineStatus engine={engine} label={engineLabel} model={ai.model} busy={busy} />
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          <EngineChip engine={engine} label={engineLabel} model={ai.model} />
-          <button onClick={openHistory} aria-label="History" title="History" className="rounded-md p-2 text-zinc-400 hover:bg-white/5 hover:text-white lg:hidden"><History className="h-4 w-4" /></button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button onClick={openHistory} aria-label="History" title="History" className="grid h-9 w-9 place-items-center rounded-full text-zinc-400 hover:bg-white/5 hover:text-white lg:hidden"><History className="h-[18px] w-[18px]" /></button>
           {msgs.length > 0 && (
-            <button onClick={() => aiStore.reset()} disabled={busy} aria-label="New chat" title="New chat" className="rounded-md p-2 text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-40"><MessageSquarePlus className="h-4 w-4" /></button>
+            <button onClick={() => aiStore.reset()} disabled={busy} aria-label="New chat" title="New chat" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/10 px-3 text-xs font-semibold text-zinc-200 hover:bg-white/5 hover:text-white disabled:opacity-40"><MessageSquarePlus className="h-4 w-4" aria-hidden />New</button>
           )}
         </div>
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div id="ai-scroll" ref={scroller} onScroll={onScroll} className="h-full space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4" aria-live="polite">
+        <div id="ai-scroll" ref={scroller} onScroll={onScroll} className="h-full space-y-4 overflow-y-auto overscroll-contain px-3 py-4 sm:px-4" data-lenis-prevent aria-live="polite">
           {!ai.loaded ? <div className="space-y-3"><Skeleton className="ml-auto h-10 w-2/3" /><Skeleton className="h-24" /></div>
             : ai.loadError && !msgs.length ? <p className="text-sm text-red-300">{ai.loadError} <button className="font-semibold text-ember-300" onClick={() => aiStore.init(true)}>Retry</button></p>
               : msgs.length === 0 ? empty : messages}
@@ -416,7 +430,7 @@ export default function Assistant() {
         <AnimatePresence>
           {!atBottom && msgs.length > 0 && (
             <motion.button initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} onClick={jump}
-              className="absolute bottom-3 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-ink-800/95 px-3 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur">
+              className="absolute bottom-3 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-ink-800 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
               <ArrowDown className="h-3.5 w-3.5" aria-hidden />{busy ? 'Jump to live answer' : 'Jump to latest'}
             </motion.button>
           )}
@@ -427,23 +441,23 @@ export default function Assistant() {
         {msgs.length > 0 && !busy && sugg.length > 0 && (
           <div className="no-scrollbar -mx-2.5 mb-2 flex gap-1.5 overflow-x-auto px-2.5 sm:-mx-3 sm:px-3">
             {sugg.map((p) => (
-              <button key={p.id} type="button" onClick={() => send(p.q)} className="shrink-0 whitespace-nowrap rounded-full border border-white/10 px-3 py-1.5 text-xs text-zinc-300 hover:border-ember-400/40 hover:text-white">{p.q}</button>
+              <button key={p.id} type="button" onClick={() => send(p.q)} className="shrink-0 whitespace-nowrap rounded-full bg-white/[0.05] px-3 py-1.5 text-xs text-zinc-300 ring-1 ring-white/10 hover:text-white hover:ring-ember-400/40">{p.q}</button>
             ))}
           </div>
         )}
-        <div className="flex items-end gap-2 rounded-md border border-white/10 bg-ink-900/80 p-1.5 focus-within:border-ember-400/60 focus-within:ring-2 focus-within:ring-ember-400/20">
+        <div className="flex items-end gap-2 rounded-3xl border border-white/10 bg-ink-950/70 py-1 pl-2 pr-1 transition-colors focus-within:border-ember-400/60 focus-within:ring-2 focus-within:ring-ember-400/20">
           <label htmlFor="ai-q" className="sr-only">Ask Squad Intelligence</label>
           <textarea id="ai-q" ref={inputRef} rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKey} maxLength={1000} enterKeyHint="send"
-            placeholder={isCaptain ? 'Ask, or tell me what to do…' : 'Ask about your team…'}
+            placeholder="Message Squad AI…"
             className="max-h-36 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-base text-white placeholder:text-zinc-500 focus:outline-none sm:text-sm" />
           {busy ? (
-            <button type="button" onClick={() => aiStore.stop()} aria-label="Stop" className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-white/10 text-white hover:bg-white/15"><Square className="h-4 w-4" /></button>
+            <button type="button" onClick={() => aiStore.stop()} aria-label="Stop" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-white hover:bg-white/15"><Square className="h-4 w-4 fill-current" /></button>
           ) : (
             <motion.button type="submit" disabled={!input.trim()} aria-label="Send" whileTap={{ scale: 0.9 }}
-              className="grid h-10 w-10 shrink-0 place-items-center bg-gradient-to-b from-ember-400 to-ember-600 text-ink-950 cut-sm disabled:opacity-40"><ArrowUp className="h-5 w-5" /></motion.button>
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-b from-ember-400 to-ember-600 text-ink-950 transition-opacity disabled:opacity-30"><ArrowUp className="h-5 w-5" strokeWidth={2.6} /></motion.button>
           )}
         </div>
-        <p className="mt-1.5 hidden text-center text-[10px] text-zinc-600 sm:block">Keeps working even if you close the app. {isCaptain ? 'Nothing changes until you approve.' : 'Only the captain can approve team actions.'}</p>
+        <p className="mt-1.5 hidden text-center text-[11px] text-zinc-600 sm:block">Keeps answering if you leave. {isCaptain ? 'Nothing changes without your OK.' : 'Only the captain approves changes.'}</p>
       </form>
     </div>
   );
@@ -461,11 +475,11 @@ export default function Assistant() {
 
   /* Phone / tablet: Chat and Dashboard as tabs. */
   const tabs = (
-    <div role="tablist" aria-label="View" className="grid grid-cols-2 rounded-md border border-white/10 bg-ink-900/90 p-1 lg:hidden">
-      {([['chat', 'Chat', MessageSquare], ['board', 'Dashboard', LayoutDashboard]] as const).map(([k, label, I]) => (
+    <div role="tablist" aria-label="View" className="grid grid-cols-2 rounded-full border border-white/10 bg-ink-900/90 p-1 lg:hidden">
+      {([['chat', 'Chat', MessageSquare], ['board', 'Charts', LayoutDashboard]] as const).map(([k, label, I]) => (
         <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-          className={cx('relative flex items-center justify-center gap-2 rounded py-2 font-display text-sm font-bold uppercase tracking-wider', tab === k ? 'text-ink-950' : 'text-zinc-400')}>
-          {tab === k && <motion.span layoutId="ai-tab" className="absolute inset-0 rounded bg-ember-400" transition={spring} />}
+          className={cx('relative flex items-center justify-center gap-2 rounded-full py-1.5 text-sm font-semibold', tab === k ? 'text-ink-950' : 'text-zinc-400')}>
+          {tab === k && <motion.span layoutId="ai-tab" className="absolute inset-0 rounded-full bg-ember-400" transition={spring} />}
           <I className="relative h-4 w-4" aria-hidden /><span className="relative">{label}</span>
           {k === 'board' && ai.unseen > 0 && (
             <motion.span key={ai.unseen} initial={{ scale: 0.4 }} animate={{ scale: 1 }} transition={spring}

@@ -30,7 +30,7 @@ export function Markdown({ text }: { text: string }) {
     blocks.push(
       <L key={blocks.length} className={list.ordered ? 'ml-5 list-decimal space-y-1 marker:text-ember-400' : 'space-y-1'}>
         {list.items.map((it, i) => (
-          <li key={i} className={list!.ordered ? '' : 'relative pl-4 before:absolute before:left-0 before:top-[0.6em] before:h-1.5 before:w-1.5 before:bg-ember-400 before:[clip-path:polygon(40%_0,100%_0,60%_100%,0_100%)]'}>{inline(it)}</li>
+          <li key={i} className={list!.ordered ? '' : 'relative pl-4 before:absolute before:left-0.5 before:top-[0.62em] before:h-1.5 before:w-1.5 before:rounded-full before:bg-ember-400'}>{inline(it)}</li>
         ))}
       </L>,
     );
@@ -50,9 +50,9 @@ export function Markdown({ text }: { text: string }) {
     flush();
     if (!line.trim()) continue;
     const h = /^#{1,4}\s+(.*)$/.exec(line);
-    if (h) blocks.push(<p key={blocks.length} className="font-display text-base font-bold uppercase tracking-wide text-white">{inline(h[1])}</p>);
+    if (h) blocks.push(<p key={blocks.length} className="pt-1 text-[15px] font-semibold text-white">{inline(h[1])}</p>);
     else blocks.push(<p key={blocks.length}>{inline(line)}</p>);
   }
   flush();
-  return <div className="space-y-2.5 text-[14px] leading-relaxed text-zinc-300">{blocks.map((b, i) => <Fragment key={i}>{b}</Fragment>)}</div>;
+  return <div className="space-y-2.5 text-[15px] leading-relaxed text-zinc-200 sm:text-sm">{blocks.map((b, i) => <Fragment key={i}>{b}</Fragment>)}</div>;
 }
