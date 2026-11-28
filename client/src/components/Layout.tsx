@@ -10,6 +10,7 @@ import { useLiveSync } from '@/lib/useLiveSync';
 import { aiStore, useAi } from '@/lib/aiStore';
 import { Avatar, cx, Skeleton } from './ui';
 import { Logo } from './Logo';
+import { Crest } from './Crest';
 import { TeamChat } from './TeamChat';
 
 export function Layout() {
@@ -84,7 +85,7 @@ export function Layout() {
         {team && (
           <div className="glass mt-6 flex items-center gap-3 overflow-hidden p-3">
             <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-ember-500/20 blur-2xl" />
-            <img src="/icons/logo.png" alt="" width={40} height={40} className="relative rounded-md ring-1 ring-ember-400/30" />
+            <Crest size={44} className="relative" glow={false} />
             <div className="relative min-w-0">
               <p className="font-display text-[10px] font-bold uppercase tracking-[0.24em] text-ember-400">Team</p>
               <p className="truncate font-display text-lg font-bold uppercase leading-tight text-white">{team.name}</p>

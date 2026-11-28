@@ -1,6 +1,6 @@
 /* SquadSync service worker: web push (FCM data messages) + light offline shell. */
-const CACHE = 'squadsync-v5';
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/badge-96.png'];
+const CACHE = 'squadsync-v6';
+const SHELL = ['/', '/manifest.webmanifest', '/icons/rare-icon-192.png', '/icons/badge-96.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
@@ -46,7 +46,7 @@ self.addEventListener('push', (e) => {
   e.waitUntil(Promise.all([ring,
     self.registration.showNotification(title, {
       body: d.body || '',
-      icon: '/icons/icon-192.png',
+      icon: '/icons/rare-icon-192.png',
       badge: '/icons/badge-96.png',
       tag: d.tag || 'squadsync',
       renotify: true,
