@@ -3,6 +3,17 @@ import { config } from '../config.js';
 
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
 
+/** Room ID / password / slot in tap-to-copy monospace, so players can copy them straight from Telegram. */
+export function copyableRoom(html: string) {
+  return html.replace(/\b(Room(?: ID)?|Pass|Slot): ([^\s/]+?)(?=\.?(?:\s|$))/g, (all, k: string, v: string) => (v === '-' || v === 'TBA' ? all : `${k}: <code>${v}</code>`));
+}
+
+/** "Open BGMI" button: a page in the app that copies the room details and launches the game. */
+export function bgmiButton(matchId?: string) {
+  const url = new URL(matchId ? `/bgmi?match=${matchId}` : '/bgmi', config.clientUrl).toString();
+  return url.startsWith('https://') ? [{ text: '🎮 Open BGMI', url }] : [];
+}
+
 export class TelegramError extends Error {
   constructor(message: string, readonly status: number, readonly retryAfter?: number) { super(message); }
 }
@@ -54,7 +65,7 @@ export class TelegramProvider implements NotificationProvider {
     try {
       await sendWithRetry({
         chat_id: r.telegramChatId,
-        text: `🎮 <b>${esc(p.title)}</b>\n${esc(p.body)}`,
+        text: `🎮 <b>${esc(p.title)}</b>\n${copyableRoom(esc(p.body))}`,
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [[
@@ -62,7 +73,9 @@ export class TelegramProvider implements NotificationProvider {
             ...(p.tag.startsWith('match-') ? [{ text: "✅ I'm joining", callback_data: `join:${p.matchId}` }] : []),
             // Telegram rejects localhost URLs in buttons.
             ...(url.startsWith('https://') ? [{ text: 'Open match', url }] : []),
-          ]],
+          ],
+          // Room ID alerts and updates: jump straight into the game.
+          ...(p.tag.startsWith('match-') ? [bgmiButton(p.matchId)] : [])],
         },
       });
       return { ok: true };

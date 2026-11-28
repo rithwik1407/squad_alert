@@ -10,6 +10,7 @@ import type { ClassicInvite, Member } from '@/lib/types';
 import { Avatar, Button, Card, cx } from './ui';
 import { Modal, useDialog } from './Modal';
 import { ChallengeChip, ChallengePicker } from './Challenges';
+import { OpenBgmiButton } from './OpenBgmi';
 import { useToast } from './Toast';
 
 const DEFAULT_MSG = 'Can we play a classic match?';
@@ -152,6 +153,7 @@ function InviteRow({ invite: i, now }: { invite: ClassicInvite; now: number }) {
       </div>
       {i.expiresAt && <p className="mt-1.5 flex items-center gap-1 pl-[42px] text-[11px] text-ember-300/80"><Timer className="h-3 w-3" aria-hidden />{clearsIn(i.expiresAt, now)}</p>}
       {i.myResponse !== undefined && <AnswerButtons invite={i} className="mt-2.5" />}
+      {(i.sentByMe || i.myResponse === 'in') && <OpenBgmiButton className="mt-2.5 w-full" />}
     </motion.li>
   );
 }

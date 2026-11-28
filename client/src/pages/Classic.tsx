@@ -9,6 +9,7 @@ import { Avatar, Button, Card, Skeleton, cx } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { AnswerButtons, clearsIn, useDeleteInvite, useNow } from '@/components/ClassicInvite';
 import { BadgeIcon, ModeTag } from '@/components/Challenges';
+import { OpenBgmiButton } from '@/components/OpenBgmi';
 
 /** One classic-match invite: the message, my answer, and who is in / out / still to answer. */
 export default function Classic() {
@@ -50,6 +51,7 @@ export default function Classic() {
             </div>
           )}
           {i.myResponse !== undefined && <AnswerButtons invite={i} className="mt-5" />}
+          {(i.sentByMe || i.myResponse === 'in') && <OpenBgmiButton className="mt-3 w-full" />}
           {(i.sentByMe || i.expiresAt) && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-4">
               <p className="text-xs text-zinc-500">{clearsIn(i.expiresAt, now) ?? 'Only you can delete this invite.'}</p>

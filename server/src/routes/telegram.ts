@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ah } from '../middleware/handlers.js';
 import { User } from '../models/index.js';
 import { config } from '../config.js';
-import { telegramApi } from '../notifications/telegram.js';
+import { bgmiButton, telegramApi } from '../notifications/telegram.js';
 import { markJoining } from '../lib/availability.js';
 import { Match } from '../models/index.js';
 import { respondToInvite } from '../lib/invites.js';
@@ -56,7 +56,11 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
         await telegramApi('editMessageText', {
           chat_id: cb.message.chat.id, message_id: cb.message.message_id,
           text: `${base.split('\n\nYour answer:')[0]}\n\nYour answer: ${ci[2] === 'in' ? "I'm in ✅" : "I'm out ❌"}`,
-          reply_markup: cb.message.reply_markup,
+          // Keep I'm in / I'm out (to change the answer); once in, add Open BGMI.
+          reply_markup: { inline_keyboard: [
+            ...((cb.message.reply_markup?.inline_keyboard ?? []) as { url?: string }[][]).filter((row) => !row.some((b) => b.url?.includes('/bgmi'))),
+            ...(ci[2] === 'in' && bgmiButton().length ? [bgmiButton()] : []),
+          ] },
         }).catch(() => {});
       }
       return;

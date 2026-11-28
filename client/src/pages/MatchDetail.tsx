@@ -15,6 +15,7 @@ import { list } from '@/lib/motion';
 import type { GuestStat, Match, MatchReport, Member, ScorecardRow } from '@/lib/types';
 import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, StatusChip, cx } from '@/components/ui';
+import { OpenBgmiButton } from '@/components/OpenBgmi';
 import { MapArt } from '@/components/MapArt';
 import { FlipCountdown } from '@/components/FlipCountdown';
 import { NotifyChips } from '@/components/MatchCard';
@@ -125,6 +126,7 @@ function RoomBox({ m }: { m: Match }) {
           <Copy className="h-3.5 w-3.5 text-zinc-500" aria-hidden />
         </button>
       ))}
+      <OpenBgmiButton copy={m.roomId} className="w-full sm:w-auto" />
     </div>
   );
 }

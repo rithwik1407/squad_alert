@@ -21,6 +21,7 @@ const CalendarHub = lazy(() => import('./pages/CalendarHub'));
 const Classic = lazy(() => import('./pages/Classic'));
 const Assistant = lazy(() => import('./pages/Assistant'));
 const Challenges = lazy(() => import('./pages/Challenges'));
+const OpenBgmi = lazy(() => import('./pages/OpenBgmi'));
 
 function Loading() {
   return (
@@ -90,6 +91,7 @@ export function App() {
           <Route path="classic/:id" element={<Classic />} />
           <Route path="ai" element={<Assistant />} />
           <Route path="challenges" element={<Challenges />} />
+          <Route path="bgmi" element={<OpenBgmi />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
