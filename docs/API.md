@@ -83,9 +83,9 @@ Players only see full match details (room ID, squad) for matches where they are 
 | POST | `/matches/:id/send-now` | captain | | Requires a confirmed squad. Cancels the delayed job and sends now. 202 |
 | POST | `/matches/:id/resend-failed` | captain | | Retries everyone selected who has no `sent` log. 202 |
 | GET | `/matches/:id/notifications` | captain | | Delivery log for this match |
-| GET | `/matches/:id/report` | any | | `{ attendance[], stats[] }` |
+| GET | `/matches/:id/report` | any | | `{ attendance[], stats[], guests: [{ name, kills, damage, survivalMin, assists }], placement, screenshotAt }`. Guests are players on the results screenshot who aren't on the team: kept on this match only |
 | PUT | `/matches/:id/attendance` | captain | `{ entries: [{ userId, joined }] }` | |
-| PUT | `/matches/:id/stats` | captain | `{ entries: [{ userId, kills, damage, mvp }] }` | One MVP max |
+| PUT | `/matches/:id/stats` | captain | `{ entries: [{ userId, kills, damage, survivalMin, assists }], placement?, guests? }` | MVP worked out from the numbers. Only listed players played: confirmed-squad players left out are marked not joined, so their matches count doesn't go up |
 
 ## Scrim organizers
 
@@ -116,7 +116,7 @@ Log entry: `{ id, matchId, match, userId, user, kind: "squad"|"captain_alert", c
 | DELETE | `/me/fcm-token` | `{ token }` |
 | POST | `/me/telegram/link` | → `{ url: "https://t.me/<bot>?start=<one-time token>" }` |
 | DELETE | `/me/telegram` | unlink |
-| GET | `/me/stats` | `{ rows: [{ matchId, title, map, startAt, selected, joined, kills, damage, mvp }], totals }` |
+| GET | `/me/stats` | `{ rows: [{ matchId, title, map, startAt, selected, played, joined, kills, damage, mvp }], totals }` |
 | GET | `/me/stats/team` | Whole-team scorecards for the charts: `{ players: [{ id, name, ign, avatar }], matches: [{ matchId, title, map, type, startAt, placement, stats: [{ userId, kills, damage, survivalMin, assists, mvp, mvpScore }] }] }` |
 
 ## Squad AI

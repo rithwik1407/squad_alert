@@ -12,7 +12,7 @@ import { matchPoints, pointsLine } from '@/lib/points';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST } from '@/lib/time';
 import { list } from '@/lib/motion';
-import type { Match, MatchReport, Member, ScorecardRow } from '@/lib/types';
+import type { GuestStat, Match, MatchReport, Member, ScorecardRow } from '@/lib/types';
 import { mapLabel } from '@/lib/types';
 import { Avatar, Button, Card, LockBadge, PageHeader, Skeleton, StatusChip, cx } from '@/components/ui';
 import { MapArt } from '@/components/MapArt';
@@ -309,7 +309,8 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
   const q = useQuery({ queryKey: ['report', m.id], queryFn: () => api.report(m.id) });
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Record<string, Row>>({});
-  const [unmatched, setUnmatched] = useState<ScorecardRow[]>([]);
+  /** Players on the results who aren't on our team: kept on this match only (never in stats or the team). */
+  const [guests, setGuests] = useState<GuestStat[]>([]);
   const [busy, setBusy] = useState<'read' | 'save' | null>(null);
   const [dirty, setDirty] = useState(false);
   const [readErr, setReadErr] = useState<string | null>(null);
@@ -330,10 +331,14 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
     }
     setRows(next);
     setPlace(q.data.placement ? String(q.data.placement) : '');
+    setGuests(q.data.guests ?? []);
     setDirty(false);
   }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { score, mvp } = useMemo(() => mvpScores(rows), [rows]);
+  // Only players who played are scored: un-ticked rows aren't in the results.
+  const { score, mvp } = useMemo(() => mvpScores(Object.fromEntries(Object.entries(rows).filter(([, r]) => r.joined))), [rows]);
+  const setGuest = (i: number, patch: Partial<GuestStat>) => { setDirty(true); setGuests((g) => g.map((x, j) => (j === i ? { ...x, ...patch } : x))); };
+  const toGuest = (c: ScorecardRow): GuestStat => ({ name: c.name, kills: c.finishes, damage: c.damage, survivalMin: c.survivedMin, assists: c.assists });
   const set = (id: string, patch: Partial<Row>) => { setDirty(true); setRows((r) => ({ ...r, [id]: { ...(r[id] ?? { joined: true, kills: 0, damage: 0, survivalMin: 0, assists: 0 }), ...patch } })); };
   const fromCard = (c: ScorecardRow): Partial<Row> => ({ joined: true, kills: c.finishes, damage: c.damage, survivalMin: c.survivedMin, assists: c.assists });
 
@@ -351,12 +356,18 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
       if (!mounted.current) return;
       const matched = got.filter((r) => r.userId);
       for (const r of matched) set(r.userId!, fromCard(r));
+      // Squad players who aren't on the results screen didn't play this match: un-tick them (the admin can tick back).
+      if (matched.length) {
+        const onScreen = new Set(matched.map((r) => r.userId!));
+        setRows((rs) => Object.fromEntries(Object.entries(rs).map(([id, r]) => [id, onScreen.has(id) ? r : { ...r, joined: false }])));
+      }
       if (placement) setPlace(String(placement));
       setNoPlace(!placement);
       setDirty(false);
-      setUnmatched(got.filter((r) => !r.userId));
-      const kills = matched.reduce((a, r) => a + r.finishes, 0);
-      toast.success(`Read ${got.length} players and saved ${matched.length}${matched.length < got.length ? `. Pick who the other ${got.length - matched.length} are` : ''}. `
+      const outside = got.filter((r) => !r.userId);
+      setGuests(outside.map(toGuest));
+      const kills = got.reduce((a, r) => a + r.finishes, 0);
+      toast.success(`Read ${got.length} players and saved ${matched.length}${outside.length ? `. ${outside.length} not on the team ${outside.length === 1 ? 'is' : 'are'} kept on this match only` : ''}. `
         + (placement ? `Points ${pointsLine(placement, kills)}. ` : 'No position on the screenshot: type it in. ')
         + 'Fix anything wrong, then Save.');
     } catch (e) {
@@ -401,9 +412,11 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
       const entries = Object.entries(rows);
       await api.saveAttendance(m.id, entries.map(([userId, r]) => ({ userId, joined: r.joined })));
       const p = Number(place);
-      const res = await api.saveStats(m.id, entries.map(([userId, r]) => ({
+      // Only players who played go into the results. Anyone un-ticked or removed didn't play that match,
+      // so their matches-played count doesn't go up (the server marks the rest of the squad as not played).
+      const res = await api.saveStats(m.id, entries.filter(([, r]) => r.joined).map(([userId, r]) => ({
         userId, kills: r.kills, damage: r.damage, survivalMin: r.survivalMin, assists: r.assists,
-      })), p >= 1 && p <= 25 ? Math.round(p) : null);
+      })), p >= 1 && p <= 25 ? Math.round(p) : null, guests.map((g) => ({ ...g, name: g.name.trim().slice(0, 40) || 'Guest' })));
       toast.success(res.mvpUserId ? `Saved. MVP: ${byId.get(res.mvpUserId)?.ign ?? 'player'}` : 'Saved');
       qc.invalidateQueries({ queryKey: ['report', m.id] });
       qc.invalidateQueries({ queryKey: ['match', m.id] });
@@ -414,7 +427,7 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
 
   const ids = Object.keys(rows);
   const placeNum = Number(place) >= 1 && Number(place) <= 25 ? Math.round(Number(place)) : null;
-  const teamKills = ids.reduce((a, id) => a + (rows[id].joined ? rows[id].kills : 0), 0);
+  const teamKills = ids.reduce((a, id) => a + (rows[id].joined ? rows[id].kills : 0), 0) + guests.reduce((a, g) => a + g.kills, 0);
   const addable = members.filter((p) => !rows[p.id]);
   const num = (v: string) => Math.max(0, Number(v) || 0);
 
@@ -465,24 +478,28 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
         <p role="status" className="mb-3 rounded-xl border border-amber-400/30 bg-amber-400/5 p-2.5 text-xs text-amber-200">
           The screenshot didn't show the squad's position. Type it in above and Save so the points table gets the placement points.</p>
       )}
-      <p className="mb-3 text-xs text-zinc-400">Upload the BGMI results screen and the numbers and position fill in automatically. Points: placement (#1 10, #2 6, #3 5, #4 4, #5 3, #6 2, #7-8 1) plus 1 per kill. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
+      <p className="mb-3 text-xs text-zinc-400">Only ticked players count as played. Un-tick or remove anyone who didn't play: their matches count won't go up. Upload the BGMI results screen and the numbers and position fill in automatically. Points: placement (#1 10, #2 6, #3 5, #4 4, #5 3, #6 2, #7-8 1) plus 1 per kill. Check them, fix anything wrong, then Save. MVP: finishes 40%, damage 30%, survival 20%, assists 10% (the screen has no knockouts, so assists count instead).</p>
 
-      {unmatched.length > 0 && (
-        <div className="mb-3 space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
-          <p className="text-sm font-semibold text-amber-200">Couldn't match these names to a player. Pick who they are:</p>
-          {unmatched.map((u, i) => (
+      {guests.length > 0 && (
+        <div className="mb-3 space-y-2 rounded-xl border border-sky-400/25 bg-sky-400/5 p-3">
+          <p className="text-sm font-semibold text-sky-200">Not on the team</p>
+          <p className="text-xs text-zinc-400">These players are kept on this match's results only, with their numbers. They never show in stats or on the team. If one is actually a teammate with a different name, pick who.</p>
+          {guests.map((g, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-mono text-white">{u.name}</span>
-              <span className="text-zinc-400">{u.finishes} kills · {u.damage} dmg</span>
-              <select aria-label={`Who is ${u.name}`} className="input w-auto py-1.5" value="" onChange={(e) => {
+              <span className="chip bg-sky-400/10 text-sky-200">Guest</span>
+              <span className="min-w-0 truncate font-mono text-white">{g.name}</span>
+              <label className="flex items-center gap-1 text-xs text-zinc-400">K<input type="number" min={0} max={99} aria-label={`${g.name} kills`} className="input w-14 py-1" value={g.kills} onChange={(e) => setGuest(i, { kills: num(e.target.value) })} /></label>
+              <label className="flex items-center gap-1 text-xs text-zinc-400">Dmg<input type="number" min={0} max={9999} aria-label={`${g.name} damage`} className="input w-20 py-1" value={g.damage} onChange={(e) => setGuest(i, { damage: num(e.target.value) })} /></label>
+              <label className="flex items-center gap-1 text-xs text-zinc-400">A<input type="number" min={0} max={99} aria-label={`${g.name} assists`} className="input w-14 py-1" value={g.assists} onChange={(e) => setGuest(i, { assists: num(e.target.value) })} /></label>
+              <select aria-label={`Is ${g.name} a teammate`} className="input w-auto py-1" value="" onChange={(e) => {
                 if (!e.target.value) return;
-                set(e.target.value, fromCard(u));
-                setUnmatched((list) => list.filter((_, j) => j !== i));
+                set(e.target.value, { joined: true, kills: g.kills, damage: g.damage, survivalMin: g.survivalMin, assists: g.assists });
+                setGuests((list) => list.filter((_, j) => j !== i));
               }}>
-                <option value="">Pick player…</option>
+                <option value="">It's a teammate…</option>
                 {members.map((p) => <option key={p.id} value={p.id}>{p.ign}</option>)}
               </select>
-              <button className="text-xs text-zinc-500 hover:text-white" onClick={() => setUnmatched((list) => list.filter((_, j) => j !== i))}>Ignore</button>
+              <button aria-label={`Remove ${g.name}`} className="rounded p-1 text-zinc-500 hover:text-white" onClick={() => { setDirty(true); setGuests((list) => list.filter((_, j) => j !== i)); }}><X className="h-4 w-4" /></button>
             </div>
           ))}
         </div>
@@ -501,8 +518,8 @@ function ReportCard({ m, members }: { m: Match; members: Member[] }) {
                 const ign = byId.get(id)?.ign ?? 'Player';
                 const photo = byId.get(id)?.avatar;
                 return (
-                  <tr key={id} className={cx('border-t border-white/5', mvp === id && 'bg-ember-500/10')}>
-                    <td className="p-2 font-semibold text-white"><span className="inline-flex items-center gap-2 align-middle"><Avatar name={ign} src={photo} size={24} />{ign}</span>{mvp === id && <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-ember-300"><Crown className="h-3.5 w-3.5" aria-hidden />MVP</span>}</td>
+                  <tr key={id} className={cx('border-t border-white/5', mvp === id && 'bg-ember-500/10', !r.joined && 'opacity-50')}>
+                    <td className="p-2 font-semibold text-white"><span className="inline-flex items-center gap-2 align-middle"><Avatar name={ign} src={photo} size={24} />{ign}</span>{mvp === id && <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-ember-300"><Crown className="h-3.5 w-3.5" aria-hidden />MVP</span>}{!r.joined && <span className="ml-2 text-xs font-medium text-zinc-400">Not played</span>}</td>
                     <td className="p-2"><input type="checkbox" aria-label={`${ign} joined`} className="h-4 w-4 accent-ember-500" checked={r.joined} onChange={(e) => set(id, { joined: e.target.checked })} /></td>
                     <td className="p-2"><input type="number" min={0} max={99} aria-label={`${ign} kills`} className="input w-16 py-1.5" value={r.kills} onChange={(e) => set(id, { kills: num(e.target.value) })} /></td>
                     <td className="p-2"><input type="number" min={0} max={9999} aria-label={`${ign} damage`} className="input w-20 py-1.5" value={r.damage} onChange={(e) => set(id, { damage: num(e.target.value) })} /></td>
@@ -550,6 +567,10 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
   const q = useQuery({ queryKey: ['report', m.id], queryFn: () => api.report(m.id) });
   const data: MatchReport | undefined = q.data;
   const stats = [...(data?.stats ?? [])].sort((a, b) => b.mvpScore - a.mvpScore);
+  const guests = [...(data?.guests ?? [])].sort((a, b) => b.kills - a.kills || b.damage - a.damage);
+  const kills = stats.reduce((a, s) => a + s.kills, 0) + guests.reduce((a, g) => a + g.kills, 0);
+  // Picked teammates the admin left out of the results.
+  const sat = (data?.attendance ?? []).filter((a) => !a.joined && !stats.some((s) => s.userId === a.userId)).map((a) => a.userId);
   const ign = (id: string) => members.find((p) => p.id === id)?.ign ?? 'Player';
   const photo = (id: string) => members.find((p) => p.id === id)?.avatar;
   return (
@@ -558,15 +579,16 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
         <h2 className="flex items-center gap-2 text-xl font-bold text-white"><Trophy className="h-5 w-5 text-ember-400" aria-hidden />Match results</h2>
         <div className="flex items-center gap-3">
           {data?.placement ? <span className="chip bg-ember-500/15 text-ember-300">Position #{data.placement}</span> : null}
-          {data && (data.placement || stats.length > 0) ? (
-            <span className="chip bg-white/[0.06] text-zinc-200" title={pointsLine(data.placement, stats.reduce((a, s) => a + s.kills, 0))}>
-              {matchPoints(data.placement, stats.reduce((a, s) => a + s.kills, 0)).total} pts
+          {data && (data.placement || stats.length > 0 || guests.length > 0) ? (
+            <span className="chip bg-white/[0.06] text-zinc-200" title={pointsLine(data.placement, kills)}>
+              {matchPoints(data.placement, kills).total} pts
             </span>
           ) : null}
           <ScreenshotThumb matchId={m.id} at={data?.screenshotAt ?? null} />
         </div>
       </div>
-      {q.isLoading ? <Skeleton className="h-24" /> : !stats.length ? <p className="text-sm text-zinc-400">Results aren't posted yet.</p> : (
+      {q.isLoading ? <Skeleton className="h-24" /> : !stats.length && !guests.length ? <p className="text-sm text-zinc-400">Results aren't posted yet.</p> : (
+        <>
         <ul className="divide-y divide-white/5">
           {stats.map((s) => (
             <li key={s.userId} className={cx('flex items-center justify-between gap-3 py-2.5', s.mvp && 'text-ember-200')}>
@@ -577,7 +599,19 @@ function ResultsCard({ m, members }: { m: Match; members: Member[] }) {
               <span className="text-sm text-zinc-300">{s.kills} kills · {s.damage} dmg</span>
             </li>
           ))}
+          {guests.map((g, i) => (
+            <li key={`g${i}`} className="flex items-center justify-between gap-3 py-2.5">
+              <span className="flex min-w-0 items-center gap-2 font-semibold text-white">
+                <Avatar name={g.name} size={28} />
+                <span className="truncate">{g.name}</span>
+                <span className="chip shrink-0 bg-sky-400/10 text-[10px] text-sky-200" title="Not on the team: shown on this match only">Guest</span>
+              </span>
+              <span className="text-right text-sm text-zinc-300">{g.kills} kills · {g.damage} dmg<span className="hidden sm:inline"> · {g.assists} ast · {g.survivalMin}m</span></span>
+            </li>
+          ))}
         </ul>
+        {sat.length > 0 && <p className="mt-2 text-xs text-zinc-500">Not played: {sat.map(ign).join(', ')}</p>}
+        </>
       )}
     </Card>
   );

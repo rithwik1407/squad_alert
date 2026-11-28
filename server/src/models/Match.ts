@@ -25,6 +25,21 @@ const matchSchema = new Schema(
     placement: { type: Number, default: null },
     /** Matches created together (bulk add / daily repeat) share a batch id. */
     batchId: { type: String, default: null, index: true },
+    /**
+     * Players on the results screenshot who aren't on our team (a stand-in from outside). Kept on this match only:
+     * they show on the match results with their numbers and their kills count toward the match points, but they
+     * never get a user, a Stats row, a place in stats charts or on the team roster.
+     */
+    guests: {
+      type: [new Schema({
+        name: { type: String, required: true, trim: true, maxlength: 40 },
+        kills: { type: Number, default: 0, min: 0 },
+        damage: { type: Number, default: 0, min: 0 },
+        survivalMin: { type: Number, default: 0, min: 0 },
+        assists: { type: Number, default: 0, min: 0 },
+      }, { _id: false })],
+      default: [],
+    },
   },
   { timestamps: true },
 );

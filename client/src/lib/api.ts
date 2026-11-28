@@ -1,4 +1,4 @@
-import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CalendarMonth, CheckinMatch, ClassicInvite, InboxItem, JoinRequest, Match, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
+import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CalendarMonth, CheckinMatch, ClassicInvite, InboxItem, JoinRequest, Match, GuestStat, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -115,8 +115,8 @@ export const api = {
   /** image: a data: URL of a schedule screenshot. Returns what it says; nothing is created. */
   readSchedule: (image: string, onWait?: (seconds: number) => void) => readSchedule(image, onWait),
   saveAttendance: (id: string, entries: { userId: string; joined: boolean }[]) => request('PUT', `/matches/${id}/attendance`, { entries }),
-  saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[], placement?: number | null) =>
-    request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries, placement }),
+  saveStats: (id: string, entries: { userId: string; kills: number; damage: number; survivalMin: number; assists: number }[], placement?: number | null, guests?: GuestStat[]) =>
+    request<{ ok: true; mvpUserId: string | null }>('PUT', `/matches/${id}/stats`, { entries, placement, guests }),
   /** The saved results screenshot as a data: URL. */
   screenshot: (id: string) => request<{ image: string; uploadedAt: string }>('GET', `/matches/${id}/screenshot`),
 

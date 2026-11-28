@@ -4,6 +4,7 @@ import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
 import { Attendance, GAME_ROLES, isAdmin, Match, Squad, Stats, User } from '../models/index.js';
 import { isCompleted } from '../lib/matchGroups.js';
+import { didPlay } from '../lib/played.js';
 import { linkToken } from '../lib/codes.js';
 import { config } from '../config.js';
 import bcrypt from 'bcryptjs';
@@ -146,7 +147,13 @@ meRouter.get('/stats/team', ah(async (req, res) => {
   if (!teamId) { res.json({ players: [], matches: [] }); return; }
   const started = await Match.find({ teamId, startAt: { $lt: new Date() }, status: { $ne: 'cancelled' } })
     .sort({ startAt: 1 }).select('title map type startAt placement status').lean();
-  const stats = await Stats.find({ matchId: { $in: started.map((m) => m._id) } }).lean();
+  const [allStats, absent] = await Promise.all([
+    Stats.find({ matchId: { $in: started.map((m) => m._id) } }).lean(),
+    Attendance.find({ matchId: { $in: started.map((m) => m._id) }, joined: false }).select('matchId userId').lean(),
+  ]);
+  // A player marked as not joined didn't play: an old zero row saved for them doesn't count as a match.
+  const out = new Set(absent.map((a) => `${a.matchId}:${a.userId}`));
+  const stats = allStats.filter((s) => !out.has(`${s.matchId}:${s.userId}`));
   // Only finished matches count toward the charts.
   const withStats = new Set(stats.map((s) => String(s.matchId)));
   const matches = started.filter((m) => isCompleted({ status: m.status ?? 'scheduled', startAt: m.startAt, placement: m.placement }, withStats.has(String(m._id))));
@@ -208,14 +215,20 @@ meRouter.get('/stats', ah(async (req, res) => {
       type: m.type,
       startAt: m.startAt.toISOString(),
       selected: Boolean(sq?.selectedIds.some((id) => String(id) === String(uid))) || Boolean(s),
+      /** Played it: kept in the posted results (or, before results, picked and not marked absent). */
+      played: didPlay({
+        matchHasStats: matchHasStats.has(String(m._id)), hasStats: Boolean(s),
+        inSquad: Boolean(sq?.selectedIds.some((id) => String(id) === String(uid))), joined: attBy.get(String(m._id))?.joined,
+      }),
       joined: attBy.get(String(m._id))?.joined ?? null,
       kills: s?.kills ?? 0,
       damage: s?.damage ?? 0,
       mvp: s?.mvp ?? false,
     };
   });
-  const played = rows.filter((r) => r.selected);
-  const withAtt = played.filter((r) => r.joined !== null);
+  // Picked but left out of the posted results = not played: it doesn't add to the matches count.
+  const played = rows.filter((r) => r.played);
+  const withAtt = rows.filter((r) => r.selected && r.joined !== null);
   res.json({
     rows,
     totals: {
