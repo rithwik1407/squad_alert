@@ -135,7 +135,7 @@ function RangeSheet({ from, to, matchDays, countIn, onApply, onCancel }: {
           const on = picking === end;
           return (
             <div key={end} className="relative rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-              {on && <motion.span layoutId="range-end" className="absolute inset-0 rounded-xl ring-2 ring-ember-400/70 shadow-[0_0_24px_-6px_rgba(255,138,31,.6)]"
+              {on && <motion.span initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="absolute inset-0 rounded-xl ring-2 ring-ember-400/70 shadow-[0_0_24px_-6px_rgba(255,138,31,.6)]"
                 transition={{ type: 'spring', stiffness: 420, damping: 32 }} />}
               <span className="relative block text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{end === 'from' ? 'From' : 'To'}</span>
               <AnimatePresence mode="wait" initial={false}>
@@ -211,7 +211,7 @@ function RangeSheet({ from, to, matchDays, countIn, onApply, onCancel }: {
                     )}
                   >
                     {isEnd && (
-                      <motion.span layoutId={isA ? 'range-a' : 'range-b'} className="absolute inset-0 rounded-full bg-gradient-to-b from-ember-400 to-ember-500 shadow-[0_6px_18px_-6px_rgba(255,138,31,.8)]"
+                      <motion.span initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="absolute inset-0 rounded-full bg-gradient-to-b from-ember-400 to-ember-500 shadow-[0_6px_18px_-6px_rgba(255,138,31,.8)]"
                         transition={{ type: 'spring', stiffness: 460, damping: 30 }} />
                     )}
                     <span className="relative">{Number(k.slice(8))}</span>
