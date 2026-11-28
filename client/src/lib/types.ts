@@ -152,11 +152,16 @@ export interface MatchReport {
   open: boolean;
   attendance: { userId: string; joined: boolean }[];
   stats: MatchStat[];
+  /** Outside players from the results screenshot: on this match only, never in stats or the team. */
+  guests: GuestStat[];
   /** Squad finishing position (from the screenshot or typed in). */
   placement: number | null;
   /** When a results screenshot was saved; null when there is none. */
   screenshotAt: string | null;
 }
+
+/** A player on the results who isn't on our team. */
+export interface GuestStat { name: string; kills: number; damage: number; survivalMin: number; assists: number }
 
 /** A row read from a BGMI results screenshot, matched to a team member when the IGN fits. */
 export interface ScorecardRow {
@@ -175,6 +180,8 @@ export interface StatsRow {
   type: string;
   startAt: string;
   selected: boolean;
+  /** Kept in the posted results (picked but left out = not played). */
+  played?: boolean;
   joined: boolean | null;
   kills: number;
   damage: number;
@@ -307,6 +314,10 @@ export interface CalendarMatch {
   /** Finished. Only completed matches count toward points, totals and player numbers. */
   completed: boolean;
   stats: { userId: string; kills: number; damage: number; assists: number; mvp: boolean }[];
+  /** Teammates who played (left out of the posted results = not played). */
+  playedIds?: string[];
+  /** Outside players on the results (not on the team). */
+  guestCount?: number;
 }
 
 export interface CalendarTotals {
