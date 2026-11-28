@@ -44,7 +44,7 @@ export default function Classic() {
             <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-300/30 bg-amber-400/[0.06] p-3">
               <BadgeIcon emoji={i.challenge.badge.emoji} tier={i.challenge.tier} size={40} />
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Challenge{i.challenge.daily && ' · Today'}<ModeTag mode={i.challenge.mode} /></p>
+                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Challenge<ModeTag mode={i.challenge.mode} /></p>
                 <p className="text-sm font-bold text-white">{i.challenge.title}</p>
                 <p className="text-[11px] text-zinc-400">{i.challenge.text} Earns the {i.challenge.badge.name} badge.</p>
               </div>

@@ -33,13 +33,12 @@ export function ChallengeChip({ c, className }: { c: Challenge & { daily?: boole
     <span className={cx('inline-flex max-w-full items-center gap-1.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200 ring-1 ring-amber-300/25', className)}>
       <Target className="h-3 w-3 shrink-0" aria-hidden />
       <span className="truncate">{c.title}</span>
-      {c.daily && <span className="shrink-0 text-amber-300/80">· Daily</span>}
     </span>
   );
 }
 
 /**
- * Pick a challenge while sending a classic invite. Today's daily challenge comes first; shuffle for others.
+ * Pick a challenge while sending a classic invite. Shuffle for other ones.
  * `value` null means no challenge.
  */
 export function ChallengePicker({ value, onChange }: { value: string | null; onChange: (key: string | null) => void }) {
@@ -57,7 +56,6 @@ export function ChallengePicker({ value, onChange }: { value: string | null; onC
       <div role="radiogroup" aria-label="Challenge" className="mt-2 space-y-1.5">
         {q.isLoading ? <><Skeleton className="h-14" /><Skeleton className="h-14" /></> : opts.map((c) => {
           const on = value === c.key;
-          const daily = q.data?.daily === c.key;
           return (
             <button key={c.key} type="button" role="radio" aria-checked={on} onClick={() => onChange(on ? null : c.key)}
               className={cx('flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-[border-color,background-color] active:scale-[.99]',
@@ -66,7 +64,6 @@ export function ChallengePicker({ value, onChange }: { value: string | null; onC
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-sm font-semibold text-white">{c.title}</span>
-                  {daily && <span className="shrink-0 rounded bg-amber-400/20 px-1.5 py-px text-[9px] font-bold uppercase tracking-wider text-amber-200">Today</span>}
                 </span>
                 <span className="block truncate text-[11px] text-zinc-400">{c.text}</span>
               </span>
@@ -84,11 +81,6 @@ export function ChallengePicker({ value, onChange }: { value: string | null; onC
       </div>
     </div>
   );
-}
-
-/** Today's squad challenge, the same for everyone all day (new at midnight IST). */
-export function useTodayChallenge() {
-  return useQuery({ queryKey: ['challenge-today'], queryFn: api.challengeToday, staleTime: 5 * 60_000 });
 }
 
 /** Challenge checks waiting on me, and recent challenges. */
@@ -109,7 +101,6 @@ export function ChallengeCheck({ run, highlight }: { run: ChallengeRun; highligh
     onSuccess: ({ run: fresh }) => {
       qc.invalidateQueries({ queryKey: ['challenges'] });
       qc.invalidateQueries({ queryKey: ['badges'] });
-      qc.invalidateQueries({ queryKey: ['challenge-today'] });
       if (fresh.status === 'completed') {
         void celebrate();
         toast.success(`Badge earned: ${c.badge.emoji} ${c.badge.name}`);
@@ -136,9 +127,10 @@ export function ChallengeCheck({ run, highlight }: { run: ChallengeRun; highligh
         </div>
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Step {run.ask === 'begun' ? 1 : 2} of 2</span>
       </div>
+      <p className="mt-2 text-xs text-zinc-400">{c.text} <span className="text-zinc-500">Badge: {c.badge.emoji} {c.badge.name}</span></p>
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={run.ask} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.2 }}>
-          <p className="mt-3 text-sm font-bold text-amber-100">{q.title}</p>
+          <p className="mt-3 text-sm font-bold text-amber-100">{q.title}{run.ask === 'begun' && run.status === 'waiting' && <span className="block text-[11px] font-normal text-zinc-500">Answer once your match is over.</span>}</p>
           <div className="mt-2 flex gap-2">
             <button type="button" disabled={m.isPending} onClick={() => m.mutate(true)}
               className="btn flex-1 border border-emerald-400/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25">
@@ -155,48 +147,29 @@ export function ChallengeCheck({ run, highlight }: { run: ChallengeRun; highligh
   );
 }
 
-/** Home card: today's challenge, any after-match checks waiting on me, and the team's badge count. */
+/**
+ * Home card for players: the challenges they picked (or joined) on classic invites, until the result is in.
+ * After the match: "Did the match begin?" then "Was the challenge completed?". Hidden when there is none.
+ */
 export function ChallengeHomeCard() {
-  const today = useTodayChallenge();
   const runs = useChallenges();
-  const badges = useQuery({ queryKey: ['badges'], queryFn: api.badges, staleTime: 60_000 });
-  const c = today.data?.challenge;
-  const pending = runs.data?.pending ?? [];
+  const active = runs.data?.pending ?? [];
+  if (!active.length) return null;
   return (
-    <Card glow={pending.length > 0} className={cx(pending.length > 0 && 'border-amber-300/40')}>
-      <div className="flex items-start gap-3">
-        {c ? <BadgeIcon emoji={c.badge.emoji} tier={c.tier} size={44} dim={false} /> : <Skeleton className="h-11 w-11 rounded-full" />}
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">
-            Today's squad challenge{c && <ModeTag mode={c.mode} />}
-          </p>
-          {c ? (
-            <>
-              <h2 className="mt-0.5 text-lg font-bold text-white">{c.title}</h2>
-              <p className="text-xs text-zinc-400">{c.text}</p>
-              <p className="mt-1 text-[11px] text-zinc-500">
-                {today.data?.completed
-                  ? <span className="font-semibold text-emerald-300">Done today! {c.badge.emoji} {c.badge.name} earned.</span>
-                  : <>Badge: {c.badge.emoji} {c.badge.name} ({TIER[c.tier].label}). Pick it when you send a classic invite.</>}
-              </p>
-            </>
-          ) : <Skeleton className="mt-1 h-10" />}
-        </div>
+    <Card glow className="border-amber-300/40">
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">
+          <Target className="h-3.5 w-3.5" aria-hidden />{active.length === 1 ? 'Your challenge' : `Your challenges · ${active.length}`}
+        </p>
+        <Link to="/challenges" className="flex items-center gap-1 text-xs font-semibold text-ember-400 hover:text-ember-300">
+          <Medal className="h-3.5 w-3.5" aria-hidden />Badges<ChevronRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
       </div>
-      {pending.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <AnimatePresence initial={false}>
-            {pending.slice(0, 2).map((r) => <ChallengeCheck key={r.id} run={r} />)}
-          </AnimatePresence>
-        </div>
-      )}
-      <Link to="/challenges" className="mt-4 flex items-center justify-between rounded-xl bg-white/[0.03] px-3 py-2.5 text-sm hover:bg-white/[0.06]">
-        <span className="flex items-center gap-2 text-zinc-200">
-          <Medal className="h-4 w-4 text-amber-300" aria-hidden />
-          {badges.data ? <><span className="font-bold text-white">{badges.data.team.total}</span> {badges.data.team.total === 1 ? 'badge' : 'badges'} earned by the squad</> : 'Squad badges'}
-        </span>
-        <ChevronRight className="h-4 w-4 text-zinc-500" aria-hidden />
-      </Link>
+      <div className="mt-3 space-y-2">
+        <AnimatePresence initial={false}>
+          {active.slice(0, 3).map((r) => <ChallengeCheck key={r.id} run={r} />)}
+        </AnimatePresence>
+      </div>
     </Card>
   );
 }

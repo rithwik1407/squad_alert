@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { ChallengeRun, Team, User } from '../models/index.js';
 import { badRequest, conflict } from '../lib/errors.js';
 import { answerChallenge } from '../lib/challenges.js';
-import { badgeShelf, challengeByKey, challengeOptions, dailyChallenge, dayKeyIST } from '../lib/challengeCatalog.js';
+import { badgeShelf, challengeByKey, challengeOptions } from '../lib/challengeCatalog.js';
 
 /**
  * Squad challenges and badges. Everyone on the team can see them; the players a challenge was for answer the
@@ -20,19 +20,10 @@ const teamIdOf = (req: Request) => {
   return String(req.user!.teamId);
 };
 
-/** Today's squad challenge (changes at midnight IST). */
-challengesRouter.get('/today', ah(async (req, res) => {
-  const teamId = teamIdOf(req);
-  const dayKey = dayKeyIST();
-  const challenge = dailyChallenge(teamId, dayKey);
-  const done = await ChallengeRun.exists({ teamId: new Types.ObjectId(teamId), dayKey, challengeKey: challenge.key, status: 'completed' });
-  res.json({ dayKey, challenge, completed: Boolean(done) });
-}));
-
-/** Challenges to pick from on a classic invite: today's first, then random Classic ones. */
+/** Random Classic challenges to pick from on a classic invite. */
 challengesRouter.get('/options', ah(async (req, res) => {
-  const teamId = teamIdOf(req);
-  res.json({ daily: dailyChallenge(teamId).key, options: challengeOptions(teamId) });
+  teamIdOf(req);
+  res.json({ options: challengeOptions() });
 }));
 
 type Lean = {
@@ -40,7 +31,7 @@ type Lean = {
   playerIds: unknown[]; begun?: { by?: unknown; at?: Date; yes?: boolean } | null; done?: { by?: unknown; at?: Date; yes?: boolean } | null; completedAt?: Date | null;
 };
 
-async function serialize(list: Lean[], me: string, now = Date.now()) {
+async function serialize(list: Lean[], me: string) {
   const ids = [...new Set(list.flatMap((r) => [String(r.fromId), ...r.playerIds.map(String), String(r.begun?.by ?? ''), String(r.done?.by ?? '')]).filter((x) => Types.ObjectId.isValid(x)))];
   const users = await User.find({ _id: { $in: ids } }).select('name ign avatar').lean();
   const by = new Map(users.map((u) => [String(u._id), { id: String(u._id), name: u.name, ign: u.ign, avatar: u.avatar ?? '' }]));
@@ -49,10 +40,9 @@ async function serialize(list: Lean[], me: string, now = Date.now()) {
     const c = challengeByKey(r.challengeKey);
     if (!c) return [];
     const mine = r.playerIds.some((p) => String(p) === me);
-    const open = new Date(r.askAt).getTime() <= now;
-    /** What I can answer right now, if anything. */
+    /** What I can answer right now, if anything. Players can mark the result as soon as their match is over. */
     const ask = !mine ? null
-      : (r.status === 'waiting' || r.status === 'asking') && open ? 'begun'
+      : r.status === 'waiting' || r.status === 'asking' ? 'begun'
         : r.status === 'begun' ? 'done' : null;
     return [{
       id: String(r._id),
@@ -72,13 +62,13 @@ async function serialize(list: Lean[], me: string, now = Date.now()) {
   });
 }
 
-/** Recent challenges for the team, plus the checks waiting on me. */
+/** Recent challenges for the team, plus my challenges still waiting for a result (shown on Home). */
 challengesRouter.get('/', ah(async (req, res) => {
   const teamId = new Types.ObjectId(teamIdOf(req));
   const me = String(req.user!._id);
   const [recent, open] = await Promise.all([
     ChallengeRun.find({ teamId, status: { $ne: 'cancelled' } }).sort({ createdAt: -1 }).limit(30).lean(),
-    ChallengeRun.find({ teamId, playerIds: req.user!._id, status: { $in: ['waiting', 'asking', 'begun'] }, askAt: { $lte: new Date() } })
+    ChallengeRun.find({ teamId, playerIds: req.user!._id, status: { $in: ['waiting', 'asking', 'begun'] } })
       .sort({ askAt: 1 }).limit(10).lean(),
   ]);
   res.json({ runs: await serialize(recent as Lean[], me), pending: await serialize(open as Lean[], me) });

@@ -135,12 +135,11 @@ All need a signed-in team member. Actions marked captain need the captain.
 
 ## Challenges and badges
 
-A daily squad challenge (Classic, WOW or TDM, fixed for the IST day per team). A player can attach a challenge to a classic invite (`POST /api/invites` with `challengeKey`). It is for the sender plus every teammate who answers "I'm in". After the invite window plus about 25 minutes per match, those players get "Did the match begin?" (push, Telegram buttons, Inbox); a yes is followed by "Was the challenge completed?". The first answer counts for the squad; a completed challenge awards its badge to everyone on it.
+A player can attach a challenge to a classic invite (`POST /api/invites` with `challengeKey`). It is for the sender plus every teammate who answers "I'm in". After the invite window plus about 25 minutes per match, those players get "Did the match begin?" (push, Telegram buttons, Inbox); a yes is followed by "Was the challenge completed?". The first answer counts for the squad; a completed challenge awards its badge to everyone on it.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/api/challenges/today` | `{ dayKey, challenge, completed }` |
-| GET | `/api/challenges/options` | `{ daily, options[] }`: today's challenge first (when Classic), then random Classic picks. |
-| GET | `/api/challenges` | `{ runs[], pending[] }`: recent team challenges and the checks waiting on me (`ask: 'begun' \| 'done'`). |
+| GET | `/api/challenges/options` | `{ options[] }`: random Classic picks. |
+| GET | `/api/challenges` | `{ runs[], pending[] }`: recent team challenges and my challenges still waiting for a result (`ask: 'begun' \| 'done'`); players can answer as soon as the match is over. |
 | POST | `/api/challenges/:id/answer` | Body `{ step: 'begun' \| 'done', yes }`. 409 when a teammate already answered or the check isn't for you. |
 | GET | `/api/challenges/badges` | `{ team: { total, badges[] }, players: [{ user, total, badges[] }] }` |

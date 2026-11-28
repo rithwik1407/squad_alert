@@ -71,19 +71,14 @@ export function dailyChallenge(teamId: string, dayKey = dayKeyIST()): Challenge 
   return CHALLENGES[hash(`${teamId}|${dayKey}`) % CHALLENGES.length];
 }
 
-/**
- * Challenges to pick from when sending a classic-match invite: today's daily challenge first (when it is a Classic
- * one), then random Classic picks. `rand` is injectable for tests.
- */
-export function challengeOptions(teamId: string, count = 4, dayKey = dayKeyIST(), rand: () => number = Math.random): Challenge[] {
-  const daily = dailyChallenge(teamId, dayKey);
-  const pool = CHALLENGES.filter((c) => c.mode === 'Classic' && c.key !== daily.key);
+/** Random Classic challenges to pick from when sending a classic-match invite. `rand` is injectable for tests. */
+export function challengeOptions(count = 4, rand: () => number = Math.random): Challenge[] {
+  const pool = CHALLENGES.filter((c) => c.mode === 'Classic');
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  const head = daily.mode === 'Classic' ? [daily] : [];
-  return [...head, ...pool].slice(0, count);
+  return pool.slice(0, count);
 }
 
 /** How long one match takes, roughly: the "did it begin?" check comes after this many minutes per match. */

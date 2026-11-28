@@ -25,14 +25,11 @@ describe('challenge catalog', () => {
     expect(dayKeyIST(new Date('2026-11-28T18:31:00Z'))).toBe('2026-11-29');
   });
 
-  it('offers Classic picks, with the daily challenge first when it is a Classic one', () => {
-    for (let d = 1; d <= 20; d++) {
-      const day = `2026-12-${String(d).padStart(2, '0')}`;
-      const opts = challengeOptions(TEAM, 4, day, () => 0.3);
-      const daily = dailyChallenge(TEAM, day);
+  it('offers 4 different random Classic picks', () => {
+    for (const r of [0, 0.3, 0.99]) {
+      const opts = challengeOptions(4, () => r);
       expect(opts).toHaveLength(4);
       expect(new Set(opts.map((o) => o.key)).size).toBe(4);
-      if (daily.mode === 'Classic') expect(opts[0].key).toBe(daily.key);
       expect(opts.every((o) => o.mode === 'Classic')).toBe(true);
     }
   });
