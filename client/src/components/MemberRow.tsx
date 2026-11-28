@@ -71,12 +71,12 @@ export function MemberRow({ p, onChanged }: { p: Member; onChanged: () => Promis
               <Field label="BGMI UID"><input name="bgmiId" className="input font-mono" inputMode="numeric" defaultValue={p.bgmiId} /></Field>
               <Field label="Login email"><input name="email" type="email" className="input" defaultValue={p.email ?? ''} autoComplete="off" /></Field>
               {WHATSAPP_ENABLED && (
-                <Field label="WhatsApp number" hint="With country code. 10-digit Indian numbers get +91 added.">
+                <Field label="WhatsApp number" hint="+91 added for Indian numbers">
                   <input name="whatsappNumber" type="tel" className="input font-mono" defaultValue={p.whatsappNumber ? `+${p.whatsappNumber}` : ''} placeholder="+91 98765 43210" />
                 </Field>
               )}
               {isAdmin && (
-                <Field label="Reset password" hint="Leave empty to keep their current password. At least 8 characters. Players can't change it themselves.">
+                <Field label="Reset password" hint="Empty keeps it. 8+ characters">
                   <input name="password" type="text" className="input font-mono" autoComplete="new-password" minLength={8} placeholder="••••••••" />
                 </Field>
               )}

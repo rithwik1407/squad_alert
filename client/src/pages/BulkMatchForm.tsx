@@ -142,13 +142,13 @@ export default function BulkMatchForm() {
               </Field>
               <Field label="Notify before (min)"><input type="number" min={0} max={120} className="input" value={offset} onChange={(e) => setOffset(Number(e.target.value))} /></Field>
               <div className="sm:col-span-3">
-                <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required for every scrim and tournament">
+                <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Organiser or event name">
                   <input className="input" autoComplete="off" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
                 <SeriesSuggestions value={tournamentName} onPick={setTournamentName} />
                 </Field>
               </div>
               <div className="sm:col-span-3">
-                <Field label="Slot number (optional)" hint="These matches are one lobby, so they share one slot. Add it now, or later on any one match and it fills in on all of them.">
+                <Field label="Slot number (optional)" hint="Shared by all matches here">
                   <input className="input font-mono" value={slot} onChange={(e) => setSlot(e.target.value)} inputMode="numeric" placeholder="e.g. 12" maxLength={10} />
                 </Field>
               </div>
@@ -217,7 +217,7 @@ export default function BulkMatchForm() {
             </ul>
             {past.length > 0 && <p className="mt-3 text-xs text-red-300">{past.length} time{past.length > 1 ? 's are' : ' is'} already past. Change the date or times.</p>}
             {dupTimes && <p className="mt-3 text-xs text-red-300">Two matches share a start time.</p>}
-            <p className="mt-3 text-xs text-zinc-400">Each alert fires {offset} min before its match, only to the 4 you pick for it.</p>
+            <p className="mt-3 text-xs text-zinc-400">Alerts go {offset} min before, only to your picked 4.</p>
             <Button type="submit" loading={busy} disabled={!planned.length || past.length > 0 || dupTimes || planned.length > 40} className="mt-4 w-full py-3">
               Schedule {planned.length} match{planned.length === 1 ? '' : 'es'}
             </Button>

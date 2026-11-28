@@ -52,7 +52,7 @@ export function ScheduleImageUpload({ onParsed }: { onParsed: (s: ParsedSchedule
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">Got a schedule image?</p>
-          <p className="text-xs text-zinc-400">Upload the scrim or tournament schedule and the name, date, IDP times and maps fill in. Check them, then Schedule.</p>
+          <p className="text-xs text-zinc-400">Upload the schedule image and the details fill in.</p>
         </div>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
         <Button variant="ghost" loading={reading} icon={<ImagePlus className="h-4 w-4" aria-hidden />} onClick={() => fileRef.current?.click()}>
@@ -60,7 +60,7 @@ export function ScheduleImageUpload({ onParsed }: { onParsed: (s: ParsedSchedule
         </Button>
       </div>
       {reading && waited >= 10 && (
-        <p className="mt-2 text-xs text-zinc-400">The free readers are slow right now. It keeps trying for up to about 3 minutes.</p>
+        <p className="mt-2 text-xs text-zinc-400">Taking a while, still trying (up to 3 min).</p>
       )}
       {err && !reading && (
         <div role="alert" className="mt-3 flex items-start justify-between gap-3 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-sm">

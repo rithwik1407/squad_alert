@@ -21,6 +21,13 @@
     transition-timing-function: cubic-bezier(.22, 1, .36, 1);
   }
   button, a, [role='button'] { touch-action: manipulation; }
+  /* Phones zoom the whole page in when you tap a field whose text is under 16px (iPhone Safari does this).
+     Keep every field at 16px on touch screens so tapping never zooms, and stop double-tap zoom on fields. */
+  @media (pointer: coarse), (max-width: 1023px) {
+    input, select, textarea { font-size: 16px !important; touch-action: manipulation; }
+  }
+  /* While the chat sheet is open on a phone the page behind it stays still. */
+  html.sheet-open, html.sheet-open body { overflow: hidden; overscroll-behavior: none; }
   body {
     @apply bg-ink-950 text-zinc-100 font-sans antialiased;
     /* Static layers only: a tiny pre-rendered grain tile + two glows. No fixed overlays, no live SVG filters. */

@@ -163,7 +163,7 @@ export default function MatchForm() {
               </motion.button>
             </div>
             <div className="mt-4">
-              <Field label="Drop location" hint={map === MAP_TBD ? 'Set the map later and the team default drop fills in' : team?.drops[map] ? `Team default for ${map}: ${team.drops[map]}` : 'No team default for this map'}>
+              <Field label="Drop location" hint={map === MAP_TBD ? 'Fills in once the map is set' : team?.drops[map] ? `Default: ${team.drops[map]}` : undefined}>
                 <div className="relative">
                   <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ember-400" aria-hidden />
                   <input className="input pl-9" value={drop} onChange={(e) => setDrop(e.target.value)} placeholder="e.g. Quarry" maxLength={30} />
@@ -184,21 +184,21 @@ export default function MatchForm() {
                   ))}
                 </div>
               </Field>
-              <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Required, e.g. the organiser's scrims or the tournament">
+              <Field label={type === 'tournament' ? 'Tournament name' : 'Scrim name'} hint="Organiser or event name">
                 <input className="input" autoComplete="off" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder={type === 'tournament' ? 'BGIS 2026' : 'XYZ Esports Scrims'} required maxLength={60} />
                 <SeriesSuggestions value={tournamentName} onPick={setTournamentName} />
               </Field>
-              <Field label="Start (IST)" hint={timeLocked ? 'Locked: the alert already went out' : undefined}>
+              <Field label="Start (IST)" hint={timeLocked ? 'Locked, alert sent' : undefined}>
                 <input type="datetime-local" className="input [color-scheme:dark]" value={start} onChange={(e) => setStart(e.target.value)} required disabled={timeLocked} />
               </Field>
               <Field label="Notify before (minutes)">
                 <input type="number" min={0} max={120} className="input" value={offset} onChange={(e) => setOffset(Number(e.target.value))} disabled={timeLocked} />
               </Field>
-              <Field label="Room ID" hint="Can be added later, right before the match"><input className="input font-mono" value={roomId} onChange={(e) => setRoomId(e.target.value)} inputMode="numeric" /></Field>
+              <Field label="Room ID" hint="Can add later"><input className="input font-mono" value={roomId} onChange={(e) => setRoomId(e.target.value)} inputMode="numeric" /></Field>
               <Field label="Room password"><input className="input font-mono" value={roomPassword} onChange={(e) => setRoomPassword(e.target.value)} /></Field>
               <Field label="Slot number" hint={batchMates.length
-                ? `Same lobby: also sets the slot on ${batchMates.map((b) => `${b.title} (${timeIST(b.startAt)})`).join(', ')}`
-                : roomId ? 'Your team\'s slot in the room' : 'Add with the room ID'}>
+                ? `Also sets ${batchMates.length} more match${batchMates.length > 1 ? 'es' : ''} in this lobby`
+                : undefined}>
                 <input className="input font-mono" value={slot} onChange={(e) => setSlot(e.target.value)} inputMode="numeric" placeholder="e.g. 12" maxLength={10} required={Boolean(roomId)} />
               </Field>
             </div>

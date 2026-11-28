@@ -167,7 +167,7 @@ export function ApproveSheet({ block, open, onClose, onDone }: { block: Proposal
             <p className="text-sm text-zinc-400">{f.matchLabel}</p>
             <Seg label="Status" value={f.status} options={[{ v: 'available', label: 'Available' }, { v: 'maybe', label: 'Maybe' }, { v: 'unavailable', label: 'Unavailable' }]} onChange={(status) => up({ status, joinTime: status === 'unavailable' ? '' : f.joinTime })} />
             {f.status !== 'unavailable' && (
-              <Field label="Joining at (optional)" hint="Leave empty if you'll be on time."><input className="input" type="time" value={f.joinTime} onChange={(e) => up({ joinTime: e.target.value })} /></Field>
+              <Field label="Joining at (optional)" hint="Empty if on time"><input className="input" type="time" value={f.joinTime} onChange={(e) => up({ joinTime: e.target.value })} /></Field>
             )}
           </div>
         );
