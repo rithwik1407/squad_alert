@@ -1,7 +1,7 @@
 import { Schema, model, type InferSchemaType } from 'mongoose';
 
 /** What kind of phone notification an inbox item copies. */
-export const INBOX_KINDS = ['squad', 'captain_alert', 'selected', 'results', 'room', 'invite', 'ai_message'] as const;
+export const INBOX_KINDS = ['squad', 'captain_alert', 'selected', 'results', 'room', 'invite', 'ai_message', 'challenge'] as const;
 export type InboxKind = (typeof INBOX_KINDS)[number];
 /** Inbox items are removed automatically this long after they arrive. */
 export const INBOX_TTL_DAYS = 30;

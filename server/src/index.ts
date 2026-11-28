@@ -9,6 +9,7 @@ import { seedTeamRare } from './seed-data.js';
 import { runStartupMigrations } from './lib/deleteMatches.js';
 import { ensureTelegramWebhook } from './lib/telegramWebhook.js';
 import { startInviteSweep } from './lib/invites.js';
+import { startChallengeSweep } from './lib/challenges.js';
 
 /** Keep retrying instead of crashing, so /api/health stays up and shows db: "down" with the reason in the logs. */
 async function connectWithRetry() {
@@ -41,6 +42,8 @@ async function main() {
   void ensureTelegramWebhook();
   // Classic invites last 7 minutes: delete their Telegram messages once they run out.
   const stopInviteSweep = startInviteSweep();
+  // After a challenge match: ask the squad "Did the match begin?" and close old unanswered checks.
+  const stopChallengeSweep = startChallengeSweep();
 
   if (process.env.SEED_TEAM_RARE === 'true') {
     try {
@@ -65,6 +68,7 @@ async function main() {
     stopCatchup?.();
     stopSummary?.();
     stopInviteSweep();
+    stopChallengeSweep();
     await worker?.close();
     await closeQueue();
     process.exit(0);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
-import { AlertTriangle, BarChart3, Bell, Gamepad2, KeyRound, ListChecks, MessageCircle, Smartphone, Sparkles, Trophy, UserCheck, X, XCircle } from 'lucide-react';
+import { AlertTriangle, BarChart3, Bell, Gamepad2, KeyRound, Medal, ListChecks, MessageCircle, Smartphone, Sparkles, Trophy, UserCheck, X, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { fullIST, ago, timeIST } from '@/lib/time';
@@ -244,6 +244,7 @@ const KIND: Record<InboxKind, { icon: typeof Bell; tone: string; label: string }
   captain_alert: { icon: AlertTriangle, tone: 'bg-amber-500/15 text-amber-300', label: 'Captain alert' },
   invite: { icon: Gamepad2, tone: 'bg-violet-500/15 text-violet-300', label: 'Classic invite' },
   ai_message: { icon: Sparkles, tone: 'bg-fuchsia-500/15 text-fuchsia-300', label: 'Squad AI' },
+  challenge: { icon: Medal, tone: 'bg-amber-500/15 text-amber-300', label: 'Challenge' },
 };
 
 const SWIPE_DELETE_PX = 96;

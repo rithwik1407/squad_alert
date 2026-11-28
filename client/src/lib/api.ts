@@ -1,4 +1,4 @@
-import type { Availability, ChatMessage, ChatMode, ChatMute, ChatState, CalendarMonth, CheckinMatch, ClassicInvite, InboxItem, JoinRequest, Match, GuestStat, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
+import type { BadgeBoard, Challenge, ChallengeRun, Availability, ChatMessage, ChatMode, ChatMute, ChatState, CalendarMonth, CheckinMatch, ClassicInvite, InboxItem, JoinRequest, Match, GuestStat, MatchReport, MyStats, NotificationLog, ParsedSchedule, TeamStats, ScorecardRow, ScrimSeries, ScrimSeriesInput, ScrimSeriesList, Team, User } from './types';
 
 /** Empty in production: Vercel rewrites /api/* to the Render backend so the auth cookie stays first-party. */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -137,9 +137,14 @@ export const api = {
   teamStats: () => request<TeamStats>('GET', '/me/stats/team'),
   invites: () => request<{ invites: ClassicInvite[] }>('GET', '/invites'),
   invite: (id: string) => request<{ invite: ClassicInvite }>('GET', `/invites/${id}`),
-  sendInvite: (b: { message: string; userIds: string[] }) => request<{ invite: ClassicInvite }>('POST', '/invites', b),
+  sendInvite: (b: { message: string; userIds: string[]; challengeKey?: string | null }) => request<{ invite: ClassicInvite }>('POST', '/invites', b),
   deleteInvite: (id: string) => request<{ ok: true }>('DELETE', `/invites/${id}`),
   respondInvite: (id: string, response: 'in' | 'out') => request<{ invite: ClassicInvite }>('POST', `/invites/${id}/respond`, { response }),
+  challengeToday: () => request<{ dayKey: string; challenge: Challenge; completed: boolean }>('GET', '/challenges/today'),
+  challengeOptions: () => request<{ daily: string; options: Challenge[] }>('GET', '/challenges/options'),
+  challenges: () => request<{ runs: ChallengeRun[]; pending: ChallengeRun[] }>('GET', '/challenges'),
+  answerChallenge: (id: string, step: 'begun' | 'done', yes: boolean) => request<{ run: ChallengeRun }>('POST', `/challenges/${id}/answer`, { step, yes }),
+  badges: () => request<BadgeBoard>('GET', '/challenges/badges'),
   calendar: (month?: string) => request<CalendarMonth>('GET', `/matches/calendar${month ? `?month=${month}` : ''}`),
 
   chat: () => request<{ state: ChatState; messages: ChatMessage[]; mutes?: ChatMute[] }>('GET', '/chat'),
