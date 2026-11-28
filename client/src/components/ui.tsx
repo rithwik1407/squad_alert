@@ -59,7 +59,9 @@ export function PageHeader({ eyebrow, title, action, children }: { eyebrow?: str
     <header className="relative mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/[0.06] pb-4 sm:mb-7">
       <div className="min-w-0">
         {eyebrow && <p className="eyebrow mb-1.5">{eyebrow}</p>}
-        <h1 className="text-3xl font-bold leading-none text-white sm:text-4xl">{title}</h1>
+        <motion.h1 className="text-3xl font-bold leading-none text-white sm:text-4xl"
+          initial={{ opacity: 0, x: -10, filter: 'blur(6px)' }} animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>{title}</motion.h1>
         {children && <p className="mt-2 text-sm text-zinc-400">{children}</p>}
       </div>
       {/* Accent underline that draws in from the left, like a game menu header. */}
