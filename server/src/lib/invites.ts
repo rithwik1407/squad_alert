@@ -6,6 +6,7 @@ import { isGoneChat, telegramApi } from '../notifications/telegram.js';
 import type { Recipient } from '../notifications/types.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
 import { saveToInbox, type InboxEntry } from './inbox.js';
+import { syncChallengePlayers } from './challenges.js';
 
 /** Classic-match invites: send to the picked teammates on every channel they have, and record I'm in / I'm out. */
 
@@ -75,13 +76,15 @@ export interface Delivery { delivered: string[]; tgMessageId: number | null }
 
 /** Send one invite to each recipient on push and Telegram (both, not either). Returns channels (and the Telegram message) per user. */
 export async function deliverInvite(
-  invite: { id: string; message: string; fromIgn: string },
+  invite: { id: string; message: string; fromIgn: string; challenge?: { title: string; mode: string; badge: { name: string; emoji: string } } | null },
   recipients: Recipient[],
   ch: ChannelDeps = defaultChannels,
 ): Promise<Map<string, Delivery>> {
   const path = `/classic/${invite.id}`;
   const url = new URL(path, config.clientUrl).toString();
-  const body = invite.message ? `${invite.fromIgn}: ${invite.message}` : `${invite.fromIgn} wants to play a classic match.`;
+  const c = invite.challenge;
+  const base = invite.message ? `${invite.fromIgn}: ${invite.message}` : `${invite.fromIgn} wants to play a classic match.`;
+  const body = c ? `${base}\n🎯 Challenge: ${c.title} (${c.badge.emoji} ${c.badge.name} badge)` : base;
   const out = new Map<string, Delivery>();
   await ch.inbox?.(recipients.map((r) => r.id), { kind: 'invite', title: INVITE_TITLE, body, url: path }).catch(() => undefined);
   await Promise.all(recipients.map(async (r) => {
@@ -133,6 +136,8 @@ export async function respondToInvite(inviteId: string, userId: string, response
     { new: true },
   );
   if (!invite) return null;
+  // A challenge on this invite is for whoever is in.
+  await syncChallengePlayers(inviteId, userId, response).catch(() => undefined);
   const ids = [...new Set([String(invite.fromId), ...invite.recipients.map((r) => String(r.userId))])];
   const people = await mongoDispatchRepo.getRecipients(ids);
   const who = people.find((p) => p.id === userId);

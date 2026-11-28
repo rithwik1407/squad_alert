@@ -36,6 +36,7 @@ Notification: **"Match in 2 minutes!"** / *"Scrim 1 · Erangel · 9:00 PM. Join 
 - **Alerts** N minutes before start, to the selected 4 only: push first, Telegram fallback, captain-only alert if no squad is confirmed, Send now, Resend to failed.
 - **"I'm joining" replies** from the app, the push notification button, or the Telegram button. The captain sees who's on the way.
 - **Nightly team summary on Telegram** at 12:00 AM IST: the day's matches played, MVP of the day, top fragger, a player board and each match's result. Sent once to every player with Telegram linked; skipped on days with no matches.
+- **Squad challenges and badges**: a new BGMI challenge every day (Classic, WOW, TDM). Pick one when sending a classic invite; after the match the squad is asked "Did the match begin?" then "Was the challenge completed?", and finishing it earns a badge. See `/challenges`.
 - **Delivery history**, player inbox, attendance, kills/damage/MVP stats with charts, tournament placements.
 
 ## Squad Intelligence (AI assistant)

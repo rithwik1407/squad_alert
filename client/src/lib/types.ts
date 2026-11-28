@@ -123,7 +123,7 @@ export interface NotificationLog {
   error: string | null;
 }
 
-export type InboxKind = 'squad' | 'captain_alert' | 'selected' | 'results' | 'room' | 'invite' | 'ai_message';
+export type InboxKind = 'squad' | 'captain_alert' | 'selected' | 'results' | 'room' | 'invite' | 'ai_message' | 'challenge';
 
 /** Your own copy of a notification SquadSync sent you (kept 30 days, or until you delete it). */
 export interface InboxItem {
@@ -359,6 +359,8 @@ export interface ClassicInvite {
   id: string;
   from: InvitePerson;
   message: string;
+  /** The challenge picked for this match, if any. */
+  challenge: (Challenge & { daily: boolean; runId: string }) | null;
   createdAt: string | null;
   sentByMe: boolean;
   /** When the invite runs out and disappears (7 minutes after it was sent). */
@@ -366,4 +368,55 @@ export interface ClassicInvite {
   /** My answer when I was invited (undefined when I'm the sender). */
   myResponse?: 'in' | 'out' | null;
   recipients: { user: InvitePerson; response: 'in' | 'out' | null; respondedAt: string | null; delivered: string[] }[];
+}
+
+export type ChallengeMode = 'Classic' | 'WOW' | 'TDM';
+export type BadgeTier = 'bronze' | 'silver' | 'gold';
+
+/** One squad challenge from the pool. Finishing it earns its badge. */
+export interface Challenge {
+  key: string;
+  mode: ChallengeMode;
+  title: string;
+  text: string;
+  matches: number;
+  tier: BadgeTier;
+  badge: { name: string; emoji: string };
+}
+
+export type ChallengeStatus = 'waiting' | 'asking' | 'begun' | 'completed' | 'failed' | 'not_played' | 'cancelled' | 'expired';
+
+/** A challenge picked on a classic invite, and how it went. */
+export interface ChallengeRun {
+  id: string;
+  challenge: Challenge;
+  daily: boolean;
+  status: ChallengeStatus;
+  from: InvitePerson | null;
+  players: InvitePerson[];
+  askAt: string;
+  createdAt: string | null;
+  completedAt: string | null;
+  begun: { by: InvitePerson | null; at: string; yes: boolean } | null;
+  done: { by: InvitePerson | null; at: string; yes: boolean } | null;
+  /** I'm one of the players it was for. */
+  mine: boolean;
+  /** The question waiting on me right now, if any. */
+  ask: 'begun' | 'done' | null;
+}
+
+export interface BadgeCount {
+  key: string;
+  name: string;
+  emoji: string;
+  tier: BadgeTier;
+  mode: ChallengeMode;
+  count: number;
+  daily: number;
+  lastAt: string | null;
+}
+
+export interface BadgeBoard {
+  team: { total: number; badges: BadgeCount[] };
+  players: { user: InvitePerson; total: number; badges: BadgeCount[] }[];
 }

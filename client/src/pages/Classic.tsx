@@ -8,6 +8,7 @@ import { list, item } from '@/lib/motion';
 import { Avatar, Button, Card, Skeleton, cx } from '@/components/ui';
 import { EmptyState } from '@/components/EmptyState';
 import { AnswerButtons, clearsIn, useDeleteInvite, useNow } from '@/components/ClassicInvite';
+import { BadgeIcon, ModeTag } from '@/components/Challenges';
 
 /** One classic-match invite: the message, my answer, and who is in / out / still to answer. */
 export default function Classic() {
@@ -38,6 +39,16 @@ export default function Classic() {
               {i.message && <p className="mt-0.5 whitespace-pre-wrap break-words text-zinc-200">{i.message}</p>}
             </div>
           </div>
+          {i.challenge && (
+            <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-300/30 bg-amber-400/[0.06] p-3">
+              <BadgeIcon emoji={i.challenge.badge.emoji} tier={i.challenge.tier} size={40} />
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Challenge{i.challenge.daily && ' · Today'}<ModeTag mode={i.challenge.mode} /></p>
+                <p className="text-sm font-bold text-white">{i.challenge.title}</p>
+                <p className="text-[11px] text-zinc-400">{i.challenge.text} Earns the {i.challenge.badge.name} badge.</p>
+              </div>
+            </div>
+          )}
           {i.myResponse !== undefined && <AnswerButtons invite={i} className="mt-5" />}
           {(i.sentByMe || i.expiresAt) && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.06] pt-4">

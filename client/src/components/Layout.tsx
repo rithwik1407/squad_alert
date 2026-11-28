@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 're
 import { motion } from 'framer-motion';
 import { scrollTopNow } from '@/lib/smoothScroll';
 import { ErrorBoundary } from './ErrorBoundary';
-import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
+import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Medal, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useJoinRequests } from '@/lib/useJoinRequests';
 import { useInbox } from '@/lib/useInbox';
@@ -42,6 +42,7 @@ export function Layout() {
         { to: '/calendar', label: 'Calendar', icon: CalendarDays },
         { to: '/ai', label: 'Squad AI', icon: Sparkles },
         { to: '/calendar?view=scrims', label: 'Scrims', icon: BookUser },
+        { to: '/challenges', label: 'Challenges', icon: Medal },
         { to: '/team', label: 'Team', icon: Users },
         { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
@@ -52,6 +53,7 @@ export function Layout() {
         { to: '/calendar', label: 'Calendar', icon: CalendarDays },
         { to: '/ai', label: 'Squad AI', icon: Sparkles },
         { to: '/calendar?view=scrims', label: 'Scrims', icon: BookUser },
+        { to: '/challenges', label: 'Challenges', icon: Medal },
         { to: '/notifications', label: 'Inbox', icon: Bell },
         { to: '/settings', label: 'Settings', icon: Settings },
       ];

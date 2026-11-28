@@ -3,10 +3,12 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 import { ah, parse } from '../middleware/handlers.js';
 import { requireAuth } from '../middleware/auth.js';
-import { ClassicInvite, INVITE_RESPONSES, isAdmin, Team, User } from '../models/index.js';
+import { ChallengeRun, ClassicInvite, INVITE_RESPONSES, isAdmin, Team, User } from '../models/index.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { defaultChannels, deliverInvite, inviteEndsAt, liveInvite, purgeAt, respondToInvite } from '../lib/invites.js';
 import { mongoDispatchRepo } from '../scheduler/repo.js';
+import { cancelChallengeForInvite, startChallengeRun } from '../lib/challenges.js';
+import { challengeByKey, type Challenge } from '../lib/challengeCatalog.js';
 
 /**
  * "Play classic" invites between teammates. Only players send and get them; the captain / admin is left out.
@@ -32,6 +34,12 @@ async function serialize(list: Lean[], me: string) {
   const ids = [...new Set(list.flatMap((i) => [String(i.fromId), ...i.recipients.map((r) => String(r.userId))]))];
   const users = await User.find({ _id: { $in: ids } }).select('name ign avatar').lean();
   const by = new Map(users.map((u) => [String(u._id), { id: String(u._id), name: u.name, ign: u.ign, avatar: u.avatar ?? '' }]));
+  // The challenge picked on each invite, if any.
+  const runs = await ChallengeRun.find({ inviteId: { $in: list.map((i) => i._id) } }).select('inviteId challengeKey daily').lean();
+  const challengeOf = new Map<string, (Challenge & { daily: boolean; runId: string }) | null>(runs.map((r) => {
+    const c = challengeByKey(r.challengeKey);
+    return [String(r.inviteId), c ? { ...c, daily: Boolean(r.daily), runId: String(r._id) } : null];
+  }));
   const who = (id: unknown) => by.get(String(id)) ?? { id: String(id), name: 'Player', ign: 'Player', avatar: '' };
   return list.map((i) => {
     const mine = i.recipients.find((r) => String(r.userId) === me);
@@ -39,6 +47,7 @@ async function serialize(list: Lean[], me: string) {
       id: String(i._id),
       from: who(i.fromId),
       message: i.message ?? '',
+      challenge: challengeOf.get(String(i._id)) ?? null,
       createdAt: i.createdAt ?? null,
       sentByMe: String(i.fromId) === me,
       /** When it runs out and disappears (7 minutes after it was sent). */
@@ -69,8 +78,9 @@ invitesRouter.get('/:id', ah(async (req, res) => {
 }));
 
 invitesRouter.post('/', ah(async (req, res) => {
-  const { message, userIds } = parse(z.object({
+  const { message, userIds, challengeKey } = parse(z.object({
     message: z.string().trim().max(300).default(''),
+    challengeKey: z.string().max(60).nullish(),
     userIds: z.array(z.string().regex(/^[a-f\d]{24}$/i)).min(1, 'Pick at least one teammate').max(20),
   }), req.body);
   const teamId = teamIdOf(req);
@@ -83,11 +93,16 @@ invitesRouter.post('/', ah(async (req, res) => {
   const picked = [...new Set(userIds)].filter((id) => id !== me);
   if (picked.some((id) => !onTeam.has(id))) throw badRequest('You can only invite your teammates');
   if (!picked.length) throw badRequest('Pick at least one teammate');
+  if (challengeKey && !challengeByKey(challengeKey)) throw badRequest('That challenge no longer exists. Pick another one.');
   const invite = await ClassicInvite.create({
     teamId, fromId: me, message, recipients: picked.map((userId) => ({ userId })), expireAt: purgeAt(Date.now()),
   });
+  const challenge = challengeByKey(challengeKey);
+  if (challenge) {
+    await startChallengeRun({ teamId: String(teamId), inviteId: String(invite._id), fromId: me, challengeKey: challenge.key, invitedIds: picked, sentAt: invite.createdAt });
+  }
   const recipients = await mongoDispatchRepo.getRecipients(picked);
-  const delivered = await deliverInvite({ id: String(invite._id), message, fromIgn: req.user!.ign || req.user!.name }, recipients);
+  const delivered = await deliverInvite({ id: String(invite._id), message, fromIgn: req.user!.ign || req.user!.name, challenge }, recipients);
   await Promise.all(picked.map((uid) => ClassicInvite.updateOne(
     { _id: invite._id, 'recipients.userId': new Types.ObjectId(uid) },
     { $set: { 'recipients.$.delivered': delivered.get(uid)?.delivered ?? [], 'recipients.$.tgMessageId': delivered.get(uid)?.tgMessageId ?? null } },
@@ -111,6 +126,7 @@ invitesRouter.delete('/:id', ah(async (req, res) => {
   if (!i) throw notFound('Invite not found. It may have expired.');
   if (String(i.fromId) !== String(req.user!._id)) throw forbidden('Only the player who sent it can delete it');
   await ClassicInvite.deleteOne({ _id: i._id });
+  await cancelChallengeForInvite(String(i._id));
   // Take it off Telegram too.
   const withMsg = i.recipients.filter((r) => r.tgMessageId);
   if (withMsg.length) {

@@ -25,6 +25,7 @@ import { CheckinBoard } from '@/components/CheckinBoard';
 import { WHATSAPP_ENABLED } from '@/lib/features';
 import { PlayClassicCard, useHasLiveInvite } from '@/components/ClassicInvite';
 import { DailyTip } from '@/components/DailyTip';
+import { ChallengeHomeCard } from '@/components/Challenges';
 
 export default function Dashboard() {
   const { isCaptain } = useAuth();
@@ -126,6 +127,8 @@ function CaptainDashboard() {
         )}
 
         {next && !next.locked && team && <QuickPicker m={next} members={team.members} />}
+
+        <ChallengeHomeCard />
 
         <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
           <section aria-labelledby="today-h" className="min-w-0">
@@ -248,6 +251,8 @@ function PlayerDashboard() {
         )}
 
         <motion.div layout className={invitesLive ? 'order-first' : undefined}><PlayClassicCard /></motion.div>
+
+        <ChallengeHomeCard />
 
         <motion.div variants={item} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Link to="/stats?show=played" aria-label="Matches you played: open the list" className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-400/70">

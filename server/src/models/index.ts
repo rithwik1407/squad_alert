@@ -16,3 +16,4 @@ export * from './ClassicInvite.js';
 export * from './AiProposal.js';
 export * from './AiTurn.js';
 export * from './InboxItem.js';
+export * from './ChallengeRun.js';

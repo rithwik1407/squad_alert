@@ -6,6 +6,9 @@ import { telegramApi } from '../notifications/telegram.js';
 import { markJoining } from '../lib/availability.js';
 import { Match } from '../models/index.js';
 import { respondToInvite } from '../lib/invites.js';
+import { answerChallenge, begunText, doneKeyboard, doneText } from '../lib/challenges.js';
+import { challengeByKey } from '../lib/challengeCatalog.js';
+import { ChallengeRun } from '../models/index.js';
 
 /**
  * Telegram webhook. Set it once with:
@@ -58,6 +61,12 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
       }
       return;
     }
+    // After-match challenge check: "Did the match begin?" then "Was the challenge completed?".
+    const chk = String(cb.data ?? '').match(/^ch([bd]):([a-f0-9]{24}):([yn])$/);
+    if (chk) {
+      await handleChallengeButton(cb, chk[1] === 'b' ? 'begun' : 'done', chk[2], chk[3] === 'y');
+      return;
+    }
     const m = String(cb.data ?? '').match(/^join:([a-f0-9]{24})$/);
     const user = m ? await User.findOne({ telegramChatId: String(cb.from?.id ?? cb.message?.chat?.id) }) : null;
     let text = 'Could not record that. Open SquadSync instead.';
@@ -97,3 +106,44 @@ telegramRouter.post('/webhook', ah(async (req, res) => {
     }).catch(() => {});
   }
 }));
+
+type Callback = { id: string; from?: { id?: number }; message?: { message_id?: number; chat: { id: number } } };
+
+async function handleChallengeButton(cb: Callback, step: 'begun' | 'done', runId: string, yes: boolean) {
+  const reply = (text: string) => telegramApi('answerCallbackQuery', { callback_query_id: cb.id, text }).catch(() => {});
+  const edit = (text: string, keyboard?: unknown) => cb.message?.message_id
+    ? telegramApi('editMessageText', {
+        chat_id: cb.message.chat.id, message_id: cb.message.message_id, text, parse_mode: 'HTML',
+        reply_markup: keyboard ?? { inline_keyboard: [] },
+      }).catch(() => {})
+    : Promise.resolve();
+  const who = await User.findOne({ telegramChatId: String(cb.from?.id ?? cb.message?.chat?.id) }).lean();
+  if (!who) return reply('This Telegram is not linked to SquadSync. Link it in Settings.');
+  const run = await answerChallenge(runId, String(who._id), step, yes);
+  const c = challengeByKey((run ?? (await ChallengeRun.findById(runId).lean()))?.challengeKey);
+  if (!run) {
+    // A teammate answered first: show where the check is now.
+    const cur = await ChallengeRun.findById(runId).lean();
+    if (cur?.status === 'begun' && c && cur.playerIds.some((p) => String(p) === String(who._id))) {
+      await edit(doneText(c), doneKeyboard(runId));
+      return reply('A teammate said the match began.');
+    }
+    await edit(c ? `${begunText(c).split('\n\n')[0]}\n\nAlready answered${cur ? `: ${statusLine(cur.status)}` : ''}.` : 'This check is closed.');
+    return reply('This check was already answered.');
+  }
+  if (!c) return reply('Saved.');
+  if (run.status === 'begun') {
+    await edit(doneText(c), doneKeyboard(runId));
+    return reply('Nice. Now: was the challenge completed?');
+  }
+  await edit(`${begunText(c).split('\n\n')[0]}\n\n${statusLine(run.status, c.badge)}`);
+  return reply(run.status === 'completed' ? `🏅 ${c.badge.name} badge earned!` : 'Saved. Next time!');
+}
+
+function statusLine(status: string, badge?: { name: string; emoji: string }) {
+  if (status === 'completed') return badge ? `🏅 Completed! Badge earned: ${badge.emoji} ${badge.name}` : '🏅 Completed!';
+  if (status === 'failed') return '😤 Not completed this time.';
+  if (status === 'not_played') return "❌ The match didn't happen.";
+  if (status === 'expired') return 'Closed without an answer.';
+  return status;
+}

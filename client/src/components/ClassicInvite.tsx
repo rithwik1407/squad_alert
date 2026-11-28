@@ -9,6 +9,7 @@ import { ago } from '@/lib/time';
 import type { ClassicInvite, Member } from '@/lib/types';
 import { Avatar, Button, Card, cx } from './ui';
 import { Modal, useDialog } from './Modal';
+import { ChallengeChip, ChallengePicker } from './Challenges';
 import { useToast } from './Toast';
 
 const DEFAULT_MSG = 'Can we play a classic match?';
@@ -137,6 +138,7 @@ function InviteRow({ invite: i, now }: { invite: ClassicInvite; now: number }) {
         <Avatar name={i.from.ign} src={i.from.avatar} size={30} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">{i.sentByMe ? 'You asked' : i.from.ign}{i.message ? `: ${i.message}` : ''}</p>
+          {i.challenge && <ChallengeChip c={i.challenge} className="my-0.5" />}
           <p className="text-[11px] text-zinc-500">{ins} in · {i.recipients.filter((r) => r.response === 'out').length} out · {i.recipients.filter((r) => !r.response).length} waiting{i.createdAt ? ` · ${ago(i.createdAt)}` : ''}</p>
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" aria-hidden />
@@ -188,15 +190,17 @@ function InviteComposer({ open, onClose }: { open: boolean; onClose: () => void 
   const toast = useToast();
   const [msg, setMsg] = useState(DEFAULT_MSG);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [challengeKey, setChallengeKey] = useState<string | null>(null);
   const all = picked.size === mates.length && mates.length > 0;
   const toggle = (id: string) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const send = useMutation({
-    mutationFn: () => api.sendInvite({ message: msg.trim(), userIds: [...picked] }),
+    mutationFn: () => api.sendInvite({ message: msg.trim(), userIds: [...picked], challengeKey }),
     onSuccess: ({ invite }) => {
       const reached = invite.recipients.filter((r) => r.delivered.length).length;
       toast.success(`Sent to ${invite.recipients.length}${reached < invite.recipients.length ? ` (${invite.recipients.length - reached} have no alerts turned on)` : ''}`);
       qc.invalidateQueries({ queryKey: ['invites'] });
       setPicked(new Set());
+      setChallengeKey(null);
       setMsg(DEFAULT_MSG);
       onClose();
     },
@@ -236,6 +240,10 @@ function InviteComposer({ open, onClose }: { open: boolean; onClose: () => void 
           })}
           {!mates.length && <li className="text-sm text-zinc-400">No teammates yet.</li>}
         </ul>
+        <div className="mt-4">
+          <ChallengePicker value={challengeKey} onChange={setChallengeKey} />
+          {challengeKey && <p className="mt-1.5 text-[11px] text-zinc-500">It's for you and everyone who says I'm in. After the match, you'll be asked how it went.</p>}
+        </div>
         <div className="mt-4 flex gap-2">
           <Button type="submit" className="flex-1" loading={send.isPending} disabled={!picked.size} icon={<Send className="h-4 w-4" aria-hidden />}>
             Send{picked.size ? ` to ${picked.size}` : ''}
