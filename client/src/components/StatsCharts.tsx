@@ -13,12 +13,10 @@ export const ORANGE = '#ff8a1f';
 export const MUTED = '#71717a';
 export const GRID = 'rgba(255,255,255,.06)';
 
-export type MetricKey = 'kills' | 'damage' | 'assists' | 'survivalMin' | 'mvpScore';
+export type MetricKey = 'kills' | 'damage' | 'mvpScore';
 export const METRICS: { key: MetricKey; label: string; short: string; unit?: string }[] = [
   { key: 'kills', label: 'Kills', short: 'Kills' },
   { key: 'damage', label: 'Damage', short: 'Dmg' },
-  { key: 'assists', label: 'Assists', short: 'Ast' },
-  { key: 'survivalMin', label: 'Survival', short: 'Surv', unit: 'min' },
   { key: 'mvpScore', label: 'MVP score', short: 'MVP' },
 ];
 export const metricOf = (k: MetricKey) => METRICS.find((m) => m.key === k)!;

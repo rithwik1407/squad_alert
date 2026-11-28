@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BellRing, CalendarPlus, Check, Inbox, KeyRound, MapPin, Send, Swords, Target, Trophy } from 'lucide-react';
+import { BellRing, CalendarPlus, Check, ChevronRight, Inbox, KeyRound, MapPin, Send, Swords, Target, Trophy } from 'lucide-react';
 import { useInbox } from '@/lib/useInbox';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -250,7 +250,9 @@ function PlayerDashboard() {
         <motion.div layout className={invitesLive ? 'order-first' : undefined}><PlayClassicCard /></motion.div>
 
         <motion.div variants={item} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Matches" value={stats.data?.totals.matches ?? null} icon={<Swords className="h-3.5 w-3.5" aria-hidden />} />
+          <Link to="/stats?show=played" aria-label="Matches you played: open the list" className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-400/70">
+            <StatTile label="Matches" value={stats.data?.totals.matches ?? null} hint={<span className="inline-flex items-center gap-0.5 text-ember-300">View played<ChevronRight className="h-3 w-3" aria-hidden /></span>} icon={<Swords className="h-3.5 w-3.5" aria-hidden />} />
+          </Link>
           <StatTile label="Kills" value={stats.data?.totals.kills ?? null} icon={<Target className="h-3.5 w-3.5" aria-hidden />} />
           <StatTile label="MVPs" value={stats.data?.totals.mvps ?? null} icon={<Trophy className="h-3.5 w-3.5" aria-hidden />} />
           <StatTile label="Attendance" value={stats.data?.totals.attendanceOf ? stats.data.totals.attended ?? 0 : null} of={stats.data?.totals.attendanceOf} icon={<Check className="h-3.5 w-3.5" aria-hidden />} />
