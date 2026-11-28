@@ -1,5 +1,5 @@
 /* SquadSync service worker: web push (FCM data messages) + light offline shell. */
-const CACHE = 'squadsync-v6';
+const CACHE = 'squadsync-v7';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/rare-icon-192.png', '/icons/badge-96.png'];
 
 self.addEventListener('install', (e) => {
@@ -59,7 +59,7 @@ self.addEventListener('push', (e) => {
       actions: /^classic-[a-f0-9]{24}$/.test(d.tag || '')
         ? [{ action: 'in', title: "✅ I'm in" }, { action: 'out', title: "❌ I'm out" }]
         : (d.tag || '').startsWith('match-')
-          ? [{ action: 'join', title: "✅ I'm joining" }, { action: 'open', title: 'Open match' }]
+          ? [{ action: 'join', title: "✅ I'm joining" }, { action: 'bgmi', title: '🎮 Open BGMI' }]
           : [{ action: 'open', title: 'Open' }],
     }),
   ]));
@@ -74,9 +74,18 @@ self.addEventListener('notificationclick', (e) => {
       fetch(`/api/invites/${inviteId}/respond?via=push`, {
         method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ response: e.action }),
       })
-        .then((r) => { if (!r.ok) throw new Error(String(r.status)); })
+        .then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          // In: open the page with the Open BGMI button, ready to jump into the game.
+          if (e.action === 'in') return self.clients.openWindow('/bgmi');
+        })
         .catch(() => self.clients.openWindow(`/classic/${inviteId}`)),
     );
+    return;
+  }
+  // Room ID alert: open the page with copy buttons and the Open BGMI button.
+  if (e.action === 'bgmi' && matchId) {
+    e.waitUntil(self.clients.openWindow(`/bgmi?match=${matchId}`));
     return;
   }
   if (e.action === 'join' && matchId) {
