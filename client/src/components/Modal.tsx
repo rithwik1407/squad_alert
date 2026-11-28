@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from './ui';
+import { setScrollLocked } from '@/lib/smoothScroll';
 
 /**
  * One pop-up shell for the whole app. It is portalled to <body> so a transformed parent (page transitions,
@@ -16,8 +17,9 @@ export function Modal({ open, onClose, labelledBy, children }: {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    setScrollLocked(true);
     window.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+    return () => { document.body.style.overflow = prev; setScrollLocked(false); window.removeEventListener('keydown', onKey); };
   }, [open, onClose]);
 
   return createPortal(
@@ -26,6 +28,7 @@ export function Modal({ open, onClose, labelledBy, children }: {
         <motion.div
           key="modal"
           role="dialog" aria-modal="true" aria-labelledby={labelledBy}
+          data-lenis-prevent
           className="fixed inset-0 z-[90] overflow-y-auto overscroll-contain bg-black/70"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.15 } }}
           onClick={onClose}

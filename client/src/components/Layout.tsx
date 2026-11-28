@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useScroll, useSpring } from 'framer-motion';
+import { scrollTopNow } from '@/lib/smoothScroll';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Bell, BookUser, CalendarClock, CalendarDays, Home, LogOut, Settings, Sparkles, Users, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -20,7 +21,7 @@ export function Layout() {
   const navType = useNavigationType();
   // New page starts at the top (the old scroll position made pages open half-way down on mobile). Back/forward keeps the browser's position.
   useEffect(() => {
-    if (navType !== 'POP') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (navType !== 'POP') scrollTopNow();
   }, [loc.pathname, navType]);
   // Teammates' changes (slots, results, squads, check-ins) show up without a refresh.
   useLiveSync(Boolean(team));
@@ -77,6 +78,8 @@ export function Layout() {
 
   return (
     <div className="min-h-screen lg:pl-64">
+      <ScrollProgress />
+      <RouteSweep key={loc.pathname} />
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[80] btn-primary">Skip to content</a>
 
       {/* Desktop sidebar */}
@@ -148,8 +151,9 @@ export function Layout() {
         {/* Enter-only page transition (opacity + transform). No exit/wait phase, so a lazy page can never get stuck invisible. */}
         <ErrorBoundary resetKey={loc.pathname}>
           <Suspense fallback={<PageSkeleton />}>
-            <motion.div key={loc.pathname} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}>
+            <motion.div key={loc.pathname} initial={{ opacity: 0, y: 18, scale: 0.985, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none', transform: 'none' } }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
               <Outlet />
             </motion.div>
           </Suspense>
@@ -181,6 +185,24 @@ export function Layout() {
         </ul>
       </nav>
     </div>
+  );
+}
+
+/** Thin accent bar along the very top that fills as you scroll down the page. */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 260, damping: 40, restDelta: 0.001 });
+  return (
+    <motion.div aria-hidden style={{ scaleX }}
+      className="pointer-events-none fixed inset-x-0 top-0 z-[70] h-[2px] origin-left bg-gradient-to-r from-ember-600 via-ember-400 to-ember-300 shadow-[0_0_10px_rgb(var(--ember-500)/.8)] lg:left-64" />
+  );
+}
+
+/** A quick light streak across the top on every page change, like a menu switching in a game. */
+function RouteSweep() {
+  return (
+    <motion.span aria-hidden className="pointer-events-none fixed left-0 top-0 z-[71] h-[2px] w-1/3 bg-gradient-to-r from-transparent via-white to-transparent lg:left-64"
+      initial={{ x: '-100%', opacity: 1 }} animate={{ x: '320%', opacity: 0 }} transition={{ duration: 0.7, ease: [0.65, 0, 0.35, 1] }} />
   );
 }
 

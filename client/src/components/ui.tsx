@@ -14,7 +14,9 @@ export const Card = forwardRef<HTMLDivElement, HTMLMotionProps<'div'> & { glow?:
       ref={ref}
       variants={item}
       initial="initial"
-      animate="animate"
+      // Cards rise in as they scroll into view (once), so long pages feel alive instead of all popping at load.
+      whileInView="animate"
+      viewport={{ once: true, margin: '0px 0px -8% 0px' }}
       whileHover={interactive ? { y: -3, transition: spring } : undefined}
       whileTap={interactive ? { scale: 0.985 } : undefined}
       className={cx('glass gborder p-4 sm:p-5', glow && 'shadow-glow', className)}

@@ -9,7 +9,9 @@ import { DialogProvider } from './components/Modal';
 import { App } from './App';
 import { ApiError, isTransient, retryDelay } from './lib/api';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import 'lenis/dist/lenis.css';
 import './index.css';
+import { startSmoothScroll } from './lib/smoothScroll';
 import { listenForAlerts } from './lib/alertSound';
 
 const qc = new QueryClient({
@@ -46,6 +48,7 @@ createRoot(document.getElementById('root')!).render(
 );
 
 listenForAlerts();
+startSmoothScroll();
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

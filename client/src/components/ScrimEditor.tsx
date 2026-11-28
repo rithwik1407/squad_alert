@@ -46,19 +46,19 @@ export function ScrimEditor({ open, onClose, series, name }: { open: boolean; on
     <Modal open={open} onClose={onClose} labelledBy="scrim-editor-title">
       <form onSubmit={submit} className="space-y-3">
         <h2 id="scrim-editor-title" className="text-xl font-bold text-white">{series ? 'Edit organizer' : 'Add scrim organizer'}</h2>
-        <Field label="Scrim / tournament name" error={errors.name} hint="Use the same name you put on matches, so their pages show this card.">
+        <Field label="Scrim / tournament name" error={errors.name} hint="Same name as on matches">
           <input className="input" value={f.name} onChange={set('name')} placeholder="EG Daily Scrims" required maxLength={60} autoFocus={!series && !name} />
         </Field>
         <Field label="Discord server invite" error={errors.discordInvite}>
           <input className="input" value={f.discordInvite} onChange={set('discordInvite')} placeholder="https://discord.gg/..." inputMode="url" maxLength={300} />
         </Field>
-        <Field label="Room ID / slot list channel" error={errors.discordChannel} hint="Optional. Right-click the channel in Discord and Copy Link.">
+        <Field label="Room ID / slot list channel" error={errors.discordChannel} hint="Optional Discord link">
           <input className="input" value={f.discordChannel} onChange={set('discordChannel')} placeholder="https://discord.com/channels/..." inputMode="url" maxLength={300} />
         </Field>
         <Field label="Organizer" error={errors.organizer}>
           <input className="input" value={f.organizer} onChange={set('organizer')} placeholder="Name or org" maxLength={80} />
         </Field>
-        <Field label="Contact" error={errors.contact} hint="Discord handle, WhatsApp number, Instagram...">
+        <Field label="Contact" error={errors.contact} hint="Discord, WhatsApp or Insta">
           <input className="input" value={f.contact} onChange={set('contact')} placeholder="@eg_admin · +91 98xxxxxx" maxLength={200} />
         </Field>
         <Field label="Notes" error={errors.notes}>

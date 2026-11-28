@@ -183,7 +183,7 @@ export default function Settings() {
                 <Button variant="ghost" loading={busy === 'tg'} onClick={linkTelegram} disabled={!cfg.data?.telegramBot} icon={<ExternalLink className="h-4 w-4" aria-hidden />}>
                   Link Telegram{cfg.data?.telegramBot ? ` (@${cfg.data.telegramBot})` : ''}
                 </Button>
-                <p className="mt-2 text-xs text-zinc-500">Opens the bot with a one-time code. Tap <b>Start</b> and you're linked.</p>
+                <p className="mt-2 text-xs text-zinc-500">Tap <b>Start</b> in the bot to link.</p>
                 {tgLink && (
                   <div className="mt-3 rounded-xl bg-white/[0.04] p-3 text-xs text-zinc-300 ring-1 ring-white/10">
                     <p>Still says not linked? Open <a className="text-sky-300 underline" href={tgLink} target="_blank" rel="noopener noreferrer">the bot</a> and send it this code:</p>
@@ -229,7 +229,7 @@ export default function Settings() {
               <Field label="Name"><input name="name" className="input" defaultValue={user.name} required /></Field>
               <Field label="IGN"><input name="ign" className="input" defaultValue={user.ign} required /></Field>
               <Field label="BGMI UID"><input name="bgmiId" className="input font-mono" defaultValue={user.bgmiId} inputMode="numeric" /></Field>
-              <Field label="In-game role" hint="Squad AI uses this to keep the squad balanced.">
+              <Field label="In-game role" hint="Helps Squad AI balance squads">
                 <select name="gameRole" className="input" defaultValue={user.gameRole ?? ''}>
                   <option value="">Not set</option>
                   {GAME_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -237,7 +237,7 @@ export default function Settings() {
               </Field>
               <Field label="Avatar link"
                 error={avatarBroken ? "That link doesn't open as an image. For Google Drive, set sharing to “Anyone with the link”, or use Upload photo." : undefined}
-                hint="Upload a photo, or paste an image link. Google Drive share links work if sharing is set to “Anyone with the link”.">
+                hint="Upload or paste a link (public Drive links work)">
                 <input className="input" value={avatar.startsWith('data:') ? '' : avatar} placeholder={avatar.startsWith('data:') ? 'Uploaded photo' : 'https://…'}
                   onChange={(e) => { setAvatar(e.target.value.trim()); setAvatarBroken(false); }} />
               </Field>
@@ -279,7 +279,7 @@ function LoginCard({ email, onSaved }: { email: string; onSaved: () => Promise<u
       <p className="mb-4 text-sm text-zinc-400">Change your email or password. Your current password is needed to save.</p>
       <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Email"><input name="email" type="email" className="input" defaultValue={email} key={email} autoComplete="email" /></Field>
-        <Field label="New password" hint="Optional, 8+ characters"><input name="newPassword" type="password" className="input" minLength={8} autoComplete="new-password" /></Field>
+        <Field label="New password" hint="8+ characters"><input name="newPassword" type="password" className="input" minLength={8} autoComplete="new-password" /></Field>
         <Field label="Confirm new password"><input name="confirm" type="password" className="input" autoComplete="new-password" /></Field>
         <Field label="Current password"><input name="currentPassword" type="password" className="input" required autoComplete="current-password" /></Field>
         <div className="sm:col-span-2 lg:col-span-4"><Button type="submit" loading={busy}>Save login</Button></div>
@@ -312,7 +312,7 @@ function WhatsAppCard({ number, on, ready, onToggle, onSaved }: {
       </div>
       <form onSubmit={save} className="mt-4 flex flex-wrap items-end gap-3">
         <div className="min-w-[14rem] flex-1">
-          <Field label="WhatsApp number" hint="With country code. 10-digit Indian numbers get +91 added.">
+          <Field label="WhatsApp number" hint="+91 added for Indian numbers">
             <input name="phone" type="tel" className="input font-mono" defaultValue={number ? `+${number}` : ''} key={number} placeholder="+91 98765 43210" autoComplete="tel" />
           </Field>
         </div>

@@ -9,27 +9,55 @@ import { Avatar, cx } from './ui';
 import { dayIST, isTodayIST, timeIST, splitDuration } from '@/lib/time';
 import type { ChatMessage, ChatMode, ChatMute, ChatState, Member } from '@/lib/types';
 
+const isPhone = () => typeof window !== 'undefined' && window.innerWidth < 1024;
+
 /**
- * Phones: keep the chat sheet inside the part of the screen you can actually see. On iPhone the keyboard
- * doesn't shrink the page, so a plain fixed sheet slides up under the status bar when you start typing.
+ * Phones: keep the chat sheet exactly inside the part of the screen you can see. On iPhone the keyboard
+ * doesn't shrink the page, so a plain fixed sheet slides under the status bar or behind the keyboard.
+ * We follow the visual viewport, drop the top gap while the keyboard is up, and hold the page behind still.
  */
 function useMobileSheetBox() {
   const [box, setBox] = useState<{ top: number; height: number } | null>(null);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
+    let raf = 0;
     const update = () => {
-      if (window.innerWidth >= 1024) { setBox(null); return; }
-      const gap = Math.min(vv.height * 0.08, 64);
-      setBox({ top: vv.offsetTop + gap, height: vv.height - gap });
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!isPhone()) { setBox(null); return; }
+        const h = vv ? vv.height : window.innerHeight;
+        const top = vv ? vv.offsetTop : 0;
+        const keyboard = h < window.innerHeight * 0.8;
+        const gap = keyboard ? 0 : Math.min(h * 0.07, 56);
+        setBox({ top: Math.round(top + gap), height: Math.round(h - gap) });
+      });
     };
     update();
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
     window.addEventListener('resize', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
+    return () => {
+      cancelAnimationFrame(raf);
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
   }, []);
   return box;
+}
+
+/** Freeze the page behind the chat on phones, and put it back exactly where it was on close. */
+function useLockPageScroll() {
+  useEffect(() => {
+    if (!isPhone()) return;
+    const y = window.scrollY;
+    const root = document.documentElement;
+    root.classList.add('sheet-open');
+    return () => {
+      root.classList.remove('sheet-open');
+      window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior });
+    };
+  }, []);
 }
 
 const OPEN_POLL_MS = 5000;
@@ -152,6 +180,8 @@ function ChatPanel({ teamName, members, meId, onClose, onSeen }: {
   const qc = useQueryClient();
   const toast = useToast();
   const box = useMobileSheetBox();
+  useLockPageScroll();
+  const phone = isPhone();
   const [showAdmin, setShowAdmin] = useState(false);
   const q = useQuery({ queryKey: ['chat'], queryFn: () => api.chat(), refetchInterval: OPEN_POLL_MS });
   const state = q.data?.state;
@@ -178,12 +208,13 @@ function ChatPanel({ teamName, members, meId, onClose, onSeen }: {
       <motion.section
         role="dialog"
         aria-label="Team chat"
-        initial={{ opacity: 0, scale: 0.6, y: 40 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.6, y: 40, transition: { duration: 0.18 } }}
-        transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+        // Phones: a sheet that slides up from the bottom. Desktop: pops out of the chat button's corner.
+        initial={phone ? { y: '100%' } : { opacity: 0, scale: 0.6, y: 40 }}
+        animate={phone ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+        exit={phone ? { y: '100%', transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } } : { opacity: 0, scale: 0.6, y: 40, transition: { duration: 0.18 } }}
+        transition={phone ? { type: 'spring', stiffness: 380, damping: 38 } : { type: 'spring', stiffness: 360, damping: 30 }}
         style={{ transformOrigin: 'bottom right', ...(box ? { top: box.top, height: box.height, bottom: 'auto' } : {}) }}
-        className="glass gborder fixed inset-x-0 bottom-0 top-[8vh] z-[60] flex flex-col overflow-hidden rounded-b-none bg-ink-900 shadow-2xl lg:inset-x-auto lg:bottom-6 lg:right-6 lg:top-auto lg:h-[min(600px,calc(100vh-3rem))] lg:w-[400px] lg:rounded-b-2xl"
+        className="glass gborder fixed inset-x-0 bottom-0 top-[8dvh] z-[60] flex flex-col overflow-hidden overscroll-contain rounded-b-none bg-ink-900 shadow-2xl lg:inset-x-auto lg:bottom-6 lg:right-6 lg:top-auto lg:h-[min(600px,calc(100vh-3rem))] lg:w-[400px] lg:rounded-b-2xl"
       >
         <header className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3">
           <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-b from-ember-400 to-ember-600 text-ink-950">
@@ -206,7 +237,7 @@ function ChatPanel({ teamName, members, meId, onClose, onSeen }: {
 
         <AnimatePresence mode="wait" initial={false}>
           {showAdmin && state?.isAdmin ? (
-            <motion.div key="admin" className="flex-1 overflow-y-auto"
+            <motion.div key="admin" className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
               initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 30 }} transition={{ duration: 0.2 }}>
               <AdminControls state={state} mutes={q.data?.mutes ?? []} members={members.filter((m) => m.id !== meId)} />
             </motion.div>
@@ -246,6 +277,14 @@ function MessageList({ messages, loading, canDelete, onDelete }: {
     const el = ref.current;
     if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: lastId ? 'smooth' : 'auto' });
   }, [lastId]);
+  // Keyboard opens or closes: the list gets shorter/taller, keep the newest message in view.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => { if (stick.current) el.scrollTop = el.scrollHeight; });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
 
   if (loading) {
     return <div className="grid flex-1 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-ember-400" aria-label="Loading messages" /></div>;
@@ -254,8 +293,9 @@ function MessageList({ messages, loading, canDelete, onDelete }: {
   return (
     <div
       ref={ref}
+      data-lenis-prevent
       onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}
-      className="flex-1 space-y-1.5 overflow-y-auto px-3 py-4"
+      className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-4"
       aria-live="polite"
     >
       {messages.length === 0 && (
@@ -391,6 +431,7 @@ function Composer({ state }: { state: ChatState }) {
         onKeyDown={onKey}
         rows={1}
         maxLength={1000}
+        enterKeyHint="send"
         placeholder={state.isAdmin && !state.open ? 'Chat is closed, but you can still post…' : 'Message the squad…'}
         aria-label="Message"
         className="input max-h-32 min-h-[44px] flex-1 resize-none py-3"
@@ -424,7 +465,7 @@ function AdminControls({ state, mutes, members }: { state: ChatState; mutes: Cha
       <ScheduleControls state={state} />
       <section>
         <h3 className="mb-1 flex items-center gap-2 text-base font-bold text-white"><ShieldBan className="h-4 w-4 text-ember-400" /> Mute players</h3>
-        <p className="mb-3 text-xs text-zinc-400">A muted player can still read the chat but can't send messages until the time runs out or you unmute them.</p>
+        <p className="mb-3 text-xs text-zinc-400">Muted players can read but not send.</p>
         <ul className="space-y-2">
           {members.map((m) => <MuteRow key={m.id} member={m} mute={mutes.find((x) => x.userId === m.id)} />)}
           {members.length === 0 && <li className="text-sm text-zinc-500">No teammates yet.</li>}
@@ -457,7 +498,7 @@ function ScheduleControls({ state }: { state: ChatState }) {
   return (
     <section>
       <h3 className="mb-1 flex items-center gap-2 text-base font-bold text-white"><Clock className="h-4 w-4 text-ember-400" /> Chat timings</h3>
-      <p className="mb-3 text-xs text-zinc-400">When teammates can send messages. You can always post. Times are India time.</p>
+      <p className="mb-3 text-xs text-zinc-400">When teammates can post (IST). You always can.</p>
       <div className="relative grid grid-cols-3 rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/[0.06]" role="radiogroup" aria-label="Chat timings">
         {opts.map((o) => (
           <button key={o.v} type="button" role="radio" aria-checked={mode === o.v} onClick={() => setMode(o.v)}
