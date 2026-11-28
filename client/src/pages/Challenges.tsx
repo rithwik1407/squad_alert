@@ -7,7 +7,7 @@ import { ago } from '@/lib/time';
 import { list, item } from '@/lib/motion';
 import type { ChallengeRun } from '@/lib/types';
 import { Avatar, Card, PageHeader, Skeleton, cx } from '@/components/ui';
-import { BadgeIcon, BadgeRow, ChallengeCheck, ModeTag, TIER, useChallenges, useTodayChallenge } from '@/components/Challenges';
+import { BadgeIcon, BadgeRow, ChallengeCheck, TIER, useChallenges } from '@/components/Challenges';
 
 const STATUS: Record<ChallengeRun['status'], { label: string; cls: string; icon: typeof Clock }> = {
   waiting: { label: 'Match on', cls: 'text-sky-300', icon: Clock },
@@ -24,35 +24,16 @@ const STATUS: Record<ChallengeRun['status'], { label: string; cls: string; icon:
 export default function Challenges() {
   const [params] = useSearchParams();
   const focus = params.get('check');
-  const today = useTodayChallenge();
   const runs = useChallenges();
   const badges = useQuery({ queryKey: ['badges'], queryFn: api.badges, staleTime: 30_000 });
-  const c = today.data?.challenge;
   const pending = runs.data?.pending ?? [];
 
   return (
     <div>
       <PageHeader eyebrow="Squad" title="Challenges">
-        A new challenge every day. Pick one when you send a classic invite; after the match, the squad says how it went and earns the badge.
+        Pick a challenge when you send a classic invite. After the match, the squad marks it completed or not, and earns the badge.
       </PageHeader>
       <motion.div variants={list} initial="initial" animate="animate" className="space-y-6">
-        <Card glow>
-          {c ? (
-            <div className="flex items-start gap-4">
-              <BadgeIcon emoji={c.badge.emoji} tier={c.tier} size={60} />
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-300">Today<ModeTag mode={c.mode} /></p>
-                <h2 className="mt-1 text-2xl font-bold text-white">{c.title}</h2>
-                <p className="mt-1 text-sm text-zinc-300">{c.text}</p>
-                <p className="mt-2 text-xs text-zinc-500">
-                  {c.matches > 1 ? `Across ${c.matches} matches. ` : ''}Badge: {c.badge.emoji} <span className={TIER[c.tier].text}>{c.badge.name}</span> ({TIER[c.tier].label})
-                  {today.data?.completed && <span className="ml-2 font-semibold text-emerald-300">Done today!</span>}
-                </p>
-              </div>
-            </div>
-          ) : <Skeleton className="h-24" />}
-        </Card>
-
         {pending.length > 0 && (
           <motion.section variants={item} aria-labelledby="chk-h">
             <h2 id="chk-h" className="mb-3 flex items-center gap-2 text-xl font-bold text-white"><Target className="h-5 w-5 text-amber-300" aria-hidden />How did it go?</h2>
@@ -74,7 +55,7 @@ export default function Challenges() {
                     <BadgeIcon emoji={b.emoji} tier={b.tier} size={40} />
                     <div className="min-w-0">
                       <p className={cx('truncate text-sm font-bold', TIER[b.tier].text)}>{b.name}</p>
-                      <p className="text-[11px] text-zinc-500">×{b.count}{b.daily ? ` · ${b.daily} daily` : ''}</p>
+                      <p className="text-[11px] text-zinc-500">×{b.count}</p>
                     </div>
                   </li>
                 ))}
@@ -115,7 +96,7 @@ export default function Challenges() {
                     <li key={r.id} className="flex items-center gap-3 p-3 sm:p-4">
                       <BadgeIcon emoji={r.challenge.badge.emoji} tier={r.challenge.tier} size={34} dim={r.status !== 'completed'} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{r.challenge.title}{r.daily && <span className="ml-1.5 text-[10px] font-bold uppercase text-amber-300">Daily</span>}</p>
+                        <p className="truncate text-sm font-semibold text-white">{r.challenge.title}</p>
                         <p className="truncate text-[11px] text-zinc-500">{r.players.map((p) => p.ign).join(', ')}{r.createdAt ? ` · ${ago(r.createdAt)}` : ''}</p>
                       </div>
                       <span className={cx('flex shrink-0 items-center gap-1 text-[11px] font-semibold', s.cls)}><s.icon className="h-3.5 w-3.5" aria-hidden /><span className="sr-only sm:not-sr-only">{s.label}</span></span>

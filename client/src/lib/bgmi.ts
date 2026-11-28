@@ -1,8 +1,6 @@
-/** Opening BGMI (Battlegrounds Mobile India) from the app, a notification or Telegram. */
+/** Opening BGMI (Battlegrounds Mobile India) from the app. */
 
 export const BGMI_PACKAGE = 'com.pubg.imobile';
-const PLAY_STORE = `https://play.google.com/store/apps/details?id=${BGMI_PACKAGE}`;
-const APP_STORE = 'https://apps.apple.com/in/app/battlegrounds-mobile-india/id1526436837';
 
 export type Platform = 'android' | 'ios' | 'other';
 export function platform(ua = typeof navigator === 'undefined' ? '' : navigator.userAgent): Platform {
@@ -11,15 +9,17 @@ export function platform(ua = typeof navigator === 'undefined' ? '' : navigator.
   return 'other';
 }
 
+/** Only Android lets a web page launch another app by its package. iPhone and computers get no button. */
+export const canOpenBgmi = (p: Platform = platform()) => p === 'android';
+
 /**
- * Link that launches BGMI. Android: an intent for the game's launcher screen (falls back to the Play Store when it
- * isn't installed). iPhone: the App Store page, whose Open button starts the game. Elsewhere: the Play Store page.
+ * Android intent that launches BGMI itself. It never goes to the Play Store: if Android can't start the game from a
+ * link, it comes back to `backTo` (our page) with ?nolaunch=1, where we say the ID is copied.
  */
-export function bgmiLink(p: Platform = platform()) {
-  if (p === 'android') {
-    return `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${BGMI_PACKAGE};S.browser_fallback_url=${encodeURIComponent(PLAY_STORE)};end`;
-  }
-  return p === 'ios' ? APP_STORE : PLAY_STORE;
+export function bgmiLink(backTo = typeof location === 'undefined' ? '/' : location.href) {
+  const back = new URL(backTo, typeof location === 'undefined' ? 'https://localhost' : location.origin);
+  back.searchParams.set('nolaunch', '1');
+  return `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=${BGMI_PACKAGE};S.browser_fallback_url=${encodeURIComponent(back.toString())};end`;
 }
 
 /** Copy (best effort) then open BGMI. Must run inside a tap so the browser allows both. */

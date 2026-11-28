@@ -116,8 +116,8 @@ export async function answerChallenge(runId: string, userId: string, step: Answe
   const answer = { by: me, at: now, yes };
   const run = step === 'begun'
     ? await ChallengeRun.findOneAndUpdate(
-        // The check opens once the match time is over, even if the reminder hasn't gone out yet.
-        { _id: runId, playerIds: me, status: { $in: ['waiting', 'asking'] }, askAt: { $lte: now } },
+        // Players can mark the result as soon as the match is over, before the reminder goes out.
+        { _id: runId, playerIds: me, status: { $in: ['waiting', 'asking'] } },
         { $set: { begun: answer, status: yes ? 'begun' : 'not_played', askedAt: now } },
         { new: true },
       )
