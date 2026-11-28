@@ -39,11 +39,19 @@ Read it and return:
   - idp: the IDP time (ID & password time) in 24-hour "HH:MM", e.g. "09:54PM" -> "21:54", "9:20 PM" -> "21:20"
   - start: the start time in 24-hour "HH:MM", or "" if not shown
   - map: the map name if shown (Erangel, Miramar, Rondo, Sanhok, Vikendi, Livik…), else "".
-Ignore lobby time and registration time: only the per-match IDP and start times matter.`;
+Ignore lobby time and registration time: only the per-match IDP and start times matter.
+
+Organisers type these by hand, so expect typos and read them sensibly:
+- Plain-text schedules come in blocks, one block per match (e.g. "Match 2 Map", "Match 2 IDP", "Match 2 Start").
+  Trust the block, not a mistyped number: a "Match 3 Start" line inside the Match 2 block is Match 2's start time.
+  Return exactly one entry per match, never two entries with the same number.
+- Scrims run late into the night, past midnight. Times keep going forward in order: if Match 1 is at 10:50 PM and
+  Match 2 at 11:30 PM, a Match 3 written as "12:10 PM" really means 12:10 AM (after midnight) -> "00:10".`;
 
 const JSON_HINT = `
 Reply with JSON only, no other text, in exactly this shape:
-{"isSchedule": true, "eventName": "EG Daily Scrims", "group": "", "isTournament": false, "date": "", "matches": [{"number": 1, "idp": "21:20", "start": "21:30", "map": "Rondo"}]}`;
+{"isSchedule": true, "eventName": "EG Daily Scrims", "group": "", "isTournament": false, "date": "", "matches": [{"number": 1, "idp": "21:20", "start": "21:30", "map": "Rondo"}]}
+Return only the JSON object: no thinking, no explanation, no markdown.`;
 
 const SCHEMA = {
   type: 'object',
@@ -157,21 +165,83 @@ function toMap(raw: unknown): ParsedSchedule['matches'][number]['map'] {
   return MAPS.find((m) => s.startsWith(m.toLowerCase().slice(0, 4))) ?? MAP_TBD;
 }
 
+type RawMatch = { number?: number; idp?: string; start?: string; map?: string };
+const blank = (v: unknown) => !String(v ?? '').trim();
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const fromMin = (min: number) => `${pad(Math.floor(((min % 1440) + 1440) % 1440 / 60))}:${pad(((min % 60) + 60) % 60)}`;
+
+/**
+ * Undo the usual hand-typed slips before the times are used:
+ * - a line with the wrong match number ("Match 3 Start" in the Match 2 block) read as its own entry: an entry with
+ *   only a start time is folded into the entry before it when that one has no start yet;
+ * - two entries with the same number: the later one gets the next free number.
+ */
+export function mergeStrays(raw: RawMatch[]): RawMatch[] {
+  const out: RawMatch[] = [];
+  for (const m of raw) {
+    const prev = out[out.length - 1];
+    if (prev && blank(m.idp) && !blank(m.start) && blank(prev.start)) {
+      prev.start = m.start;
+      if (blank(prev.map) && !blank(m.map)) prev.map = m.map;
+      continue;
+    }
+    out.push({ ...m });
+  }
+  const used = new Set<number>();
+  for (const m of out) {
+    let n = Number(m.number);
+    if (!Number.isFinite(n) || n <= 0 || used.has(n)) n = Math.max(0, ...used) + 1;
+    m.number = n;
+    used.add(n);
+  }
+  return out;
+}
+
+/**
+ * Times run forward through the night. A late-night schedule that crosses midnight is often typed with PM where AM
+ * is meant ("12:10 PM" after an 11:30 PM match, meaning 00:10). When a time lands in the afternoon right after an
+ * evening one, and going 12 hours back puts it shortly after the previous time, use that. The app already treats
+ * times before 6 AM as the next day.
+ */
+export function fixAfterMidnight(times: string[]): string[] {
+  let prev: number | null = null;
+  let night = false; // an evening time has been seen, so the schedule may run past midnight
+  return times.map((t) => {
+    if (!t) return t;
+    let cur = toMin(t);
+    if (prev !== null && night && cur >= 12 * 60 && cur < 18 * 60) {
+      const am = cur - 12 * 60; // the same clock time after midnight
+      // Within 6 hours after the previous time (wrapping past midnight): that's the meant time.
+      if ((am + 1440 - prev) % 1440 <= 6 * 60) cur = am;
+    }
+    if (cur >= 18 * 60) night = true;
+    prev = cur;
+    return fromMin(cur);
+  });
+}
+
 /** Turn a reader's answer into a schedule. Throws NotScheduleError when the image isn't one. */
 export function toSchedule(text: string, now = new Date()): ParsedSchedule {
   const p = extractJson<{
     isSchedule?: boolean; eventName?: string; group?: string; isTournament?: boolean; date?: string;
-    matches?: { number?: number; idp?: string; start?: string; map?: string }[];
+    matches?: RawMatch[];
   }>(text, `Could not read that screenshot. ${MANUAL[0].toUpperCase() + MANUAL.slice(1)} instead.`);
+  const raw = mergeStrays((p.matches ?? []).filter((m) => m && typeof m === 'object'));
+  // IDP and start times as one forward-running sequence, so a slip in either is caught.
+  const seq = fixAfterMidnight(raw.flatMap((m) => [to24h(m.idp), to24h(m.start)]));
   const seen = new Set<string>();
-  const matches = (p.matches ?? [])
-    .map((m, i) => ({
-      number: Number.isFinite(Number(m.number)) && Number(m.number) > 0 ? Math.round(Number(m.number)) : i + 1,
-      // No IDP shown: fall back to the start time.
-      time: to24h(m.idp) || to24h(m.start),
-      startTime: to24h(m.start),
-      map: toMap(m.map),
-    }))
+  const matches = raw
+    .map((m, i) => {
+      const idp = seq[i * 2];
+      const start = seq[i * 2 + 1];
+      return {
+        number: m.number!,
+        // No IDP shown: fall back to the start time.
+        time: idp || start,
+        startTime: start,
+        map: toMap(m.map),
+      };
+    })
     .filter((m) => m.time && !seen.has(m.time) && seen.add(m.time))
     .slice(0, 12);
   if (p.isSchedule === false || !matches.length) throw new NotScheduleError();

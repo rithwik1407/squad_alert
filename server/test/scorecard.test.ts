@@ -34,11 +34,22 @@ describe('Gemini screenshot reader', () => {
     expect((await readScorecardWithPlacement(IMG)).placement).toBe(5);
   });
 
-  it('retries a busy model, then succeeds', async () => {
+  it('moves on to the next model when one is busy', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(good());
     vi.stubGlobal('fetch', fetchMock);
     expect(await readScorecard(IMG)).toHaveLength(1);
-    expect(fetchMock.mock.calls.map((c) => modelOf(String(c[0])))).toEqual(['gemini-3.8-flash', 'gemini-3.8-flash']);
+    expect(fetchMock.mock.calls.map((c) => modelOf(String(c[0])))).toEqual(['gemini-3.8-flash', 'gemini-flash-latest']);
+  });
+
+  it('comes back to a busy model after a pause', async () => {
+    let n = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/models?')) return json(200, { models: [] });
+      return modelOf(url) === 'gemini-3.8-flash' && n++ > 0 ? good() : busy();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await readScorecard(IMG)).toHaveLength(1);
+    expect(fetchMock.mock.calls.map((c) => modelOf(String(c[0]))).filter(Boolean)).toEqual(['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.8-flash']);
   });
 
   it('finds a working model from the live list when the defaults are retired', async () => {
