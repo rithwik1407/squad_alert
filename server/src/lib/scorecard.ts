@@ -300,29 +300,38 @@ const READ_BUDGET_MS = 170_000;
 /**
  * Google Gemini over plain REST (free tier key from aistudio.google.com).
  * Order: GEMINI_MODEL if set, the model that last worked, current defaults, then whatever ListModels offers.
- * Busy models get up to three tries with a growing pause before moving on.
+ * Every model gets one go first; busy ones get up to two more after a growing pause.
  */
 async function askGemini<T>(task: VisionTask<T>, mime: string, data: string, until = Date.now() + READ_BUDGET_MS): Promise<string> {
   const first = [config.geminiModel, lastGoodModel, ...GEMINI_DEFAULTS].filter(Boolean) as string[];
-  const tried = new Set<string>();
   let lastErr = '';
   let busy = false;
   const left = () => until - Date.now();
-  const attempt = async (model: string) => {
-    if (tried.has(model)) return null;
-    tried.add(model);
-    for (let i = 0; i < 3 && left() > 5_000; i++) {
-      const r = await callGemini(task, model, mime, data, Math.min(60_000, left()));
+  // Retired / not allowed / out of daily uses: don't ask that model again for this screenshot.
+  const skipped = new Set<string>();
+  const tryAll = async (models: string[]) => {
+    for (const model of models) {
+      if (skipped.has(model) || left() < 5_000) continue;
+      const r = await callGemini(task, model, mime, data, Math.min(45_000, left()));
       if ('text' in r) { lastGoodModel = model; return r.text; }
       lastErr = r.err;
-      if ('skip' in r) return null;
-      busy = true;
-      if (i < 2) await sleep(Math.min([3000, 8000][i], Math.max(0, left() - 5_000)));
+      if ('skip' in r) skipped.add(model); else busy = true;
     }
     return null;
   };
-  for (const m of first) { const t = await attempt(m); if (t) return t; }
-  for (const m of (await discoverGeminiModels()).slice(0, 4)) { const t = await attempt(m); if (t) return t; }
+  // Spread the tries over several models instead of hammering one: when the newest flash model is "high demand"
+  // an older or lite one often answers straight away. One go each first, then busy ones again after a pause.
+  let models = [...new Set(first)];
+  let text = await tryAll(models);
+  if (text) return text;
+  const found = (await discoverGeminiModels()).filter((m) => !models.includes(m)).slice(0, 4);
+  models = [...models, ...found];
+  if ((text = await tryAll(found))) return text;
+  for (const pause of [3000, 8000]) {
+    if (!busy || left() < 10_000) break;
+    await sleep(Math.min(pause, Math.max(0, left() - 5_000)));
+    if ((text = await tryAll(models))) return text;
+  }
   if (/daily free limit/.test(lastErr)) throw badRequest(`Google's free daily limit for screenshot reading is used up. It resets tomorrow; ${task.manual} for now.`);
   if (busy) throw badRequest(`Google's free screenshot reader is busy right now. Try again in a few minutes, or ${task.manual}.`);
   throw badRequest(`Could not read the screenshot (${lastErr || 'no Gemini model available'}). ${cap(task.manual)} instead.`);

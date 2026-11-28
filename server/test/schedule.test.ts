@@ -44,6 +44,32 @@ describe('toSchedule', () => {
     expect(s.matches.map((m) => [m.time, m.map])).toEqual([['21:20', 'Rondo'], ['22:00', 'Erangel'], ['22:40', 'Miramar'], ['23:20', 'TBD']]);
   });
 
+  it('Discord text schedule with typos: stray "Match 3 Start" and "12:10 PM" after midnight', () => {
+    // What a reader returns for the EG text schedule when it copies the typos as written.
+    const s = toSchedule(JSON.stringify({
+      isSchedule: true, eventName: 'EG Daily Scrims', group: '', isTournament: false, date: '',
+      matches: [
+        { number: 1, idp: '10:50 PM', start: '10:58 PM', map: 'ERANGEL' },
+        { number: 2, idp: '11:30 PM', start: '', map: 'MIRAMAR' },
+        { number: 3, idp: '', start: '11:38 PM', map: '' },
+        { number: 3, idp: '12:10 PM', start: '12:18 PM', map: 'RONDO' },
+      ],
+    }), NOW);
+    expect(s.name).toBe('EG Daily Scrims');
+    expect(s.matches).toEqual([
+      { number: 1, time: '22:50', startTime: '22:58', map: 'Erangel' },
+      { number: 2, time: '23:30', startTime: '23:38', map: 'Miramar' },
+      { number: 3, time: '00:10', startTime: '00:18', map: 'Rondo' },
+    ]);
+  });
+
+  it('keeps a daytime 12 PM as noon', () => {
+    const s = toSchedule(JSON.stringify({
+      isSchedule: true, eventName: 'Day Scrims', matches: [{ number: 1, idp: '11:20 AM', start: '11:30 AM' }, { number: 2, idp: '12:00 PM', start: '12:10 PM' }],
+    }), NOW);
+    expect(s.matches.map((m) => m.time)).toEqual(['11:20', '12:00']);
+  });
+
   it('rejects images that are not schedules', () => {
     expect(() => toSchedule(JSON.stringify({ isSchedule: false, matches: [] }), NOW)).toThrow(expect.objectContaining({ name: 'NotScheduleError', status: 422 }));
   });

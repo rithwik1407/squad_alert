@@ -28,7 +28,8 @@ async function callChat(p: CompatProvider, model: string, prompt: string, dataUr
       body: JSON.stringify({
         model,
         temperature: 0,
-        max_tokens: 1500,
+        // Room for models that think out loud (Qwen) before the JSON.
+        max_tokens: 4000,
         messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: dataUrl } }] }],
       }),
     });
@@ -37,7 +38,8 @@ async function callChat(p: CompatProvider, model: string, prompt: string, dataUr
   }
   const body = await res.json().catch(() => ({})) as { choices?: { message?: { content?: string } }[]; error?: { message?: string } | string };
   if (res.ok) {
-    const text = body.choices?.[0]?.message?.content ?? '';
+    // Reasoning models may wrap their thinking in <think>…</think> before the answer.
+    const text = (body.choices?.[0]?.message?.content ?? '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
     return text ? { text } : { err: 'empty answer', busy: true };
   }
   const err = (typeof body.error === 'string' ? body.error : body.error?.message) ?? `HTTP ${res.status}`;
@@ -45,7 +47,15 @@ async function callChat(p: CompatProvider, model: string, prompt: string, dataUr
   return { err, busy: res.status === 429 || res.status >= 500 };
 }
 
-/** Try the provider's models in order: busy ones get one more go after a pause, broken ones are skipped. */
+/** The model that last answered, per provider: tried first next time. */
+const lastGood = new Map<string, string>();
+export function _forgetLastGoodForTests() { lastGood.clear(); }
+
+/**
+ * Try the provider's models in order: busy ones get one more go after a pause, broken ones (retired, no image
+ * support) are skipped. After the known list, the provider's live model list is checked, because free vision
+ * models get retired every few months (Groq dropped Llama 4 Scout / Maverick in 2026).
+ */
 export async function askCompat(p: CompatProvider, prompt: string, dataUrl: string, deadline: number): Promise<ReadTry> {
   const left = () => deadline - Date.now();
   const tried = new Set<string>();
@@ -55,14 +65,15 @@ export async function askCompat(p: CompatProvider, prompt: string, dataUrl: stri
     tried.add(model);
     for (let i = 0; i < 2 && left() > 5_000; i++) {
       const r = await callChat(p, model, prompt, dataUrl, Math.min(60_000, left()));
-      if ('text' in r) return r;
+      if ('text' in r) { lastGood.set(p.name, model); return r; }
       last = r;
       if (!r.busy) return null;
       if (i === 0) await sleep(Math.min(3_000, Math.max(0, left() - 5_000)));
     }
     return null;
   };
-  for (const m of p.models) { const r = await attempt(m); if (r) return r; }
+  const first = [lastGood.get(p.name), ...p.models].filter(Boolean) as string[];
+  for (const m of first) { const r = await attempt(m); if (r) return r; }
   const found = p.discover ? await p.discover().catch(() => []) : [];
   for (const m of found.slice(0, 4)) { const r = await attempt(m); if (r) return r; }
   return last;
@@ -75,18 +86,25 @@ async function getJson<T>(url: string, key: string): Promise<T | null> {
   } catch { return null; }
 }
 
+export const GROQ_VISION = ['qwen/qwen3.8-27b'];
+/** Model ids on Groq that can take an image: Qwen 3.x 27B multimodal, "-vl" / "vision" models, Muse, Llama 4. */
+const GROQ_VISION_LIKE = /(vision|[-_ ]vl\b|vl-|qwen\/qwen3\.\d+-27b|muse|scout|maverick|llava|pixtral)/i;
+const qwenVersion = (id: string) => Number(/qwen3\.(\d+)/i.exec(id)?.[1] ?? -1);
+
 export function groqProvider(key: string, model?: string): CompatProvider {
   return {
     name: 'Groq',
     chatUrl: 'https://api.groq.com/openai/v1/chat/completions',
     key,
-    models: [model, 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct']
-      .filter(Boolean) as string[],
+    // Groq's image model (console.groq.com/docs/vision). Llama 4 Scout / Maverick were retired in 2026 and now 404.
+    models: [model, ...GROQ_VISION].filter(Boolean) as string[],
     discover: async () => {
       const body = await getJson<{ data?: { id: string; active?: boolean }[] }>('https://api.groq.com/openai/v1/models', key);
       return (body?.data ?? [])
-        .filter((m) => m.active !== false && /(vision|scout|maverick|[-_ ]vl\b|vl-)/i.test(m.id))
-        .map((m) => m.id);
+        .filter((m) => m.active !== false && GROQ_VISION_LIKE.test(m.id) && !/(guard|whisper|tts|embed|orpheus)/i.test(m.id))
+        .map((m) => m.id)
+        // Newest Qwen first: Groq replaces it with a higher version number when it retires one.
+        .sort((a, b) => qwenVersion(b) - qwenVersion(a));
     },
   };
 }
