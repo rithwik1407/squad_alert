@@ -23,6 +23,7 @@ import { dayKey } from '../lib/dailySummary.js';
 import { config } from '../config.js';
 import { batchSlotTargets, isCompleted } from '../lib/matchGroups.js';
 import { touchTeam } from '../lib/liveSync.js';
+import { type GuestStat } from '../lib/played.js';
 
 /** Stats from a screenshot go out to players this long after reading, unless the admin hits Save first. */
 const RESULTS_DELAY_MS = 5 * 60_000;
@@ -188,14 +189,23 @@ export function matchesRouter(getQueue: () => QueueLike) {
     const month = isMonthKey(req.query.month) ? req.query.month : dayKey(new Date(), tz).slice(0, 7);
     const { start, end } = monthRange(month, tz);
     const matches = await Match.find({ teamId, status: { $ne: 'cancelled' }, startAt: { $gte: start, $lt: end } })
-      .sort({ startAt: 1 }).select('title tournamentName type map startAt status placement').lean();
-    const stats = await Stats.find({ matchId: { $in: matches.map((m) => m._id) } }).select('matchId userId kills damage assists mvp').lean();
-    const userIds = [...new Set(stats.map((s) => String(s.userId)))];
+      .sort({ startAt: 1 }).select('title tournamentName type map startAt status placement guests').lean();
+    const ids = matches.map((m) => m._id);
+    const [stats, squads, marks] = await Promise.all([
+      Stats.find({ matchId: { $in: ids } }).select('matchId userId kills damage assists mvp').lean(),
+      Squad.find({ matchId: { $in: ids }, confirmed: true }).select('matchId selectedIds').lean(),
+      Attendance.find({ matchId: { $in: ids } }).select('matchId userId joined').lean(),
+    ]);
+    const squadOf = new Map(squads.map((s) => [String(s.matchId), s.selectedIds.map(String)]));
+    const attOf = new Map<string, Record<string, boolean>>();
+    for (const a of marks) attOf.set(String(a.matchId), { ...(attOf.get(String(a.matchId)) ?? {}), [String(a.userId)]: a.joined });
+    const userIds = [...new Set([...stats.map((s) => String(s.userId)), ...squads.flatMap((s) => s.selectedIds.map(String))])];
     const users = userIds.length ? await User.find({ _id: { $in: userIds } }).select('name ign avatar').lean() : [];
     const days = buildCalendarDays(
       matches.map((m) => ({
         id: String(m._id), title: m.title, tournamentName: m.tournamentName, type: m.type ?? 'scrim', map: m.map ?? MAP_TBD,
         startAt: m.startAt, status: m.status ?? 'scheduled', placement: m.placement ?? null,
+        guests: m.guests ?? [], squadIds: squadOf.get(String(m._id)) ?? [], attendance: attOf.get(String(m._id)) ?? {},
       })),
       stats.map((s) => ({ matchId: String(s.matchId), userId: String(s.userId), kills: s.kills ?? 0, damage: s.damage ?? 0, assists: s.assists ?? 0, mvp: Boolean(s.mvp) })),
       tz,
@@ -481,7 +491,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
   // Attendance and stats only open once the match has started.
   r.get('/:id/report', ah(async (req, res) => {
     const match = await loadMatch(req);
-    if (!hasStarted(match)) { res.json({ open: false, attendance: [], stats: [], placement: null, screenshotAt: null }); return; }
+    if (!hasStarted(match)) { res.json({ open: false, attendance: [], stats: [], guests: [], placement: null, screenshotAt: null }); return; }
     const [attendance, stats, shot] = await Promise.all([
       Attendance.find({ matchId: match._id }).lean(),
       Stats.find({ matchId: match._id }).lean(),
@@ -490,6 +500,8 @@ export function matchesRouter(getQueue: () => QueueLike) {
     res.json({
       open: true,
       placement: match.placement ?? null,
+      /** Outside players from the results screenshot: shown on this match only, never in stats or the team. */
+      guests: (match.guests ?? []).map((g) => ({ name: g.name, kills: g.kills ?? 0, damage: g.damage ?? 0, survivalMin: g.survivalMin ?? 0, assists: g.assists ?? 0 })),
       /** Set when a results screenshot is saved; fetch it from GET /:id/screenshot. */
       screenshotAt: shot?.updatedAt ?? null,
       attendance: attendance.map((a) => ({ userId: String(a.userId), joined: a.joined })),
@@ -529,6 +541,12 @@ export function matchesRouter(getQueue: () => QueueLike) {
         if (p) taken.add(p.id);
         return { ...r, userId: p?.id ?? null };
       });
+      // Names that aren't on our team are outside players: keep them on this match's results only
+      // (never a user, a Stats row or a roster spot). The admin can still say one of them is a teammate.
+      const guests: GuestStat[] = matched.filter((r) => !r.userId).slice(0, 8).map((r) => ({
+        name: r.name.slice(0, 40), kills: r.finishes, damage: r.damage, survivalMin: r.survivedMin, assists: r.assists,
+      }));
+      await Match.updateOne({ _id: matchId }, { $set: { guests } });
       // Save right away so the numbers land even if the admin left the page while it was reading.
       await saveScorecardStats(matchId, matched.filter((r) => r.userId).map((r) => ({
         userId: r.userId!, kills: r.finishes, damage: r.damage, survivalMin: r.survivedMin, assists: r.assists,
@@ -576,7 +594,7 @@ export function matchesRouter(getQueue: () => QueueLike) {
 
   /** Save kills, damage, survival and assists. The MVP is worked out here from those numbers. */
   r.put('/:id/stats', requireCaptain, ah(async (req, res) => {
-    const { entries, placement } = parse(z.object({
+    const { entries, placement, guests } = parse(z.object({
       entries: z.array(z.object({
         userId: z.string().regex(/^[a-f\d]{24}$/i),
         kills: z.number().int().min(0).max(99),
@@ -586,11 +604,20 @@ export function matchesRouter(getQueue: () => QueueLike) {
       })).max(8),
       /** Squad finishing position; null clears it, left out keeps it. */
       placement: z.number().int().min(1).max(25).nullable().optional(),
+      /** Outside players for this match only; left out keeps the saved ones. */
+      guests: z.array(z.object({
+        name: z.string().trim().min(1).max(40),
+        kills: z.number().int().min(0).max(99),
+        damage: z.number().int().min(0).max(9999),
+        survivalMin: z.number().min(0).max(60).default(0),
+        assists: z.number().int().min(0).max(99).default(0),
+      })).max(8).optional(),
     }), req.body);
     if (new Set(entries.map((e) => e.userId)).size !== entries.length) throw badRequest('A player is listed twice');
     const match = await loadMatch(req);
     if (!hasStarted(match)) throw badRequest('Stats open once the match has started');
     if (placement !== undefined) await Match.updateOne({ _id: match._id }, { $set: { placement } });
+    if (guests !== undefined) await Match.updateOne({ _id: match._id }, { $set: { guests } });
     const { rows, mvpUserId } = scoreMvp(entries);
     await Stats.deleteMany({ matchId: match._id, userId: { $nin: entries.map((e) => e.userId) } });
     await Promise.all(rows.map((e) => Stats.updateOne(
@@ -598,6 +625,16 @@ export function matchesRouter(getQueue: () => QueueLike) {
       { $set: { kills: e.kills, damage: e.damage, survivalMin: e.survivalMin, assists: e.assists, mvp: e.mvp, mvpScore: e.mvpScore } },
       { upsert: true },
     )));
+    // The posted results decide who played: everyone listed played, and anyone picked for the squad
+    // the admin left out did not (so their matches-played count doesn't go up).
+    const posted = new Set(entries.map((e) => e.userId));
+    const squad = await Squad.findOne({ matchId: match._id }).select('selectedIds confirmed').lean();
+    const marked = await Attendance.find({ matchId: match._id }).select('userId').lean();
+    const absent = [...new Set([...(squad?.confirmed ? squad.selectedIds : []), ...marked.map((a) => a.userId)].map(String))].filter((id) => !posted.has(id));
+    await Promise.all([
+      ...entries.map((e) => Attendance.updateOne({ matchId: match._id, userId: e.userId }, { $set: { joined: true } }, { upsert: true })),
+      ...(entries.length ? absent.map((id) => Attendance.updateOne({ matchId: match._id, userId: id }, { $set: { joined: false } }, { upsert: true })) : []),
+    ]);
     // Saved results mean the match is over, so it now counts in stats and the calendar points table.
     await finish(String(match._id));
     // Saving is the admin's final word: send each player only their own numbers now (once per player).

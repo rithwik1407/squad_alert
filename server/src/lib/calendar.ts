@@ -2,6 +2,7 @@ import { matchPoints } from './points.js';
 import { dayKey, dayRange } from './dailySummary.js';
 import { seriesKey } from './seriesName.js';
 import { isCompleted } from './matchGroups.js';
+import { playedUserIds } from './played.js';
 
 /**
  * Match calendar and day-by-day points tables: pure helpers (no DB) so they are easy to test.
@@ -30,6 +31,12 @@ export interface CalendarInputMatch {
   startAt: Date;
   status: string;
   placement?: number | null;
+  /** Outside players on the results: their kills count toward the match points, never toward a player. */
+  guests?: { kills: number }[] | null;
+  /** The confirmed squad's picked players. */
+  squadIds?: string[];
+  /** Attendance marks for the match: userId → joined. */
+  attendance?: Record<string, boolean>;
 }
 
 export interface CalendarInputStat {
@@ -62,6 +69,10 @@ export interface CalendarMatch {
   /** Finished (see isCompleted). Only completed matches count toward points, totals and player numbers. */
   completed: boolean;
   stats: { userId: string; kills: number; damage: number; assists: number; mvp: boolean }[];
+  /** Teammates who played this match (see playedUserIds); empty until it is completed. */
+  playedIds: string[];
+  /** Outside players on the results (not on the team). */
+  guestCount: number;
 }
 
 export interface DayTotals {
@@ -99,8 +110,15 @@ export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputSt
   const series = (m.tournamentName ?? '').trim() || m.title.trim();
   const completed = isCompleted(m, stats.length > 0, now);
   // Nothing counts until the match is finished.
-  const counted = completed ? stats : [];
-  const kills = counted.length ? counted.reduce((a, s) => a + (s.kills || 0), 0) : null;
+  // Only teammates who played get a match on their count; anyone left out of the posted results didn't play.
+  const playedIds = completed ? playedUserIds({
+    statsUserIds: stats.map((s) => s.userId), squadIds: m.squadIds ?? [], attendance: m.attendance ?? {},
+  }) : [];
+  const playedSet = new Set(playedIds);
+  const counted = completed ? stats.filter((s) => playedSet.has(s.userId)) : [];
+  const guests = completed ? m.guests ?? [] : [];
+  // Team finishes for the points: teammates plus any outside player who played in our squad that match.
+  const kills = counted.length || guests.length ? counted.reduce((a, s) => a + (s.kills || 0), 0) + guests.reduce((a, g) => a + (g.kills || 0), 0) : null;
   const placement = completed ? m.placement ?? null : null;
   const { placementPts, killPts, total } = matchPoints(placement, kills);
   return {
@@ -119,6 +137,8 @@ export function buildCalendarMatch(m: CalendarInputMatch, stats: CalendarInputSt
     total,
     hasResult: placement != null || kills != null,
     completed,
+    playedIds,
+    guestCount: guests.length,
     stats: counted.map((s) => ({ userId: s.userId, kills: s.kills || 0, damage: s.damage || 0, assists: s.assists || 0, mvp: Boolean(s.mvp) })),
   };
 }
@@ -143,14 +163,17 @@ function playerTotals(matches: CalendarMatch[]): CalendarPlayerDay[] {
   const by = new Map<string, CalendarPlayerDay>();
   for (const m of matches) {
     if (!m.completed) continue;
-    for (const s of m.stats) {
-      const p = by.get(s.userId) ?? { userId: s.userId, matches: 0, kills: 0, damage: 0, assists: 0, mvps: 0 };
+    const statOf = new Map(m.stats.map((s) => [s.userId, s]));
+    for (const id of m.playedIds) {
+      const p = by.get(id) ?? { userId: id, matches: 0, kills: 0, damage: 0, assists: 0, mvps: 0 };
       p.matches += 1;
+      by.set(id, p);
+      const s = statOf.get(id);
+      if (!s) continue;
       p.kills += s.kills;
       p.damage += s.damage;
       p.assists += s.assists;
       if (s.mvp) p.mvps += 1;
-      by.set(s.userId, p);
     }
   }
   return [...by.values()].sort((a, b) => b.kills - a.kills || b.damage - a.damage);
